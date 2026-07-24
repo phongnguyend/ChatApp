@@ -2,12 +2,17 @@ namespace ChatApp.Api.Contracts;
 
 public sealed record LoginRequest(string Username);
 
-public sealed record UserDto(Guid Id, string Username, string DisplayName);
+public sealed record UserDto(
+    Guid Id,
+    string Username,
+    string DisplayName,
+    string? AvatarUrl);
 
 public sealed record ConversationDto(
     Guid Id,
     string Type,
     string? Title,
+    string? AvatarUrl,
     string? LastMessage,
     Guid? LastMessageSenderUserId,
     string? LastMessageSenderName,
@@ -29,20 +34,40 @@ public sealed record ConversationRenamedDto(Guid ConversationId, string Title);
 
 public sealed record ConversationRemovedDto(Guid ConversationId);
 
+public sealed record UserAvatarUpdatedDto(Guid UserId, string AvatarUrl);
+
+public sealed record UpdateDisplayNameRequest(string DisplayName);
+
+public sealed record UserDisplayNameUpdatedDto(Guid UserId, string DisplayName);
+
+public sealed record ConversationAvatarUpdatedDto(
+    Guid ConversationId,
+    string AvatarUrl);
+
 public sealed record ConversationMemberDto(
     Guid Id,
     string Username,
     string DisplayName,
+    string? AvatarUrl,
     string Role,
     bool IsOnline);
 
 public sealed record MembersChangedDto(Guid ConversationId, int MemberCount);
+
+public sealed record MessageAttachmentDto(
+    Guid Id,
+    string FileName,
+    string ContentType,
+    long FileSize,
+    int? Width,
+    int? Height);
 
 public sealed record MessageDto(
     Guid Id,
     Guid ConversationId,
     Guid? SenderUserId,
     string? Username,
+    string? SenderAvatarUrl,
     string? Content,
     string MessageType,
     string? ClientMessageId,
@@ -50,7 +75,8 @@ public sealed record MessageDto(
     Guid? ReplyToMessageId,
     DateTimeOffset CreatedAt,
     DateTimeOffset? EditedAt,
-    DateTimeOffset? DeletedAt);
+    DateTimeOffset? DeletedAt,
+    IReadOnlyList<MessageAttachmentDto>? Attachments = null);
 
 public sealed record SendMessageRequest(
     Guid ConversationId,

@@ -78,7 +78,7 @@ public sealed class SessionsController(ChatDbContext db) : ControllerBase
 
         await EnsureSelfConversation(user, cancellationToken);
 
-        return Ok(new UserDto(user.Id, user.Username, user.DisplayName));
+        return Ok(new UserDto(user.Id, user.Username, user.DisplayName, user.AvatarUrl));
     }
 
     private async Task EnsureSelfConversation(

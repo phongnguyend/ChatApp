@@ -16,7 +16,9 @@ namespace ChatApp.Api.Controllers;
 public sealed class ConversationsController(
     ChatDbContext db,
     IHubContext<ChatHub> hubContext,
-    PresenceTracker presence) : ControllerBase
+    PresenceTracker presence,
+    AvatarStorage avatarStorage,
+    MessageAttachmentStorage attachmentStorage) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<ConversationDto>>> GetForUser(
@@ -51,9 +53,20 @@ public sealed class ConversationsController(
                         .Select(member => member.User.DisplayName)
                         .FirstOrDefault() ?? x.User.DisplayName
                     : x.Conversation.Title,
+                x.Conversation.Type == "direct"
+                    ? x.Conversation.Members
+                        .Where(member => member.UserId != userId && member.LeftAt == null)
+                        .Select(member => member.User.AvatarUrl)
+                        .FirstOrDefault() ?? x.User.AvatarUrl
+                    : x.Conversation.AvatarUrl,
                 x.Conversation.LastMessage == null || x.Conversation.LastMessage.DeletedAt != null
                     ? null
-                    : x.Conversation.LastMessage.Content,
+                    : x.Conversation.LastMessage.Content ??
+                      (x.Conversation.LastMessage.MessageType == "image"
+                          ? "Sent an image"
+                          : x.Conversation.LastMessage.MessageType == "file"
+                              ? "Sent a file"
+                              : null),
                 x.Conversation.LastMessage == null || x.Conversation.LastMessage.DeletedAt != null
                     ? null
                     : x.Conversation.LastMessage.SenderUserId,
@@ -150,6 +163,7 @@ public sealed class ConversationsController(
             conversation.Id,
             conversation.Type,
             conversation.Title,
+            conversation.AvatarUrl,
             null,
             null,
             null,
@@ -238,6 +252,7 @@ public sealed class ConversationsController(
             var result = ToDirectDto(
                 existing.Conversation,
                 targetUser.DisplayName,
+                targetUser.AvatarUrl,
                 existing.Conversation.Members
                     .Single(x => x.UserId == currentUser.Id)
                     .UnreadCount);
@@ -281,7 +296,10 @@ public sealed class ConversationsController(
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        var created = ToDirectDto(conversation, targetUser.DisplayName);
+        var created = ToDirectDto(
+            conversation,
+            targetUser.DisplayName,
+            targetUser.AvatarUrl);
         await AddConnectedUsersToDirectConversation(
             conversation.Id,
             currentUser,
@@ -294,6 +312,63 @@ public sealed class ConversationsController(
             nameof(GetMessages),
             new { id = conversation.Id, username },
             created);
+    }
+
+    [HttpPost("{id:guid}/avatar")]
+    [RequestSizeLimit(6 * 1024 * 1024)]
+    public async Task<ActionResult<ConversationAvatarUpdatedDto>> UpdateGroupAvatar(
+        Guid id,
+        [FromQuery] string username,
+        [FromForm] IFormFile image,
+        CancellationToken cancellationToken)
+    {
+        var normalized = Username.Normalize(username);
+        var requesterId = await db.Users
+            .Where(x => x.NormalizedUsername == normalized)
+            .Select(x => (Guid?)x.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (requesterId is null)
+        {
+            return NotFound();
+        }
+
+        var conversation = await db.Conversations.SingleOrDefaultAsync(
+            x => x.Id == id && x.Type == "group" && !x.IsArchived,
+            cancellationToken);
+        if (conversation is null)
+        {
+            return NotFound();
+        }
+
+        if (!await db.ConversationMembers.AnyAsync(
+                x =>
+                    x.ConversationId == id &&
+                    x.UserId == requesterId &&
+                    x.LeftAt == null,
+                cancellationToken))
+        {
+            return Forbid();
+        }
+
+        string avatarUrl;
+        try
+        {
+            avatarUrl = await avatarStorage.SaveAsync(image, cancellationToken);
+        }
+        catch (InvalidDataException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+
+        conversation.AvatarUrl = avatarUrl;
+        conversation.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+
+        var updated = new ConversationAvatarUpdatedDto(id, avatarUrl);
+        await hubContext.Clients.Group(ChatHub.ConversationGroup(id))
+            .SendAsync("ConversationAvatarUpdated", updated, cancellationToken);
+
+        return Ok(updated);
     }
 
     [HttpPatch("{id:guid}/title")]
@@ -396,6 +471,7 @@ public sealed class ConversationsController(
         var message = new MessageDto(
             systemMessage.Id,
             conversation.Id,
+            null,
             null,
             null,
             systemMessage.Content,
@@ -527,6 +603,7 @@ public sealed class ConversationsController(
             id,
             null,
             null,
+            null,
             systemMessage.Content,
             systemMessage.MessageType,
             null,
@@ -564,6 +641,7 @@ public sealed class ConversationsController(
                 x.ConversationId,
                 x.SenderUserId,
                 x.Sender == null ? null : x.Sender.Username,
+                x.Sender == null ? null : x.Sender.AvatarUrl,
                 x.DeletedAt == null ? x.Content : null,
                 x.MessageType,
                 x.ClientMessageId,
@@ -571,11 +649,236 @@ public sealed class ConversationsController(
                 x.ReplyToMessageId,
                 x.CreatedAt,
                 x.EditedAt,
-                x.DeletedAt))
+                x.DeletedAt,
+                x.DeletedAt == null
+                    ? x.Attachments
+                        .OrderBy(attachment => attachment.CreatedAt)
+                        .Select(attachment => new MessageAttachmentDto(
+                            attachment.Id,
+                            attachment.FileName,
+                            attachment.ContentType,
+                            attachment.FileSize,
+                            attachment.Width,
+                            attachment.Height))
+                        .ToList()
+                    : new List<MessageAttachmentDto>()))
             .ToListAsync(cancellationToken);
 
         messages.Reverse();
         return Ok(messages);
+    }
+
+    [HttpPost("{id:guid}/messages/attachments")]
+    [RequestSizeLimit(80 * 1024 * 1024)]
+    public async Task<ActionResult<MessageDto>> SendAttachmentMessage(
+        Guid id,
+        [FromQuery] string username,
+        [FromForm] List<IFormFile> files,
+        [FromForm] string? content,
+        [FromForm] string clientMessageId,
+        CancellationToken cancellationToken)
+    {
+        var normalized = Username.Normalize(username);
+        var sender = await db.Users.SingleOrDefaultAsync(
+            x => x.NormalizedUsername == normalized && x.Status == "active",
+            cancellationToken);
+        if (sender is null)
+        {
+            return NotFound();
+        }
+
+        var isMember = await db.ConversationMembers.AnyAsync(
+            x => x.ConversationId == id && x.UserId == sender.Id && x.LeftAt == null,
+            cancellationToken);
+        if (!isMember)
+        {
+            return NotFound();
+        }
+
+        var messageContent = content?.Trim();
+        var cleanClientMessageId = clientMessageId?.Trim() ?? "";
+        if (files.Count is < 1 or > MessageAttachmentStorage.MaxFilesPerMessage)
+        {
+            return BadRequest(new { message = "Choose between 1 and 5 attachments." });
+        }
+        if (messageContent?.Length > 2000 || cleanClientMessageId.Length is < 1 or > 100)
+        {
+            return BadRequest(new
+            {
+                message = "Messages can contain up to 2,000 characters."
+            });
+        }
+
+        var existing = await db.Messages
+            .AsNoTracking()
+            .Where(x =>
+                x.SenderUserId == sender.Id &&
+                x.ClientMessageId == cleanClientMessageId)
+            .Select(x => new MessageDto(
+                x.Id,
+                x.ConversationId,
+                x.SenderUserId,
+                x.Sender == null ? null : x.Sender.Username,
+                x.Sender == null ? null : x.Sender.AvatarUrl,
+                x.DeletedAt == null ? x.Content : null,
+                x.MessageType,
+                x.ClientMessageId,
+                x.SequenceNumber,
+                x.ReplyToMessageId,
+                x.CreatedAt,
+                x.EditedAt,
+                x.DeletedAt,
+                x.Attachments
+                    .OrderBy(attachment => attachment.CreatedAt)
+                    .Select(attachment => new MessageAttachmentDto(
+                        attachment.Id,
+                        attachment.FileName,
+                        attachment.ContentType,
+                        attachment.FileSize,
+                        attachment.Width,
+                        attachment.Height))
+                    .ToList()))
+            .SingleOrDefaultAsync(cancellationToken);
+        if (existing is not null)
+        {
+            return Ok(existing);
+        }
+
+        var messageId = Guid.NewGuid();
+        var storedKeys = new List<string>();
+        var attachments = new List<MessageAttachment>();
+        try
+        {
+            foreach (var file in files)
+            {
+                var storageKey = await attachmentStorage.SaveAsync(
+                    id,
+                    messageId,
+                    file,
+                    cancellationToken);
+                storedKeys.Add(storageKey);
+                attachments.Add(new MessageAttachment
+                {
+                    MessageId = messageId,
+                    Message = null!,
+                    StorageKey = storageKey,
+                    FileName = attachmentStorage.CleanFileName(file.FileName),
+                    ContentType = file.ContentType,
+                    FileSize = file.Length
+                });
+            }
+        }
+        catch (InvalidDataException exception)
+        {
+            foreach (var storageKey in storedKeys)
+            {
+                attachmentStorage.Delete(storageKey);
+            }
+            return BadRequest(new { message = exception.Message });
+        }
+        catch
+        {
+            foreach (var storageKey in storedKeys)
+            {
+                attachmentStorage.Delete(storageKey);
+            }
+            throw;
+        }
+
+        var committed = false;
+        try
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable,
+                cancellationToken);
+            var conversation = await db.Conversations.SingleAsync(
+                x => x.Id == id,
+                cancellationToken);
+            var nextSequence = await db.Messages
+                .Where(x => x.ConversationId == id)
+                .Select(x => (long?)x.SequenceNumber)
+                .MaxAsync(cancellationToken) ?? 0;
+            var now = DateTimeOffset.UtcNow;
+            var message = new ChatMessage
+            {
+                Id = messageId,
+                Conversation = conversation,
+                SenderUserId = sender.Id,
+                Sender = sender,
+                MessageType = attachments.All(attachment =>
+                    attachmentStorage.IsDisplayableImage(attachment.ContentType))
+                    ? "image"
+                    : "file",
+                Content = string.IsNullOrWhiteSpace(messageContent) ? null : messageContent,
+                ClientMessageId = cleanClientMessageId,
+                SequenceNumber = nextSequence + 1,
+                CreatedAt = now,
+                Attachments = attachments
+            };
+            foreach (var attachment in attachments)
+            {
+                attachment.Message = message;
+            }
+
+            db.Messages.Add(message);
+            conversation.LastMessage = message;
+            conversation.LastMessageId = message.Id;
+            conversation.LastMessageAt = now;
+            conversation.UpdatedAt = now;
+            await db.ConversationMembers
+                .Where(x =>
+                    x.ConversationId == id &&
+                    x.UserId != sender.Id &&
+                    x.LeftAt == null)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(
+                        x => x.UnreadCount,
+                        x => x.UnreadCount + 1),
+                    cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            committed = true;
+
+            var attachmentDtos = attachments.Select(attachment =>
+                new MessageAttachmentDto(
+                    attachment.Id,
+                    attachment.FileName,
+                    attachment.ContentType,
+                    attachment.FileSize,
+                    attachment.Width,
+                    attachment.Height))
+                .ToList();
+            var result = new MessageDto(
+                message.Id,
+                message.ConversationId,
+                sender.Id,
+                sender.Username,
+                sender.AvatarUrl,
+                message.Content,
+                message.MessageType,
+                message.ClientMessageId,
+                message.SequenceNumber,
+                null,
+                message.CreatedAt,
+                null,
+                null,
+                attachmentDtos);
+
+            await hubContext.Clients.Group(ChatHub.ConversationGroup(id))
+                .SendAsync("MessageReceived", result, cancellationToken);
+            return Ok(result);
+        }
+        catch
+        {
+            if (!committed)
+            {
+                foreach (var storageKey in storedKeys)
+                {
+                    attachmentStorage.Delete(storageKey);
+                }
+            }
+            throw;
+        }
     }
 
     [HttpGet("{id:guid}/members")]
@@ -730,6 +1033,7 @@ public sealed class ConversationsController(
                 conversation.Id,
                 conversation.Type,
                 conversation.Title,
+                conversation.AvatarUrl,
                 systemMessage.Content,
                 null,
                 null,
@@ -745,6 +1049,7 @@ public sealed class ConversationsController(
             var message = new MessageDto(
                 systemMessage.Id,
                 conversation.Id,
+                null,
                 null,
                 null,
                 systemMessage.Content,
@@ -797,6 +1102,7 @@ public sealed class ConversationsController(
             var targetConversation = currentUserConversation with
             {
                 Title = currentUser.DisplayName,
+                AvatarUrl = currentUser.AvatarUrl,
                 UnreadCount = targetUnreadCount
             };
             await hubContext.Clients.Clients(targetConnections)
@@ -842,11 +1148,13 @@ public sealed class ConversationsController(
     private static ConversationDto ToDirectDto(
         Conversation conversation,
         string otherUserDisplayName,
+        string? otherUserAvatarUrl,
         int unreadCount = 0) =>
         new(
             conversation.Id,
             conversation.Type,
             otherUserDisplayName,
+            otherUserAvatarUrl,
             conversation.LastMessage?.DeletedAt is null
                 ? conversation.LastMessage?.Content
                 : null,
@@ -888,6 +1196,7 @@ public sealed class ConversationsController(
                 x.User.Id,
                 x.User.Username,
                 x.User.DisplayName,
+                x.User.AvatarUrl,
                 x.Role
             })
             .ToListAsync(cancellationToken);
@@ -899,6 +1208,7 @@ public sealed class ConversationsController(
                 x.Id,
                 x.Username,
                 x.DisplayName,
+                x.AvatarUrl,
                 x.Role,
                 onlineUsernames.Contains(x.Username)))
             .ToArray();

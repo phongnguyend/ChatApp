@@ -9,9 +9,11 @@ A simple real-time chat application built with:
 
 The app includes persistent message history, pair-unique direct messages,
 multi-person group creation, live group member management, user discovery, online
-presence, typing indicators, unread counts, automatic SignalR reconnection, and
-responsive desktop/mobile layouts. The complete relational model below is
-represented by EF Core entities and the initial SQL Server migration.
+presence, typing indicators, unread counts, profile and group avatar uploads,
+camera capture, automatic SignalR reconnection, and responsive desktop/mobile
+layouts. Uploaded avatars are stored under the API's `wwwroot/uploads/avatars`
+directory while their relative URLs are persisted in SQL Server. The complete
+relational model below is represented by EF Core entities and migrations.
 
 ## Project structure
 

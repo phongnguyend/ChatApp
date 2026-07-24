@@ -30,6 +30,12 @@ import {
   useState,
 } from 'react'
 import './App.css'
+import { AvatarPicker } from './components/AvatarPicker'
+import {
+  type ChatAttachment,
+  MessageAttachmentList,
+  MessageAttachmentPicker,
+} from './components/MessageAttachments'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5045'
 
@@ -37,12 +43,14 @@ type User = {
   id: string
   username: string
   displayName: string
+  avatarUrl: string | null
 }
 
 type Conversation = {
   id: string
   type: 'direct' | 'group'
   title: string | null
+  avatarUrl: string | null
   lastMessage: string | null
   lastMessageSenderUserId: string | null
   lastMessageSenderName: string | null
@@ -72,11 +80,27 @@ type ConversationRemovedEvent = {
   conversationId: string
 }
 
+type UserAvatarUpdatedEvent = {
+  userId: string
+  avatarUrl: string
+}
+
+type UserDisplayNameUpdatedEvent = {
+  userId: string
+  displayName: string
+}
+
+type ConversationAvatarUpdatedEvent = {
+  conversationId: string
+  avatarUrl: string
+}
+
 type Message = {
   id: string
   conversationId: string
   senderUserId: string | null
   username: string | null
+  senderAvatarUrl: string | null
   content: string | null
   messageType: string
   clientMessageId: string | null
@@ -85,6 +109,7 @@ type Message = {
   createdAt: string
   editedAt: string | null
   deletedAt: string | null
+  attachments?: ChatAttachment[] | null
 }
 
 type TypingEvent = {
@@ -113,6 +138,36 @@ function initials(name: string) {
     .map((part) => part[0])
     .join('')
     .toUpperCase()
+}
+
+function messagePreview(message: Message) {
+  if (message.content) return message.content
+  const attachments = message.attachments ?? []
+  if (attachments.length === 0) return null
+  if (attachments.every((attachment) => attachment.contentType.startsWith('image/'))) {
+    return attachments.length === 1 ? 'Sent an image' : `Sent ${attachments.length} images`
+  }
+  return attachments.length === 1 ? 'Sent a file' : `Sent ${attachments.length} files`
+}
+
+function avatarSource(avatarUrl: string | null | undefined) {
+  if (!avatarUrl) return null
+  try {
+    return new URL(avatarUrl, API_URL).toString()
+  } catch {
+    return null
+  }
+}
+
+function AvatarContent({
+  avatarUrl,
+  name,
+}: {
+  avatarUrl: string | null | undefined
+  name: string
+}) {
+  const source = avatarSource(avatarUrl)
+  return source ? <img className="avatar-image" src={source} alt="" /> : initials(name)
 }
 
 function avatarColor(name: string) {
@@ -253,7 +308,15 @@ function LoginScreen({ onLogin }: { onLogin: (user: User) => void }) {
   )
 }
 
-function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
+function ChatApp({
+  user,
+  onLogout,
+  onUserUpdated,
+}: {
+  user: User
+  onLogout: () => void
+  onUserUpdated: (user: User) => void
+}) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [messagesByConversation, setMessagesByConversation] = useState<
@@ -289,6 +352,14 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [isLeaveDialogOpen, setIsLeaveDialogOpen] = useState(false)
   const [leaveError, setLeaveError] = useState('')
   const [isLeaving, setIsLeaving] = useState(false)
+  const [avatarDialog, setAvatarDialog] = useState<'user' | 'group' | null>(null)
+  const [profileTab, setProfileTab] = useState<'avatar' | 'display-name'>('avatar')
+  const [displayNameDraft, setDisplayNameDraft] = useState(user.displayName)
+  const [displayNameError, setDisplayNameError] = useState('')
+  const [isSavingDisplayName, setIsSavingDisplayName] = useState(false)
+  const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false)
+  const [attachmentFiles, setAttachmentFiles] = useState<File[]>([])
+  const [isSendingMessage, setIsSendingMessage] = useState(false)
   const connectionRef = useRef<HubConnection | null>(null)
   const activeIdRef = useRef<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
@@ -317,6 +388,55 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
     })
     setIsRenameDialogOpen(false)
     setIsLeaveDialogOpen(false)
+    setAvatarDialog(null)
+  }, [])
+
+  const receiveMessage = useCallback((message: Message) => {
+    setMessagesByConversation((current) => {
+      const existing = current[message.conversationId] ?? []
+      const found = existing.some(
+        (item) =>
+          item.id === message.id ||
+          (item.clientMessageId &&
+            item.clientMessageId === message.clientMessageId &&
+            item.senderUserId === message.senderUserId),
+      )
+      if (found) return current
+
+      return {
+        ...current,
+        [message.conversationId]: [...existing, message].sort(
+          (a, b) => a.sequenceNumber - b.sequenceNumber,
+        ),
+      }
+    })
+    setConversations((current) =>
+      current.map((conversation) =>
+        conversation.id === message.conversationId
+          ? {
+              ...conversation,
+              lastMessage: messagePreview(message),
+              lastMessageSenderUserId: message.senderUserId,
+              lastMessageSenderName: message.username,
+              lastMessageAt: message.createdAt,
+              unreadCount:
+                activeIdRef.current === message.conversationId
+                  ? 0
+                  : conversation.unreadCount + 1,
+            }
+          : conversation,
+      ),
+    )
+    if (
+      activeIdRef.current === message.conversationId &&
+      connectionRef.current?.state === HubConnectionState.Connected
+    ) {
+      void connectionRef.current.invoke(
+        'MarkRead',
+        message.conversationId,
+        message.sequenceNumber,
+      )
+    }
   }, [])
 
   useEffect(() => {
@@ -372,46 +492,7 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
       .configureLogging(LogLevel.Warning)
       .build()
 
-    connection.on('MessageReceived', (message: Message) => {
-      setMessagesByConversation((current) => {
-        const existing = current[message.conversationId] ?? []
-        const found = existing.some(
-          (item) =>
-            item.id === message.id ||
-            (item.clientMessageId &&
-              item.clientMessageId === message.clientMessageId &&
-              item.senderUserId === message.senderUserId),
-        )
-        if (found) return current
-
-        return {
-          ...current,
-          [message.conversationId]: [...existing, message].sort(
-            (a, b) => a.sequenceNumber - b.sequenceNumber,
-          ),
-        }
-      })
-      setConversations((current) =>
-        current.map((conversation) =>
-          conversation.id === message.conversationId
-            ? {
-                ...conversation,
-                lastMessage: message.content,
-                lastMessageSenderUserId: message.senderUserId,
-                lastMessageSenderName: message.username,
-                lastMessageAt: message.createdAt,
-                unreadCount:
-                  activeIdRef.current === message.conversationId
-                    ? 0
-                    : conversation.unreadCount + 1,
-              }
-            : conversation,
-        ),
-      )
-      if (activeIdRef.current === message.conversationId) {
-        void connection.invoke('MarkRead', message.conversationId, message.sequenceNumber)
-      }
-    })
+    connection.on('MessageReceived', receiveMessage)
     connection.on('PresenceChanged', (usernames: string[]) => {
       setOnlineUsers(usernames)
       const onlineSet = new Set(usernames.map((name) => name.toLocaleLowerCase()))
@@ -454,6 +535,110 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
         ),
       )
     })
+    connection.on(
+      'ConversationAvatarUpdated',
+      (event: ConversationAvatarUpdatedEvent) => {
+        setConversations((current) =>
+          current.map((conversation) =>
+            conversation.id === event.conversationId
+              ? { ...conversation, avatarUrl: event.avatarUrl }
+              : conversation,
+          ),
+        )
+      },
+    )
+    connection.on('UserAvatarUpdated', (event: UserAvatarUpdatedEvent) => {
+      if (event.userId === user.id) {
+        onUserUpdated({
+          id: user.id,
+          username: user.username,
+          displayName: user.displayName,
+          avatarUrl: event.avatarUrl,
+        })
+      }
+      setUserResults((current) =>
+        current.map((item) =>
+          item.id === event.userId ? { ...item, avatarUrl: event.avatarUrl } : item,
+        ),
+      )
+      setSelectedUsers((current) =>
+        current.map((item) =>
+          item.id === event.userId ? { ...item, avatarUrl: event.avatarUrl } : item,
+        ),
+      )
+      setMembersByConversation((current) =>
+        Object.fromEntries(
+          Object.entries(current).map(([conversationId, members]) => [
+            conversationId,
+            members.map((member) =>
+              member.id === event.userId
+                ? { ...member, avatarUrl: event.avatarUrl }
+                : member,
+            ),
+          ]),
+        ),
+      )
+      setMessagesByConversation((current) =>
+        Object.fromEntries(
+          Object.entries(current).map(([conversationId, messages]) => [
+            conversationId,
+            messages.map((message) =>
+              message.senderUserId === event.userId
+                ? { ...message, senderAvatarUrl: event.avatarUrl }
+                : message,
+            ),
+          ]),
+        ),
+      )
+      void loadConversations()
+    })
+    connection.on(
+      'UserDisplayNameUpdated',
+      (event: UserDisplayNameUpdatedEvent) => {
+        if (event.userId === user.id) {
+          onUserUpdated({
+            id: user.id,
+            username: user.username,
+            displayName: event.displayName,
+            avatarUrl: user.avatarUrl,
+          })
+        }
+        setUserResults((current) =>
+          current.map((item) =>
+            item.id === event.userId
+              ? { ...item, displayName: event.displayName }
+              : item,
+          ),
+        )
+        setSelectedUsers((current) =>
+          current.map((item) =>
+            item.id === event.userId
+              ? { ...item, displayName: event.displayName }
+              : item,
+          ),
+        )
+        setMembersByConversation((current) =>
+          Object.fromEntries(
+            Object.entries(current).map(([conversationId, members]) => [
+              conversationId,
+              members.map((member) =>
+                member.id === event.userId
+                  ? { ...member, displayName: event.displayName }
+                  : member,
+              ),
+            ]),
+          ),
+        )
+        setConversations((current) =>
+          current.map((conversation) =>
+            conversation.lastMessageSenderUserId === event.userId
+              ? { ...conversation, lastMessageSenderName: event.displayName }
+              : conversation,
+          ),
+        )
+        void loadConversations()
+      },
+    )
     connection.on('ConversationRemoved', (event: ConversationRemovedEvent) => {
       removeConversation(event.conversationId)
     })
@@ -485,7 +670,17 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
       connectionRef.current = null
       void connection.stop()
     }
-  }, [loadMembers, removeConversation, user.username])
+  }, [
+    loadConversations,
+    loadMembers,
+    onUserUpdated,
+    removeConversation,
+    receiveMessage,
+    user.avatarUrl,
+    user.displayName,
+    user.id,
+    user.username,
+  ])
 
   useEffect(() => {
     if (!conversationDialog) return
@@ -566,6 +761,10 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
   }, [activeId, user.username])
 
   useEffect(() => {
+    setAttachmentFiles([])
+  }, [activeId])
+
+  useEffect(() => {
     if (!activeId || activeConversation?.type !== 'group') return
     loadMembers(activeId).catch((requestError) => {
       setError(
@@ -601,30 +800,58 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
     const content = draft.trim()
     const connection = connectionRef.current
     if (
-      !content ||
+      (!content && attachmentFiles.length === 0) ||
       !activeId ||
       !connection ||
-      connection.state !== HubConnectionState.Connected
+      connection.state !== HubConnectionState.Connected ||
+      isSendingMessage
     ) {
       return
     }
 
+    const filesToSend = attachmentFiles
     setDraft('')
+    setAttachmentFiles([])
+    setIsSendingMessage(true)
     setError('')
     if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current)
     try {
       await connection.invoke('SetTyping', activeId, false)
-      await connection.invoke('SendMessage', {
-        conversationId: activeId,
-        content,
-        clientMessageId: crypto.randomUUID(),
-      })
+      if (filesToSend.length > 0) {
+        const formData = new FormData()
+        filesToSend.forEach((file) => formData.append('files', file))
+        formData.append('content', content)
+        formData.append('clientMessageId', crypto.randomUUID())
+        const response = await fetch(
+          `${API_URL}/api/conversations/${activeId}/messages/attachments?username=${encodeURIComponent(
+            user.username,
+          )}`,
+          { method: 'POST', body: formData },
+        )
+        if (!response.ok) throw new Error(await readError(response))
+        receiveMessage((await response.json()) as Message)
+      } else {
+        await connection.invoke('SendMessage', {
+          conversationId: activeId,
+          content,
+          clientMessageId: crypto.randomUUID(),
+        })
+      }
     } catch (requestError) {
       setDraft(content)
+      setAttachmentFiles(filesToSend)
       setError(
         requestError instanceof Error ? requestError.message : 'Your message was not sent.',
       )
+    } finally {
+      setIsSendingMessage(false)
     }
+  }
+
+  function attachmentUrl(attachmentId: string, download = false) {
+    return `${API_URL}/api/attachments/${attachmentId}?username=${encodeURIComponent(
+      user.username,
+    )}${download ? '&download=true' : ''}`
   }
 
   function handleDraftChange(value: string) {
@@ -875,6 +1102,84 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
     }
   }
 
+  async function uploadUserAvatar(file: File) {
+    const formData = new FormData()
+    formData.append('image', file)
+    const response = await fetch(
+      `${API_URL}/api/users/avatar?username=${encodeURIComponent(user.username)}`,
+      { method: 'POST', body: formData },
+    )
+    if (!response.ok) throw new Error(await readError(response))
+
+    const updatedUser = (await response.json()) as User
+    onUserUpdated(updatedUser)
+  }
+
+  async function updateDisplayName(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (isSavingDisplayName) return
+
+    const displayName = displayNameDraft.trim()
+    if (displayName.length < 2 || displayName.length > 100) {
+      setDisplayNameError('Display name must be between 2 and 100 characters.')
+      return
+    }
+
+    setIsSavingDisplayName(true)
+    setDisplayNameError('')
+    try {
+      const response = await fetch(
+        `${API_URL}/api/users/display-name?username=${encodeURIComponent(
+          user.username,
+        )}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ displayName }),
+        },
+      )
+      if (!response.ok) throw new Error(await readError(response))
+
+      const updatedUser = (await response.json()) as User
+      onUserUpdated(updatedUser)
+      setDisplayNameDraft(updatedUser.displayName)
+      setAvatarDialog(null)
+    } catch (requestError) {
+      setDisplayNameError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Could not update your display name.',
+      )
+    } finally {
+      setIsSavingDisplayName(false)
+    }
+  }
+
+  async function uploadGroupAvatar(file: File) {
+    if (!activeConversation || activeConversation.type !== 'group') {
+      throw new Error('Choose a group conversation first.')
+    }
+
+    const formData = new FormData()
+    formData.append('image', file)
+    const response = await fetch(
+      `${API_URL}/api/conversations/${
+        activeConversation.id
+      }/avatar?username=${encodeURIComponent(user.username)}`,
+      { method: 'POST', body: formData },
+    )
+    if (!response.ok) throw new Error(await readError(response))
+
+    const updated = (await response.json()) as ConversationAvatarUpdatedEvent
+    setConversations((current) =>
+      current.map((conversation) =>
+        conversation.id === updated.conversationId
+          ? { ...conversation, avatarUrl: updated.avatarUrl }
+          : conversation,
+      ),
+    )
+  }
+
   const currentTypingUsers = activeId ? typingUsers[activeId] ?? [] : []
   const isOnline = status === 'connected'
 
@@ -928,12 +1233,17 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
                     conversation.type === 'direct' ? 'direct-icon' : ''
                   }`}
                   style={
-                    conversation.type === 'direct'
+                    conversation.type === 'direct' && !conversation.avatarUrl
                       ? { backgroundColor: avatarColor(conversation.title ?? '') }
                       : undefined
                   }
                 >
-                  {conversation.type === 'direct' ? (
+                  {conversation.avatarUrl ? (
+                    <AvatarContent
+                      avatarUrl={conversation.avatarUrl}
+                      name={conversation.title ?? 'Conversation'}
+                    />
+                  ) : conversation.type === 'direct' ? (
                     initials(conversation.title ?? 'Direct')
                   ) : (
                     <Hash size={17} />
@@ -969,18 +1279,31 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
         </div>
 
         <div className="sidebar-user">
-          <span
-            className="avatar avatar-small"
-            style={{ backgroundColor: avatarColor(user.username) }}
+          <button
+            className="avatar avatar-small avatar-edit-trigger"
+            type="button"
+            aria-label="Edit your profile"
+            style={!user.avatarUrl ? { backgroundColor: avatarColor(user.username) } : undefined}
+            onClick={() => {
+              setProfileTab('avatar')
+              setDisplayNameDraft(user.displayName)
+              setDisplayNameError('')
+              setAvatarDialog('user')
+            }}
           >
-            {initials(user.displayName)}
+            <AvatarContent avatarUrl={user.avatarUrl} name={user.displayName} />
             <i className="presence-dot" aria-label="Online" />
-          </span>
+          </button>
           <span className="sidebar-user-copy">
             <strong>{user.displayName}</strong>
             <small>Online</small>
           </span>
-          <button className="icon-button" aria-label="Sign out" onClick={onLogout}>
+          <button
+            className="icon-button"
+            type="button"
+            aria-label="Sign out"
+            onClick={() => setIsLogoutDialogOpen(true)}
+          >
             <LogOut size={17} />
           </button>
         </div>
@@ -996,24 +1319,51 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
             <Menu size={21} />
           </button>
           <div className="conversation-title">
-            <span
-              className={`header-channel-icon ${
-                activeConversation?.type === 'direct' ? 'direct-icon' : ''
-              }`}
-              style={
-                activeConversation?.type === 'direct'
-                  ? {
-                      backgroundColor: avatarColor(activeConversation.title ?? ''),
-                    }
-                  : undefined
-              }
-            >
-              {activeConversation?.type === 'direct' ? (
-                initials(activeConversation.title ?? 'Direct')
-              ) : (
-                <Hash size={19} />
-              )}
-            </span>
+            {activeConversation?.type === 'group' ? (
+              <button
+                className="header-channel-icon avatar-edit-trigger group-avatar-trigger"
+                type="button"
+                aria-label="Update this group's avatar"
+                title="Change group avatar"
+                onClick={() => setAvatarDialog('group')}
+              >
+                {activeConversation.avatarUrl ? (
+                  <AvatarContent
+                    avatarUrl={activeConversation.avatarUrl}
+                    name={activeConversation.title ?? 'Group'}
+                  />
+                ) : (
+                  <Hash size={19} />
+                )}
+              </button>
+            ) : (
+              <span
+                className={`header-channel-icon ${
+                  activeConversation?.type === 'direct' ? 'direct-icon' : ''
+                }`}
+                style={
+                  activeConversation?.type === 'direct' &&
+                  !activeConversation.avatarUrl
+                    ? {
+                        backgroundColor: avatarColor(
+                          activeConversation.title ?? '',
+                        ),
+                      }
+                    : undefined
+                }
+              >
+                {activeConversation?.avatarUrl ? (
+                  <AvatarContent
+                    avatarUrl={activeConversation.avatarUrl}
+                    name={activeConversation.title ?? 'Conversation'}
+                  />
+                ) : activeConversation?.type === 'direct' ? (
+                  initials(activeConversation.title ?? 'Direct')
+                ) : (
+                  <Hash size={19} />
+                )}
+              </span>
+            )}
             <div>
               <h1>{conversationDisplayTitle(activeConversation, 'Welcome')}</h1>
               <p>
@@ -1136,11 +1486,20 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
                       {startsGroup && !isOwnMessage ? (
                         <span
                           className="avatar"
-                          style={{
-                            backgroundColor: avatarColor(message.username ?? 'System'),
-                          }}
+                          style={
+                            !message.senderAvatarUrl
+                              ? {
+                                  backgroundColor: avatarColor(
+                                    message.username ?? 'System',
+                                  ),
+                                }
+                              : undefined
+                          }
                         >
-                          {initials(message.username ?? 'System')}
+                          <AvatarContent
+                            avatarUrl={message.senderAvatarUrl}
+                            name={message.username ?? 'System'}
+                          />
                         </span>
                       ) : !startsGroup ? (
                         <time className="compact-time">
@@ -1158,11 +1517,17 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
                             </time>
                           </div>
                         )}
-                        <p className={message.deletedAt ? 'deleted-message' : ''}>
-                          {message.deletedAt
-                            ? 'This message was deleted.'
-                            : message.content}
-                        </p>
+                        {message.deletedAt ? (
+                          <p className="deleted-message">This message was deleted.</p>
+                        ) : (
+                          <>
+                            <MessageAttachmentList
+                              attachments={message.attachments ?? []}
+                              getUrl={attachmentUrl}
+                            />
+                            {message.content && <p>{message.content}</p>}
+                          </>
+                        )}
                       </div>
                     </article>
                   )}
@@ -1189,12 +1554,18 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
         </div>
 
         <form className="composer" onSubmit={sendMessage}>
+          <MessageAttachmentPicker
+            files={attachmentFiles}
+            disabled={!activeConversation || !isOnline || isSendingMessage}
+            onChange={setAttachmentFiles}
+            onError={setError}
+          />
           <textarea
             aria-label={`Message ${conversationDisplayTitle(
               activeConversation,
               'conversation',
             )}`}
-            disabled={!activeConversation || !isOnline}
+            disabled={!activeConversation || !isOnline || isSendingMessage}
             maxLength={2000}
             placeholder={
               isOnline
@@ -1211,7 +1582,11 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
           <button
             className="send-button"
             type="submit"
-            disabled={!draft.trim() || !isOnline}
+            disabled={
+              (!draft.trim() && attachmentFiles.length === 0) ||
+              !isOnline ||
+              isSendingMessage
+            }
             aria-label="Send message"
           >
             <Send size={18} />
@@ -1247,9 +1622,16 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
                 <div className="person" key={member.id}>
                   <span
                     className="avatar avatar-small"
-                    style={{ backgroundColor: avatarColor(member.username) }}
+                    style={
+                      !member.avatarUrl
+                        ? { backgroundColor: avatarColor(member.username) }
+                        : undefined
+                    }
                   >
-                    {initials(member.displayName)}
+                    <AvatarContent
+                      avatarUrl={member.avatarUrl}
+                      name={member.displayName}
+                    />
                     {member.isOnline && <i className="presence-dot" />}
                   </span>
                   <span>
@@ -1376,9 +1758,16 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
                       >
                         <span
                           className="avatar avatar-small"
-                          style={{ backgroundColor: avatarColor(result.username) }}
+                          style={
+                            !result.avatarUrl
+                              ? { backgroundColor: avatarColor(result.username) }
+                              : undefined
+                          }
                         >
-                          {initials(result.displayName)}
+                          <AvatarContent
+                            avatarUrl={result.avatarUrl}
+                            name={result.displayName}
+                          />
                         </span>
                         <span>
                           <strong>{result.displayName}</strong>
@@ -1436,10 +1825,15 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
                         <span
                           className="avatar"
                           style={{
-                            backgroundColor: avatarColor(selectedUser.username),
+                            backgroundColor: selectedUser.avatarUrl
+                              ? undefined
+                              : avatarColor(selectedUser.username),
                           }}
                         >
-                          {initials(selectedUser.displayName)}
+                          <AvatarContent
+                            avatarUrl={selectedUser.avatarUrl}
+                            name={selectedUser.displayName}
+                          />
                         </span>
                         {selectedUser.displayName}
                         <X size={13} />
@@ -1489,9 +1883,16 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
                         >
                           <span
                             className="avatar avatar-small"
-                            style={{ backgroundColor: avatarColor(result.username) }}
+                            style={
+                              !result.avatarUrl
+                                ? { backgroundColor: avatarColor(result.username) }
+                                : undefined
+                            }
                           >
-                            {initials(result.displayName)}
+                            <AvatarContent
+                              avatarUrl={result.avatarUrl}
+                              name={result.displayName}
+                            />
                           </span>
                           <span>
                             <strong>{result.displayName}</strong>
@@ -1649,6 +2050,161 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
           </div>
         </div>
       )}
+
+      {isLogoutDialogOpen && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal-card confirmation-dialog">
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">Account</p>
+                <h2>Sign out of Huddle?</h2>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                aria-label="Close"
+                onClick={() => setIsLogoutDialogOpen(false)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <p>You’ll return to the username sign-in screen.</p>
+
+            <div className="modal-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setIsLogoutDialogOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="danger-button"
+                type="button"
+                onClick={() => {
+                  setIsLogoutDialogOpen(false)
+                  onLogout()
+                }}
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {avatarDialog && (avatarDialog === 'user' || activeConversation?.type === 'group') && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal-card avatar-dialog">
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">
+                  {avatarDialog === 'user' ? 'Your profile' : 'Group settings'}
+                </p>
+                <h2>
+                  {avatarDialog === 'user' ? 'Edit your profile' : 'Update group avatar'}
+                </h2>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                aria-label="Close"
+                onClick={() => {
+                  setAvatarDialog(null)
+                  setDisplayNameError('')
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {avatarDialog === 'user' && (
+              <div className="dialog-tabs profile-tabs" role="tablist" aria-label="Profile settings">
+                <button
+                  className={profileTab === 'avatar' ? 'active' : ''}
+                  type="button"
+                  role="tab"
+                  aria-selected={profileTab === 'avatar'}
+                  onClick={() => {
+                    setProfileTab('avatar')
+                    setDisplayNameError('')
+                  }}
+                >
+                  Avatar
+                </button>
+                <button
+                  className={profileTab === 'display-name' ? 'active' : ''}
+                  type="button"
+                  role="tab"
+                  aria-selected={profileTab === 'display-name'}
+                  onClick={() => {
+                    setProfileTab('display-name')
+                    setDisplayNameDraft(user.displayName)
+                    setDisplayNameError('')
+                  }}
+                >
+                  Display name
+                </button>
+              </div>
+            )}
+
+            {avatarDialog === 'group' || profileTab === 'avatar' ? (
+              <AvatarPicker
+                imageUrl={avatarSource(
+                  avatarDialog === 'user'
+                    ? user.avatarUrl
+                    : activeConversation?.avatarUrl,
+                )}
+                fallback={initials(
+                  avatarDialog === 'user'
+                    ? user.displayName
+                    : (activeConversation?.title ?? 'Group'),
+                )}
+                label={
+                  avatarDialog === 'user'
+                    ? user.displayName
+                    : (activeConversation?.title ?? 'Group')
+                }
+                capture={avatarDialog === 'user' ? 'user' : 'environment'}
+                onSelect={
+                  avatarDialog === 'user' ? uploadUserAvatar : uploadGroupAvatar
+                }
+              />
+            ) : (
+              <form className="profile-name-form" onSubmit={updateDisplayName}>
+                <label htmlFor="profile-display-name">Display name</label>
+                <input
+                  id="profile-display-name"
+                  autoFocus
+                  maxLength={100}
+                  value={displayNameDraft}
+                  onChange={(event) => {
+                    setDisplayNameDraft(event.target.value)
+                    setDisplayNameError('')
+                  }}
+                  placeholder="Enter your display name"
+                />
+                <p className="profile-name-note">
+                  Your username @{user.username} will stay the same.
+                </p>
+                {displayNameError && <p className="form-error">{displayNameError}</p>}
+                <button
+                  className="primary-button"
+                  type="submit"
+                  disabled={
+                    isSavingDisplayName ||
+                    displayNameDraft.trim().length < 2 ||
+                    displayNameDraft.trim() === user.displayName
+                  }
+                >
+                  {isSavingDisplayName ? 'Saving...' : 'Save display name'}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   )
 }
@@ -1657,7 +2213,11 @@ function App() {
   const [user, setUser] = useState<User | null>(null)
 
   return user ? (
-    <ChatApp user={user} onLogout={() => setUser(null)} />
+    <ChatApp
+      user={user}
+      onLogout={() => setUser(null)}
+      onUserUpdated={setUser}
+    />
   ) : (
     <LoginScreen onLogin={setUser} />
   )

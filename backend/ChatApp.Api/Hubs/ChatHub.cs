@@ -26,7 +26,7 @@ public sealed class ChatHub(
             return;
         }
 
-        presence.Connect(Context.ConnectionId, user.Id, user.Username);
+        presence.Connect(Context.ConnectionId, user.Id, user.Username, user.AvatarUrl);
 
         var conversationIds = await db.ConversationMembers
             .Where(x => x.UserId == user.Id && x.LeftAt == null)
@@ -92,6 +92,7 @@ public sealed class ChatHub(
                 x.ConversationId,
                 x.SenderUserId,
                 x.Sender == null ? null : x.Sender.Username,
+                x.Sender == null ? null : x.Sender.AvatarUrl,
                 x.DeletedAt == null ? x.Content : null,
                 x.MessageType,
                 x.ClientMessageId,
@@ -161,6 +162,7 @@ public sealed class ChatHub(
             message.ConversationId,
             session.UserId,
             session.Username,
+            session.AvatarUrl,
             message.Content,
             message.MessageType,
             message.ClientMessageId,
