@@ -1,3 +1,74 @@
+# Huddle Chat App
+
+A simple real-time chat application built with:
+
+- ASP.NET Core 10 Web API and SignalR
+- Entity Framework Core 10 with SQL Server
+- React 19, TypeScript, and Vite
+- Username-only sign-in
+
+The app includes persistent message history, pair-unique direct messages,
+multi-person group creation, live group member management, user discovery, online
+presence, typing indicators, unread counts, automatic SignalR reconnection, and
+responsive desktop/mobile layouts. The complete relational model below is
+represented by EF Core entities and the initial SQL Server migration.
+
+## Project structure
+
+```text
+backend/
+  ChatApp.slnx
+  ChatApp.Api/
+    Data/
+    Models/
+    Hubs/
+    Controllers/
+frontend/
+  src/
+  scripts/
+```
+
+## Run locally
+
+Prerequisites:
+
+- .NET 10 SDK
+- Node.js 20 or newer
+- SQL Server LocalDB, or another SQL Server instance
+
+The default connection string uses `(localdb)\mssqllocaldb`. To use another SQL
+Server instance, update `ConnectionStrings:ChatDatabase` in
+`backend/ChatApp.Api/appsettings.json` or provide it through configuration.
+
+Start the API:
+
+```powershell
+cd backend
+dotnet restore
+dotnet run --project ChatApp.Api
+```
+
+The API applies pending EF Core migrations automatically and listens at
+`http://localhost:5045` with the default HTTP launch profile.
+
+Start the React app in a second terminal:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`, enter a username, and join the General conversation.
+
+To verify the production builds and live persistence flow:
+
+```powershell
+dotnet build backend/ChatApp.slnx
+npm --prefix frontend run build
+npm --prefix frontend run test:smoke
+```
+
 # Database Schema
 
 Below is a practical relational schema for a chat application supporting:
@@ -326,7 +397,7 @@ CREATE TABLE direct_conversations (
                         REFERENCES users(id),
 
     CONSTRAINT ck_direct_users_order
-        CHECK (user_low_id < user_high_id),
+        CHECK (user_low_id <= user_high_id),
 
     CONSTRAINT uq_direct_conversation_pair
         UNIQUE (user_low_id, user_high_id)
@@ -341,6 +412,7 @@ user_high_id = max(userA, userB)
 ```
 
 This guarantees that the pair can have only one active direct conversation.
+Equal user IDs represent the user's default conversation with themselves.
 
 UUID ordering differs by database, so another option is to calculate a deterministic pair key in the application:
 
