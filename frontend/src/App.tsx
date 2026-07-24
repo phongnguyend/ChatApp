@@ -11,6 +11,7 @@ import {
   LogOut,
   Menu,
   MessageCircleMore,
+  Pencil,
   Plus,
   Send,
   Search,
@@ -60,6 +61,15 @@ type ConversationMember = User & {
 type MembersChangedEvent = {
   conversationId: string
   memberCount: number
+}
+
+type ConversationRenamedEvent = {
+  conversationId: string
+  title: string
+}
+
+type ConversationRemovedEvent = {
+  conversationId: string
 }
 
 type Message = {
@@ -272,6 +282,13 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
     null,
   )
   const [dialogError, setDialogError] = useState('')
+  const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false)
+  const [renameTitle, setRenameTitle] = useState('')
+  const [renameError, setRenameError] = useState('')
+  const [isRenaming, setIsRenaming] = useState(false)
+  const [isLeaveDialogOpen, setIsLeaveDialogOpen] = useState(false)
+  const [leaveError, setLeaveError] = useState('')
+  const [isLeaving, setIsLeaving] = useState(false)
   const connectionRef = useRef<HubConnection | null>(null)
   const activeIdRef = useRef<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
@@ -283,9 +300,34 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
     : EMPTY_MESSAGES
   const activeMembers = activeId ? membersByConversation[activeId] ?? [] : []
 
+  const removeConversation = useCallback((conversationId: string) => {
+    setConversations((current) =>
+      current.filter((conversation) => conversation.id !== conversationId),
+    )
+    setActiveId((current) => (current === conversationId ? null : current))
+    setMessagesByConversation((current) => {
+      const next = { ...current }
+      delete next[conversationId]
+      return next
+    })
+    setMembersByConversation((current) => {
+      const next = { ...current }
+      delete next[conversationId]
+      return next
+    })
+    setIsRenameDialogOpen(false)
+    setIsLeaveDialogOpen(false)
+  }, [])
+
   useEffect(() => {
     activeIdRef.current = activeId
   }, [activeId])
+
+  useEffect(() => {
+    if (!activeId && conversations.length > 0) {
+      setActiveId(conversations[0].id)
+    }
+  }, [activeId, conversations])
 
   const loadConversations = useCallback(async () => {
     const response = await fetch(
@@ -403,6 +445,18 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
         void loadMembers(event.conversationId)
       }
     })
+    connection.on('ConversationRenamed', (event: ConversationRenamedEvent) => {
+      setConversations((current) =>
+        current.map((conversation) =>
+          conversation.id === event.conversationId
+            ? { ...conversation, title: event.title }
+            : conversation,
+        ),
+      )
+    })
+    connection.on('ConversationRemoved', (event: ConversationRemovedEvent) => {
+      removeConversation(event.conversationId)
+    })
     connection.on('UserTyping', (event: TypingEvent) => {
       setTypingUsers((current) => {
         const previous = current[event.conversationId] ?? []
@@ -431,7 +485,7 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
       connectionRef.current = null
       void connection.stop()
     }
-  }, [loadMembers, user.username])
+  }, [loadMembers, removeConversation, user.username])
 
   useEffect(() => {
     if (!conversationDialog) return
@@ -738,6 +792,89 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
     }
   }
 
+  function openRenameDialog() {
+    if (!activeConversation || activeConversation.type !== 'group') return
+    setRenameTitle(activeConversation.title ?? '')
+    setRenameError('')
+    setIsRenameDialogOpen(true)
+  }
+
+  async function renameGroup(event: FormEvent) {
+    event.preventDefault()
+    if (!activeConversation || activeConversation.type !== 'group') return
+
+    const title = renameTitle.trim()
+    if (
+      title.length < 2 ||
+      title === activeConversation.title ||
+      isRenaming
+    ) {
+      return
+    }
+
+    setIsRenaming(true)
+    setRenameError('')
+    try {
+      const response = await fetch(
+        `${API_URL}/api/conversations/${
+          activeConversation.id
+        }/title?username=${encodeURIComponent(user.username)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title }),
+        },
+      )
+      if (!response.ok) throw new Error(await readError(response))
+
+      const renamed = (await response.json()) as ConversationRenamedEvent
+      setConversations((current) =>
+        current.map((conversation) =>
+          conversation.id === renamed.conversationId
+            ? { ...conversation, title: renamed.title }
+            : conversation,
+        ),
+      )
+      setIsRenameDialogOpen(false)
+    } catch (requestError) {
+      setRenameError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Could not rename the group.',
+      )
+    } finally {
+      setIsRenaming(false)
+    }
+  }
+
+  async function leaveGroup() {
+    if (!activeConversation || activeConversation.type !== 'group' || isLeaving) {
+      return
+    }
+
+    setIsLeaving(true)
+    setLeaveError('')
+    try {
+      const response = await fetch(
+        `${API_URL}/api/conversations/${
+          activeConversation.id
+        }/members/me?username=${encodeURIComponent(user.username)}`,
+        { method: 'DELETE' },
+      )
+      if (!response.ok) throw new Error(await readError(response))
+
+      removeConversation(activeConversation.id)
+    } catch (requestError) {
+      setLeaveError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Could not leave the group.',
+      )
+    } finally {
+      setIsLeaving(false)
+    }
+  }
+
   const currentTypingUsers = activeId ? typingUsers[activeId] ?? [] : []
   const isOnline = status === 'connected'
 
@@ -807,9 +944,11 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
                   {conversation.lastMessage && conversation.lastMessageAt ? (
                     <small className="conversation-summary">
                       <span className="preview-sender">
-                        {conversation.lastMessageSenderUserId === user.id
-                          ? 'You'
-                          : (conversation.lastMessageSenderName ?? 'Someone')}
+                        {conversation.lastMessageSenderUserId === null
+                          ? 'System'
+                          : conversation.lastMessageSenderUserId === user.id
+                            ? 'You'
+                            : (conversation.lastMessageSenderName ?? 'Someone')}
                         :
                       </span>
                       <span className="preview-message">{conversation.lastMessage}</span>
@@ -887,13 +1026,39 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
             </div>
           </div>
           {activeConversation?.type === 'group' && (
-            <button
-              className="icon-button header-add-member"
-              aria-label="Add people to this group"
-              onClick={() => openConversationDialog('add-members')}
-            >
-              <UserRoundPlus size={17} />
-            </button>
+            <div className="header-group-actions">
+              {activeConversation.title !== 'General' && (
+                <button
+                  className="icon-button header-group-action"
+                  type="button"
+                  aria-label="Rename this group"
+                  onClick={openRenameDialog}
+                >
+                  <Pencil size={16} />
+                </button>
+              )}
+              <button
+                className="icon-button header-group-action"
+                type="button"
+                aria-label="Add people to this group"
+                onClick={() => openConversationDialog('add-members')}
+              >
+                <UserRoundPlus size={17} />
+              </button>
+              {activeConversation.title !== 'General' && (
+                <button
+                  className="icon-button header-group-action leave-group-action"
+                  type="button"
+                  aria-label="Leave this group"
+                  onClick={() => {
+                    setLeaveError('')
+                    setIsLeaveDialogOpen(true)
+                  }}
+                >
+                  <LogOut size={16} />
+                </button>
+              )}
+            </div>
           )}
           <div className={`connection-pill ${status}`}>
             {status === 'offline' ? <WifiOff size={13} /> : <span />}
@@ -955,37 +1120,52 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
                       <span>{dateLabel(message.createdAt)}</span>
                     </div>
                   )}
-                  <article
-                    className={`message ${startsGroup ? 'group-start' : 'compact'} ${
-                      isOwnMessage ? 'own-message' : ''
-                    }`}
-                  >
-                    {startsGroup && !isOwnMessage ? (
-                      <span
-                        className="avatar"
-                        style={{
-                          backgroundColor: avatarColor(message.username ?? 'System'),
-                        }}
-                      >
-                        {initials(message.username ?? 'System')}
-                      </span>
-                    ) : !startsGroup ? (
-                      <time className="compact-time">{formatTime(message.createdAt)}</time>
-                    ) : null}
-                    <div className="message-body">
-                      {startsGroup && (
-                        <div className="message-meta">
-                          {!isOwnMessage && <strong>{message.username ?? 'System'}</strong>}
-                          <time dateTime={message.createdAt}>
-                            {formatTime(message.createdAt)}
-                          </time>
-                        </div>
-                      )}
-                      <p className={message.deletedAt ? 'deleted-message' : ''}>
-                        {message.deletedAt ? 'This message was deleted.' : message.content}
-                      </p>
-                    </div>
-                  </article>
+                  {message.messageType === 'system' ? (
+                    <article className="system-message">
+                      <p>{message.content}</p>
+                      <time dateTime={message.createdAt}>
+                        {formatTime(message.createdAt)}
+                      </time>
+                    </article>
+                  ) : (
+                    <article
+                      className={`message ${
+                        startsGroup ? 'group-start' : 'compact'
+                      } ${isOwnMessage ? 'own-message' : ''}`}
+                    >
+                      {startsGroup && !isOwnMessage ? (
+                        <span
+                          className="avatar"
+                          style={{
+                            backgroundColor: avatarColor(message.username ?? 'System'),
+                          }}
+                        >
+                          {initials(message.username ?? 'System')}
+                        </span>
+                      ) : !startsGroup ? (
+                        <time className="compact-time">
+                          {formatTime(message.createdAt)}
+                        </time>
+                      ) : null}
+                      <div className="message-body">
+                        {startsGroup && (
+                          <div className="message-meta">
+                            {!isOwnMessage && (
+                              <strong>{message.username ?? 'System'}</strong>
+                            )}
+                            <time dateTime={message.createdAt}>
+                              {formatTime(message.createdAt)}
+                            </time>
+                          </div>
+                        )}
+                        <p className={message.deletedAt ? 'deleted-message' : ''}>
+                          {message.deletedAt
+                            ? 'This message was deleted.'
+                            : message.content}
+                        </p>
+                      </div>
+                    </article>
+                  )}
                 </div>
               )
             })
@@ -1353,6 +1533,119 @@ function ChatApp({ user, onLogout }: { user: User; onLogout: () => void }) {
                 {dialogError}
               </p>
             )}
+          </div>
+        </div>
+      )}
+
+      {isRenameDialogOpen && activeConversation?.type === 'group' && (
+        <div className="modal-backdrop" role="presentation">
+          <form className="modal-card rename-group-form" onSubmit={renameGroup}>
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">Group settings</p>
+                <h2>Rename conversation</h2>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                aria-label="Close"
+                onClick={() => setIsRenameDialogOpen(false)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <label htmlFor="rename-group-title">Group name</label>
+            <input
+              id="rename-group-title"
+              autoFocus
+              maxLength={200}
+              value={renameTitle}
+              onChange={(event) => {
+                setRenameTitle(event.target.value)
+                setRenameError('')
+              }}
+            />
+            <p className="rename-note">
+              Everyone in the group will see a message about this change.
+            </p>
+
+            {renameError && (
+              <p className="form-error" role="alert">
+                {renameError}
+              </p>
+            )}
+
+            <button
+              className="primary-button"
+              disabled={
+                isRenaming ||
+                renameTitle.trim().length < 2 ||
+                renameTitle.trim() === activeConversation.title
+              }
+              type="submit"
+            >
+              {isRenaming ? (
+                <LoaderCircle className="spin" size={18} />
+              ) : (
+                'Save new name'
+              )}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {isLeaveDialogOpen && activeConversation?.type === 'group' && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal-card leave-group-dialog">
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">Group settings</p>
+                <h2>Leave {activeConversation.title}?</h2>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                aria-label="Close"
+                onClick={() => setIsLeaveDialogOpen(false)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <p>
+              This conversation will be removed from your list. Everyone remaining
+              in the group will see that you left.
+            </p>
+
+            {leaveError && (
+              <p className="form-error" role="alert">
+                {leaveError}
+              </p>
+            )}
+
+            <div className="modal-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={isLeaving}
+                onClick={() => setIsLeaveDialogOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="danger-button"
+                type="button"
+                disabled={isLeaving}
+                onClick={() => void leaveGroup()}
+              >
+                {isLeaving ? (
+                  <LoaderCircle className="spin" size={18} />
+                ) : (
+                  'Leave group'
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

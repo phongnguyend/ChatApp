@@ -562,9 +562,19 @@
   font-weight: 700;
 }
 
-.header-add-member {
+.header-group-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.header-group-action {
   color: #676c67;
   background: #f3f1eb;
+}
+
+.leave-group-action {
+  color: #aa4c3f;
 }
 
 .connection-pill > span {
@@ -772,6 +782,29 @@
 
 .message.own-message .message-body p.deleted-message {
   color: #d8dfdd;
+}
+
+.system-message {
+  margin: 16px auto 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: #989b95;
+  text-align: center;
+}
+
+.system-message p {
+  margin: 0;
+  font-size: 11px;
+  font-style: italic;
+  line-height: 1.45;
+}
+
+.system-message time {
+  flex: 0 0 auto;
+  color: #b0b1ac;
+  font-size: 9px;
 }
 
 .typing-line {
@@ -999,6 +1032,55 @@
 
 .modal-card .primary-button {
   margin-top: 22px;
+}
+
+.rename-group-form .rename-note {
+  margin: 9px 0 0;
+  color: #8e918b;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.leave-group-dialog > p {
+  margin: 0;
+  color: #747873;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.modal-actions {
+  margin-top: 24px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.secondary-button,
+.danger-button {
+  min-height: 44px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+}
+
+.secondary-button {
+  border: 1px solid #dcd8cf;
+  color: #606560;
+  background: white;
+}
+
+.danger-button {
+  border: 0;
+  color: white;
+  background: #b84f41;
+  box-shadow: 0 8px 20px rgba(184, 79, 65, 0.18);
+}
+
+.secondary-button:disabled,
+.danger-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .group-picker > label {

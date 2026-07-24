@@ -23,6 +23,12 @@ public sealed record CreateDirectConversationRequest(string Username);
 
 public sealed record AddConversationMembersRequest(IReadOnlyList<string>? Usernames);
 
+public sealed record UpdateConversationTitleRequest(string Title);
+
+public sealed record ConversationRenamedDto(Guid ConversationId, string Title);
+
+public sealed record ConversationRemovedDto(Guid ConversationId);
+
 public sealed record ConversationMemberDto(
     Guid Id,
     string Username,

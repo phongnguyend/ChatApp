@@ -296,6 +296,251 @@ public sealed class ConversationsController(
             created);
     }
 
+    [HttpPatch("{id:guid}/title")]
+    public async Task<ActionResult<ConversationRenamedDto>> RenameGroup(
+        Guid id,
+        [FromQuery] string username,
+        UpdateConversationTitleRequest request,
+        CancellationToken cancellationToken)
+    {
+        var title = request.Title?.Trim() ?? "";
+        if (title.Length is < 2 or > 200)
+        {
+            return BadRequest(new
+            {
+                message = "Conversation names must contain 2–200 characters."
+            });
+        }
+
+        var normalized = Username.Normalize(username);
+        var requester = await db.Users.SingleOrDefaultAsync(
+            x => x.NormalizedUsername == normalized,
+            cancellationToken);
+        if (requester is null)
+        {
+            return NotFound();
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync(
+            IsolationLevel.Serializable,
+            cancellationToken);
+
+        var conversation = await db.Conversations.SingleOrDefaultAsync(
+            x => x.Id == id && x.Type == "group" && !x.IsArchived,
+            cancellationToken);
+        if (conversation is null)
+        {
+            return NotFound();
+        }
+
+        var isMember = await db.ConversationMembers.AnyAsync(
+            x =>
+                x.ConversationId == id &&
+                x.UserId == requester.Id &&
+                x.LeftAt == null,
+            cancellationToken);
+        if (!isMember)
+        {
+            return Forbid();
+        }
+
+        if (conversation.Title == DatabaseInitializer.GeneralConversationTitle)
+        {
+            return BadRequest(new
+            {
+                message = "The General conversation keeps its default name."
+            });
+        }
+
+        if (string.Equals(conversation.Title, title, StringComparison.Ordinal))
+        {
+            return Ok(new ConversationRenamedDto(conversation.Id, title));
+        }
+
+        var nextSequence = await db.Messages
+            .Where(x => x.ConversationId == id)
+            .Select(x => (long?)x.SequenceNumber)
+            .MaxAsync(cancellationToken) ?? 0;
+        var now = DateTimeOffset.UtcNow;
+        var systemMessage = new ChatMessage
+        {
+            Conversation = conversation,
+            MessageType = "system",
+            Content = $"{requester.DisplayName} changed the group name to \"{title}\".",
+            SequenceNumber = nextSequence + 1,
+            CreatedAt = now
+        };
+
+        conversation.Title = title;
+        conversation.UpdatedAt = now;
+        conversation.LastMessage = systemMessage;
+        conversation.LastMessageId = systemMessage.Id;
+        conversation.LastMessageAt = now;
+        db.Messages.Add(systemMessage);
+
+        await db.ConversationMembers
+            .Where(x =>
+                x.ConversationId == id &&
+                x.UserId != requester.Id &&
+                x.LeftAt == null)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(
+                    x => x.UnreadCount,
+                    x => x.UnreadCount + 1),
+                cancellationToken);
+
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        var renamed = new ConversationRenamedDto(conversation.Id, title);
+        var message = new MessageDto(
+            systemMessage.Id,
+            conversation.Id,
+            null,
+            null,
+            systemMessage.Content,
+            systemMessage.MessageType,
+            null,
+            systemMessage.SequenceNumber,
+            null,
+            systemMessage.CreatedAt,
+            null,
+            null);
+
+        await hubContext.Clients.Group(ChatHub.ConversationGroup(id))
+            .SendAsync("ConversationRenamed", renamed, cancellationToken);
+        await hubContext.Clients.Group(ChatHub.ConversationGroup(id))
+            .SendAsync("MessageReceived", message, cancellationToken);
+
+        return Ok(renamed);
+    }
+
+    [HttpDelete("{id:guid}/members/me")]
+    public async Task<IActionResult> LeaveGroup(
+        Guid id,
+        [FromQuery] string username,
+        CancellationToken cancellationToken)
+    {
+        var normalized = Username.Normalize(username);
+        var requester = await db.Users.SingleOrDefaultAsync(
+            x => x.NormalizedUsername == normalized,
+            cancellationToken);
+        if (requester is null)
+        {
+            return NotFound();
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync(
+            IsolationLevel.Serializable,
+            cancellationToken);
+
+        var conversation = await db.Conversations
+            .Include(x => x.Members)
+            .SingleOrDefaultAsync(
+                x => x.Id == id && x.Type == "group" && !x.IsArchived,
+                cancellationToken);
+        if (conversation is null)
+        {
+            return NotFound();
+        }
+
+        if (conversation.Title == DatabaseInitializer.GeneralConversationTitle)
+        {
+            return BadRequest(new
+            {
+                message = "You cannot leave the General conversation."
+            });
+        }
+
+        var membership = conversation.Members.SingleOrDefault(
+            x => x.UserId == requester.Id && x.LeftAt == null);
+        if (membership is null)
+        {
+            return NotFound();
+        }
+
+        var nextSequence = await db.Messages
+            .Where(x => x.ConversationId == id)
+            .Select(x => (long?)x.SequenceNumber)
+            .MaxAsync(cancellationToken) ?? 0;
+        var now = DateTimeOffset.UtcNow;
+        var systemMessage = new ChatMessage
+        {
+            Conversation = conversation,
+            MessageType = "system",
+            Content = $"{requester.DisplayName} left the group.",
+            SequenceNumber = nextSequence + 1,
+            CreatedAt = now
+        };
+
+        membership.LeftAt = now;
+        membership.IsArchived = true;
+        membership.UnreadCount = 0;
+        conversation.UpdatedAt = now;
+        conversation.LastMessage = systemMessage;
+        conversation.LastMessageId = systemMessage.Id;
+        conversation.LastMessageAt = now;
+        db.Messages.Add(systemMessage);
+
+        await db.ConversationMembers
+            .Where(x =>
+                x.ConversationId == id &&
+                x.UserId != requester.Id &&
+                x.LeftAt == null)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(
+                    x => x.UnreadCount,
+                    x => x.UnreadCount + 1),
+                cancellationToken);
+
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        var groupName = ChatHub.ConversationGroup(id);
+        var requesterConnections = presence.ConnectionIdsForUser(requester.Id);
+        foreach (var connectionId in requesterConnections)
+        {
+            await hubContext.Groups.RemoveFromGroupAsync(
+                connectionId,
+                groupName,
+                cancellationToken);
+        }
+
+        if (requesterConnections.Count > 0)
+        {
+            await hubContext.Clients.Clients(requesterConnections)
+                .SendAsync(
+                    "ConversationRemoved",
+                    new ConversationRemovedDto(id),
+                    cancellationToken);
+        }
+
+        var memberCount = conversation.Members.Count(x => x.LeftAt == null);
+        await hubContext.Clients.Group(groupName)
+            .SendAsync(
+                "MembersChanged",
+                new MembersChangedDto(id, memberCount),
+                cancellationToken);
+
+        var message = new MessageDto(
+            systemMessage.Id,
+            id,
+            null,
+            null,
+            systemMessage.Content,
+            systemMessage.MessageType,
+            null,
+            systemMessage.SequenceNumber,
+            null,
+            systemMessage.CreatedAt,
+            null,
+            null);
+        await hubContext.Clients.Group(groupName)
+            .SendAsync("MessageReceived", message, cancellationToken);
+
+        return NoContent();
+    }
+
     [HttpGet("{id:guid}/messages")]
     public async Task<ActionResult<IReadOnlyList<MessageDto>>> GetMessages(
         Guid id,
@@ -355,11 +600,10 @@ public sealed class ConversationsController(
         CancellationToken cancellationToken)
     {
         var normalized = Username.Normalize(username);
-        var requesterId = await db.Users
-            .Where(x => x.NormalizedUsername == normalized)
-            .Select(x => (Guid?)x.Id)
-            .SingleOrDefaultAsync(cancellationToken);
-        if (requesterId is null)
+        var requester = await db.Users.SingleOrDefaultAsync(
+            x => x.NormalizedUsername == normalized,
+            cancellationToken);
+        if (requester is null)
         {
             return NotFound();
         }
@@ -375,7 +619,7 @@ public sealed class ConversationsController(
         }
 
         if (!conversation.Members.Any(x =>
-                x.UserId == requesterId &&
+                x.UserId == requester.Id &&
                 x.LeftAt == null))
         {
             return Forbid();
@@ -421,7 +665,8 @@ public sealed class ConversationsController(
                 {
                     Conversation = conversation,
                     User = selectedUser,
-                    Role = "member"
+                    Role = "member",
+                    UnreadCount = 1
                 });
             }
             else
@@ -429,6 +674,7 @@ public sealed class ConversationsController(
                 membership.LeftAt = null;
                 membership.IsArchived = false;
                 membership.JoinedAt = DateTimeOffset.UtcNow;
+                membership.UnreadCount += 1;
             }
 
             addedUsers.Add(selectedUser);
@@ -436,23 +682,57 @@ public sealed class ConversationsController(
 
         if (addedUsers.Count > 0)
         {
-            conversation.UpdatedAt = DateTimeOffset.UtcNow;
+            await using var transaction = await db.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable,
+                cancellationToken);
+
+            var nextSequence = await db.Messages
+                .Where(x => x.ConversationId == conversation.Id)
+                .Select(x => (long?)x.SequenceNumber)
+                .MaxAsync(cancellationToken) ?? 0;
+            var addedNames = string.Join(
+                ", ",
+                addedUsers
+                    .OrderBy(x => x.DisplayName)
+                    .Select(x => x.DisplayName));
+            var now = DateTimeOffset.UtcNow;
+            var systemMessage = new ChatMessage
+            {
+                Conversation = conversation,
+                MessageType = "system",
+                Content = $"{requester.DisplayName} added {addedNames} to the group.",
+                SequenceNumber = nextSequence + 1,
+                CreatedAt = now
+            };
+
+            conversation.UpdatedAt = now;
+            conversation.LastMessage = systemMessage;
+            conversation.LastMessageId = systemMessage.Id;
+            conversation.LastMessageAt = now;
+            db.Messages.Add(systemMessage);
+
+            await db.ConversationMembers
+                .Where(x =>
+                    x.ConversationId == conversation.Id &&
+                    x.UserId != requester.Id &&
+                    x.LeftAt == null)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(
+                        x => x.UnreadCount,
+                        x => x.UnreadCount + 1),
+                    cancellationToken);
+
             await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
 
             var memberCount = conversation.Members.Count(x => x.LeftAt == null);
             var conversationDto = new ConversationDto(
                 conversation.Id,
                 conversation.Type,
                 conversation.Title,
-                conversation.LastMessage?.DeletedAt is null
-                    ? conversation.LastMessage?.Content
-                    : null,
-                conversation.LastMessage?.DeletedAt is null
-                    ? conversation.LastMessage?.SenderUserId
-                    : null,
-                conversation.LastMessage?.DeletedAt is null
-                    ? conversation.LastMessage?.Sender?.DisplayName
-                    : null,
+                systemMessage.Content,
+                null,
+                null,
                 conversation.LastMessageAt,
                 0,
                 memberCount);
@@ -461,6 +741,23 @@ public sealed class ConversationsController(
                 addedUsers,
                 conversationDto,
                 cancellationToken);
+
+            var message = new MessageDto(
+                systemMessage.Id,
+                conversation.Id,
+                null,
+                null,
+                systemMessage.Content,
+                systemMessage.MessageType,
+                null,
+                systemMessage.SequenceNumber,
+                null,
+                systemMessage.CreatedAt,
+                null,
+                null);
+            await hubContext.Clients
+                .Group(ChatHub.ConversationGroup(conversation.Id))
+                .SendAsync("MessageReceived", message, cancellationToken);
         }
 
         return Ok(await GetMemberDtos(id, cancellationToken));
