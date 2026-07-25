@@ -36,6 +36,11 @@ import {
   MessageAttachmentList,
   MessageAttachmentPicker,
 } from './components/MessageAttachments'
+import {
+  type ChatReaction,
+  MessageActions,
+} from './components/MessageActions'
+import { EmojiPicker } from './components/EmojiPicker'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5045'
 
@@ -110,6 +115,25 @@ type Message = {
   editedAt: string | null
   deletedAt: string | null
   attachments?: ChatAttachment[] | null
+  reactions?: ChatReaction[] | null
+}
+
+type MessageChangedEvent = {
+  messageId: string
+  conversationId: string
+  content: string | null
+  editedAt: string | null
+  deletedAt: string | null
+}
+
+type MessageReactionChangedEvent = {
+  messageId: string
+  conversationId: string
+  userId: string
+  displayName: string
+  avatarUrl: string | null
+  reaction: string
+  isAdded: boolean
 }
 
 type TypingEvent = {
@@ -360,9 +384,14 @@ function ChatApp({
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false)
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([])
   const [isSendingMessage, setIsSendingMessage] = useState(false)
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  const [editMessageDraft, setEditMessageDraft] = useState('')
+  const [deletingMessage, setDeletingMessage] = useState<Message | null>(null)
+  const [isDeletingMessage, setIsDeletingMessage] = useState(false)
   const connectionRef = useRef<HubConnection | null>(null)
   const activeIdRef = useRef<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
+  const draftInputRef = useRef<HTMLTextAreaElement | null>(null)
   const typingTimerRef = useRef<number | null>(null)
 
   const activeConversation = conversations.find((item) => item.id === activeId)
@@ -493,6 +522,92 @@ function ChatApp({
       .build()
 
     connection.on('MessageReceived', receiveMessage)
+    connection.on('MessageChanged', (event: MessageChangedEvent) => {
+      setMessagesByConversation((current) => ({
+        ...current,
+        [event.conversationId]: (current[event.conversationId] ?? []).map((message) =>
+          message.id === event.messageId
+            ? {
+                ...message,
+                content: event.content,
+                editedAt: event.editedAt,
+                deletedAt: event.deletedAt,
+                attachments: event.deletedAt ? [] : message.attachments,
+                reactions: event.deletedAt ? [] : message.reactions,
+              }
+            : message,
+        ),
+      }))
+      void loadConversations()
+    })
+    connection.on(
+      'MessageReactionChanged',
+      (event: MessageReactionChangedEvent) => {
+        setMessagesByConversation((current) => ({
+          ...current,
+          [event.conversationId]: (current[event.conversationId] ?? []).map((message) => {
+            if (message.id !== event.messageId) return message
+
+            const reactions = [...(message.reactions ?? [])]
+            const index = reactions.findIndex(
+              (item) => item.reaction === event.reaction,
+            )
+            const isOwnReaction = event.userId === user.id
+            if (event.isAdded) {
+              if (index >= 0) {
+                const users = reactions[index].users.some(
+                  (reactingUser) => reactingUser.id === event.userId,
+                )
+                  ? reactions[index].users
+                  : [
+                      ...reactions[index].users,
+                      {
+                        id: event.userId,
+                        displayName: event.displayName,
+                        avatarUrl: event.avatarUrl,
+                      },
+                    ]
+                reactions[index] = {
+                  ...reactions[index],
+                  count: users.length,
+                  isOwn: reactions[index].isOwn || isOwnReaction,
+                  users,
+                }
+              } else {
+                reactions.push({
+                  reaction: event.reaction,
+                  count: 1,
+                  isOwn: isOwnReaction,
+                  users: [
+                    {
+                      id: event.userId,
+                      displayName: event.displayName,
+                      avatarUrl: event.avatarUrl,
+                    },
+                  ],
+                })
+              }
+            } else if (index >= 0) {
+              const users = reactions[index].users.filter(
+                (reactingUser) => reactingUser.id !== event.userId,
+              )
+              const nextCount = users.length
+              if (nextCount <= 0) {
+                reactions.splice(index, 1)
+              } else {
+                reactions[index] = {
+                  ...reactions[index],
+                  count: nextCount,
+                  isOwn: isOwnReaction ? false : reactions[index].isOwn,
+                  users,
+                }
+              }
+            }
+            return { ...message, reactions }
+          }),
+        }))
+      },
+    )
     connection.on('PresenceChanged', (usernames: string[]) => {
       setOnlineUsers(usernames)
       const onlineSet = new Set(usernames.map((name) => name.toLocaleLowerCase()))
@@ -848,6 +963,91 @@ function ChatApp({
     }
   }
 
+  async function editMessage(event: FormEvent<HTMLFormElement>, messageId: string) {
+    event.preventDefault()
+    const content = editMessageDraft.trim()
+    if (!content) return
+
+    try {
+      const response = await fetch(
+        `${API_URL}/api/messages/${messageId}?username=${encodeURIComponent(
+          user.username,
+        )}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content }),
+        },
+      )
+      if (!response.ok) throw new Error(await readError(response))
+      setEditingMessageId(null)
+      setEditMessageDraft('')
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Could not edit the message.',
+      )
+    }
+  }
+
+  async function deleteMessage() {
+    if (!deletingMessage || isDeletingMessage) return
+
+    setIsDeletingMessage(true)
+    try {
+      const response = await fetch(
+        `${API_URL}/api/messages/${deletingMessage.id}?username=${encodeURIComponent(
+          user.username,
+        )}`,
+        { method: 'DELETE' },
+      )
+      if (!response.ok) throw new Error(await readError(response))
+      setDeletingMessage(null)
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Could not delete the message.',
+      )
+    } finally {
+      setIsDeletingMessage(false)
+    }
+  }
+
+  async function toggleMessageReaction(messageId: string, reaction: string) {
+    try {
+      const response = await fetch(
+        `${API_URL}/api/messages/${messageId}/reactions?username=${encodeURIComponent(
+          user.username,
+        )}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reaction }),
+        },
+      )
+      if (!response.ok) throw new Error(await readError(response))
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Could not update the reaction.',
+      )
+    }
+  }
+
+  async function copyMessage(message: Message) {
+    const copyText =
+      message.content ??
+      (message.attachments ?? []).map((attachment) => attachment.fileName).join(', ')
+    try {
+      await navigator.clipboard.writeText(copyText)
+    } catch {
+      setError('Could not copy this message.')
+    }
+  }
+
   function attachmentUrl(attachmentId: string, download = false) {
     return `${API_URL}/api/attachments/${attachmentId}?username=${encodeURIComponent(
       user.username,
@@ -871,6 +1071,22 @@ function ChatApp({
       event.preventDefault()
       void sendMessage()
     }
+  }
+
+  function insertEmoji(emoji: string) {
+    const input = draftInputRef.current
+    const selectionStart = input?.selectionStart ?? draft.length
+    const selectionEnd = input?.selectionEnd ?? selectionStart
+    const nextDraft =
+      draft.slice(0, selectionStart) + emoji + draft.slice(selectionEnd)
+    if (nextDraft.length > 2000) return
+
+    handleDraftChange(nextDraft)
+    const nextCursor = selectionStart + emoji.length
+    window.requestAnimationFrame(() => {
+      input?.focus()
+      input?.setSelectionRange(nextCursor, nextCursor)
+    })
   }
 
   async function createGroup(event: FormEvent) {
@@ -1482,6 +1698,7 @@ function ChatApp({
                       className={`message ${
                         startsGroup ? 'group-start' : 'compact'
                       } ${isOwnMessage ? 'own-message' : ''}`}
+                      tabIndex={0}
                     >
                       {startsGroup && !isOwnMessage ? (
                         <span
@@ -1525,7 +1742,62 @@ function ChatApp({
                               attachments={message.attachments ?? []}
                               getUrl={attachmentUrl}
                             />
-                            {message.content && <p>{message.content}</p>}
+                            {editingMessageId === message.id ? (
+                              <form
+                                className="message-edit-form"
+                                onSubmit={(event) => void editMessage(event, message.id)}
+                              >
+                                <textarea
+                                  autoFocus
+                                  maxLength={2000}
+                                  rows={2}
+                                  value={editMessageDraft}
+                                  onChange={(event) =>
+                                    setEditMessageDraft(event.target.value)
+                                  }
+                                />
+                                <div>
+                                  <button
+                                    className="secondary-button"
+                                    type="button"
+                                    onClick={() => setEditingMessageId(null)}
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    className="message-edit-save"
+                                    type="submit"
+                                    disabled={!editMessageDraft.trim()}
+                                  >
+                                    Save
+                                  </button>
+                                </div>
+                              </form>
+                            ) : (
+                              message.content && <p>{message.content}</p>
+                            )}
+                            {message.editedAt && editingMessageId !== message.id && (
+                              <small className="message-edited">Edited</small>
+                            )}
+                            <MessageActions
+                              isOwn={isOwnMessage}
+                              canEdit={Boolean(message.content)}
+                              canCopy={Boolean(
+                                message.content || (message.attachments?.length ?? 0) > 0,
+                              )}
+                              disabled={!isOnline || editingMessageId === message.id}
+                              reactions={message.reactions ?? []}
+                              resolveAvatarUrl={avatarSource}
+                              onReaction={(reaction) =>
+                                void toggleMessageReaction(message.id, reaction)
+                              }
+                              onEdit={() => {
+                                setEditingMessageId(message.id)
+                                setEditMessageDraft(message.content ?? '')
+                              }}
+                              onDelete={() => setDeletingMessage(message)}
+                              onCopy={() => void copyMessage(message)}
+                            />
                           </>
                         )}
                       </div>
@@ -1561,6 +1833,7 @@ function ChatApp({
             onError={setError}
           />
           <textarea
+            ref={draftInputRef}
             aria-label={`Message ${conversationDisplayTitle(
               activeConversation,
               'conversation',
@@ -1578,6 +1851,10 @@ function ChatApp({
             value={draft}
             onChange={(event) => handleDraftChange(event.target.value)}
             onKeyDown={handleComposerKeyDown}
+          />
+          <EmojiPicker
+            disabled={!activeConversation || !isOnline || isSendingMessage}
+            onSelect={insertEmoji}
           />
           <button
             className="send-button"
@@ -2202,6 +2479,50 @@ function ChatApp({
                 </button>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {deletingMessage && (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            className="modal-card confirmation-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-message-title"
+          >
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">Delete message</p>
+                <h2 id="delete-message-title">Delete this message?</h2>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                aria-label="Close"
+                onClick={() => setDeletingMessage(null)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <p>This removes the message for everyone in the conversation.</p>
+            <div className="modal-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setDeletingMessage(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="danger-button"
+                type="button"
+                disabled={isDeletingMessage}
+                onClick={() => void deleteMessage()}
+              >
+                {isDeletingMessage ? 'Deleting...' : 'Delete message'}
+              </button>
+            </div>
           </div>
         </div>
       )}

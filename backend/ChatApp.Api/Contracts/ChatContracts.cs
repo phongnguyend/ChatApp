@@ -62,6 +62,17 @@ public sealed record MessageAttachmentDto(
     int? Width,
     int? Height);
 
+public sealed record MessageReactionDto(
+    string Reaction,
+    int Count,
+    bool IsOwn,
+    IReadOnlyList<MessageReactionUserDto> Users);
+
+public sealed record MessageReactionUserDto(
+    Guid Id,
+    string DisplayName,
+    string? AvatarUrl);
+
 public sealed record MessageDto(
     Guid Id,
     Guid ConversationId,
@@ -76,7 +87,28 @@ public sealed record MessageDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset? EditedAt,
     DateTimeOffset? DeletedAt,
-    IReadOnlyList<MessageAttachmentDto>? Attachments = null);
+    IReadOnlyList<MessageAttachmentDto>? Attachments = null,
+    IReadOnlyList<MessageReactionDto>? Reactions = null);
+
+public sealed record UpdateMessageRequest(string Content);
+
+public sealed record ToggleMessageReactionRequest(string Reaction);
+
+public sealed record MessageChangedDto(
+    Guid MessageId,
+    Guid ConversationId,
+    string? Content,
+    DateTimeOffset? EditedAt,
+    DateTimeOffset? DeletedAt);
+
+public sealed record MessageReactionChangedDto(
+    Guid MessageId,
+    Guid ConversationId,
+    Guid UserId,
+    string DisplayName,
+    string? AvatarUrl,
+    string Reaction,
+    bool IsAdded);
 
 public sealed record SendMessageRequest(
     Guid ConversationId,

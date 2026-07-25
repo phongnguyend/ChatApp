@@ -630,12 +630,21 @@ public sealed class ConversationsController(
             return NotFound();
         }
 
+        var normalizedUsername = Username.Normalize(username);
         limit = Math.Clamp(limit, 1, 100);
-        var messages = await db.Messages
+        var messageEntities = await db.Messages
             .AsNoTracking()
+            .AsSplitQuery()
+            .Include(x => x.Sender)
+            .Include(x => x.Attachments)
+            .Include(x => x.Reactions)
+                .ThenInclude(reaction => reaction.User)
             .Where(x => x.ConversationId == id)
             .OrderByDescending(x => x.SequenceNumber)
             .Take(limit)
+            .ToListAsync(cancellationToken);
+
+        var messages = messageEntities
             .Select(x => new MessageDto(
                 x.Id,
                 x.ConversationId,
@@ -661,8 +670,25 @@ public sealed class ConversationsController(
                             attachment.Width,
                             attachment.Height))
                         .ToList()
-                    : new List<MessageAttachmentDto>()))
-            .ToListAsync(cancellationToken);
+                    : new List<MessageAttachmentDto>(),
+                x.DeletedAt == null
+                    ? x.Reactions
+                        .GroupBy(reaction => reaction.Reaction)
+                        .Select(group => new MessageReactionDto(
+                            group.Key,
+                            group.Count(),
+                            group.Any(reaction =>
+                                reaction.User.NormalizedUsername == normalizedUsername),
+                            group
+                                .OrderBy(reaction => reaction.CreatedAt)
+                                .Select(reaction => new MessageReactionUserDto(
+                                    reaction.UserId,
+                                    reaction.User.DisplayName,
+                                    reaction.User.AvatarUrl))
+                                .ToList()))
+                        .ToList()
+                    : new List<MessageReactionDto>()))
+            .ToList();
 
         messages.Reverse();
         return Ok(messages);
