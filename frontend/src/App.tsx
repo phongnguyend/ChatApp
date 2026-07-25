@@ -7,7 +7,10 @@ import {
 import {
   Check,
   BellOff,
+  Download,
+  FileText,
   Hash,
+  Images,
   LoaderCircle,
   LogOut,
   Menu,
@@ -158,6 +161,7 @@ type TypingEvent = {
 }
 
 type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'offline'
+type ConversationTab = 'chat' | 'files' | 'photos'
 const EMPTY_MESSAGES: Message[] = []
 
 function conversationDisplayTitle(
@@ -223,6 +227,19 @@ function formatTime(value: string) {
     hour: 'numeric',
     minute: '2-digit',
   }).format(new Date(value))
+}
+
+function formatAttachmentDate(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value))
+}
+
+function formatAttachmentSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function dateLabel(value: string) {
@@ -361,6 +378,8 @@ function ChatApp({
 }) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [conversationTab, setConversationTab] =
+    useState<ConversationTab>('chat')
   const [messagesByConversation, setMessagesByConversation] = useState<
     Record<string, Message[]>
   >({})
@@ -430,6 +449,41 @@ function ChatApp({
   const activeMessages = activeId
     ? messagesByConversation[activeId] ?? EMPTY_MESSAGES
     : EMPTY_MESSAGES
+  const activeAttachmentItems = useMemo(
+    () =>
+      activeMessages.flatMap((message) =>
+        message.deletedAt
+          ? []
+          : (message.attachments ?? []).map((attachment) => ({
+              attachment,
+              messageId: message.id,
+              senderName:
+                message.senderUserId === user.id
+                  ? 'You'
+                  : (message.username ?? 'Unknown user'),
+              createdAt: message.createdAt,
+            })),
+      ),
+    [activeMessages, user.id],
+  )
+  const activePhotoItems = useMemo(
+    () =>
+      activeAttachmentItems.filter(
+        ({ attachment }) =>
+          attachment.contentType.startsWith('image/') ||
+          attachment.contentType.startsWith('video/'),
+      ),
+    [activeAttachmentItems],
+  )
+  const activeFileItems = useMemo(
+    () =>
+      activeAttachmentItems.filter(
+        ({ attachment }) =>
+          !attachment.contentType.startsWith('image/') &&
+          !attachment.contentType.startsWith('video/'),
+      ),
+    [activeAttachmentItems],
+  )
   const activeMembers = activeId ? membersByConversation[activeId] ?? [] : []
   const canManageGroupMembers = activeMembers.some(
     (member) => member.id === user.id && member.role === 'owner',
@@ -959,6 +1013,7 @@ function ChatApp({
 
   useEffect(() => {
     setAttachmentFiles([])
+    setConversationTab('chat')
   }, [activeId])
 
   useEffect(() => {
@@ -973,8 +1028,10 @@ function ChatApp({
   }, [activeConversation?.type, activeId, loadMembers])
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [activeMessages.length, activeId])
+    if (conversationTab === 'chat') {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [activeMessages.length, activeId, conversationTab])
 
   const groupedMessages = useMemo(() => {
     return activeMessages.map((message, index) => {
@@ -1777,7 +1834,11 @@ function ChatApp({
         </div>
       </aside>
 
-      <section className="conversation-panel">
+      <section
+        className={`conversation-panel ${
+          conversationTab === 'chat' ? '' : 'detail-mode'
+        }`}
+      >
         <header className="conversation-header">
           <button
             className="icon-button mobile-menu"
@@ -1897,7 +1958,56 @@ function ChatApp({
           </div>
         )}
 
-        <div className="message-list" aria-live="polite">
+        <nav
+          className="conversation-tabs"
+          aria-label="Conversation details"
+          role="tablist"
+        >
+          <button
+            id="conversation-tab-chat"
+            type="button"
+            role="tab"
+            aria-selected={conversationTab === 'chat'}
+            aria-controls="conversation-chat-panel"
+            onClick={() => setConversationTab('chat')}
+          >
+            <MessageCircleMore size={16} />
+            Chat
+          </button>
+          <button
+            id="conversation-tab-files"
+            type="button"
+            role="tab"
+            aria-selected={conversationTab === 'files'}
+            aria-controls="conversation-files-panel"
+            onClick={() => setConversationTab('files')}
+          >
+            <FileText size={16} />
+            Files
+            {activeFileItems.length > 0 && <span>{activeFileItems.length}</span>}
+          </button>
+          <button
+            id="conversation-tab-photos"
+            type="button"
+            role="tab"
+            aria-selected={conversationTab === 'photos'}
+            aria-controls="conversation-photos-panel"
+            onClick={() => setConversationTab('photos')}
+          >
+            <Images size={16} />
+            Photos
+            {activePhotoItems.length > 0 && <span>{activePhotoItems.length}</span>}
+          </button>
+        </nav>
+
+        <div
+          className="message-list"
+          id="conversation-chat-panel"
+          role="tabpanel"
+          aria-labelledby="conversation-tab-chat"
+          aria-live="polite"
+          hidden={conversationTab !== 'chat'}
+        >
           {isLoadingMessages ? (
             <div className="center-state">
               <LoaderCircle className="spin" size={24} />
@@ -2062,7 +2172,151 @@ function ChatApp({
           <div ref={messagesEndRef} />
         </div>
 
-        <div className="typing-line" aria-live="polite">
+        {conversationTab === 'files' && (
+          <div
+            className="conversation-assets"
+            id="conversation-files-panel"
+            role="tabpanel"
+            aria-labelledby="conversation-tab-files"
+          >
+            <div className="conversation-assets-heading">
+              <div>
+                <p className="eyebrow">Shared files</p>
+                <h2>Files in this conversation</h2>
+              </div>
+              <span>
+                {activeFileItems.length}{' '}
+                {activeFileItems.length === 1 ? 'file' : 'files'}
+              </span>
+            </div>
+            {isLoadingMessages ? (
+              <div className="center-state">
+                <LoaderCircle className="spin" size={24} />
+                <p>Loading shared files…</p>
+              </div>
+            ) : activeFileItems.length === 0 ? (
+              <div className="empty-assets">
+                <span><FileText size={25} /></span>
+                <h3>No files shared yet</h3>
+                <p>Documents and other downloadable attachments will appear here.</p>
+              </div>
+            ) : (
+              <div className="conversation-file-grid">
+                {activeFileItems.map(({ attachment, messageId, senderName, createdAt }) => (
+                  <a
+                    className="conversation-file-card"
+                    key={`${messageId}-${attachment.id}`}
+                    href={attachmentUrl(attachment.id, true)}
+                    download={attachment.fileName}
+                  >
+                    <span className="conversation-file-icon">
+                      <FileText size={21} />
+                    </span>
+                    <span className="conversation-file-copy">
+                      <strong>{attachment.fileName}</strong>
+                      <small>
+                        {formatAttachmentSize(attachment.fileSize)} · {senderName}
+                      </small>
+                      <time dateTime={createdAt}>
+                        {formatAttachmentDate(createdAt)}
+                      </time>
+                    </span>
+                    <Download size={17} />
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {conversationTab === 'photos' && (
+          <div
+            className="conversation-assets"
+            id="conversation-photos-panel"
+            role="tabpanel"
+            aria-labelledby="conversation-tab-photos"
+          >
+            <div className="conversation-assets-heading">
+              <div>
+                <p className="eyebrow">Shared media</p>
+                <h2>Photos and videos</h2>
+              </div>
+              <span>
+                {activePhotoItems.length}{' '}
+                {activePhotoItems.length === 1 ? 'item' : 'items'}
+              </span>
+            </div>
+            {isLoadingMessages ? (
+              <div className="center-state">
+                <LoaderCircle className="spin" size={24} />
+                <p>Loading shared media…</p>
+              </div>
+            ) : activePhotoItems.length === 0 ? (
+              <div className="empty-assets">
+                <span><Images size={25} /></span>
+                <h3>No photos or videos yet</h3>
+                <p>Images, camera captures, videos, and screen recordings appear here.</p>
+              </div>
+            ) : (
+              <div className="conversation-media-grid">
+                {activePhotoItems.map(
+                  ({ attachment, messageId, senderName, createdAt }) => (
+                    <article
+                      className="conversation-media-card"
+                      key={`${messageId}-${attachment.id}`}
+                    >
+                      <div className="conversation-media-preview">
+                        {attachment.contentType.startsWith('image/') ? (
+                          <a
+                            href={attachmentUrl(attachment.id)}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={`Open ${attachment.fileName}`}
+                          >
+                            <img
+                              src={attachmentUrl(attachment.id)}
+                              alt={attachment.fileName}
+                              loading="lazy"
+                            />
+                          </a>
+                        ) : (
+                          <video
+                            src={attachmentUrl(attachment.id)}
+                            controls
+                            playsInline
+                            preload="metadata"
+                          />
+                        )}
+                      </div>
+                      <div className="conversation-media-meta">
+                        <div>
+                          <strong>{attachment.fileName}</strong>
+                          <small>
+                            {senderName} · {formatAttachmentDate(createdAt)}
+                          </small>
+                        </div>
+                        <a
+                          href={attachmentUrl(attachment.id, true)}
+                          download={attachment.fileName}
+                          aria-label={`Download ${attachment.fileName}`}
+                          title="Download"
+                        >
+                          <Download size={16} />
+                        </a>
+                      </div>
+                    </article>
+                  ),
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div
+          className="typing-line"
+          aria-live="polite"
+          hidden={conversationTab !== 'chat'}
+        >
           {currentTypingUsers.length > 0 && (
             <>
               <span className="typing-dots">
@@ -2077,7 +2331,11 @@ function ChatApp({
           )}
         </div>
 
-        <form className="composer" onSubmit={sendMessage}>
+        <form
+          className="composer"
+          onSubmit={sendMessage}
+          hidden={conversationTab !== 'chat'}
+        >
           <MessageAttachmentPicker
             files={attachmentFiles}
             disabled={!activeConversation || !isOnline || isSendingMessage}
