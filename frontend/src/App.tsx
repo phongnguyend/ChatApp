@@ -44,6 +44,7 @@ import {
 import { EmojiPicker } from './components/EmojiPicker'
 import { GroupMemberActions } from './components/GroupMemberActions'
 import { ConversationActions } from './components/ConversationActions'
+import { OnlineUserActions } from './components/OnlineUserActions'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5045'
 
@@ -92,6 +93,11 @@ type ConversationRemovedEvent = {
 type ConversationMuteChangedEvent = {
   conversationId: string
   isMuted: boolean
+}
+
+type UserBlockChangedEvent = {
+  username: string
+  isBlocked: boolean
 }
 
 type UserAvatarUpdatedEvent = {
@@ -356,6 +362,9 @@ function ChatApp({
     Record<string, Message[]>
   >({})
   const [onlineUsers, setOnlineUsers] = useState<string[]>([])
+  const [blockedUsernames, setBlockedUsernames] = useState<Set<string>>(
+    () => new Set(),
+  )
   const [typingUsers, setTypingUsers] = useState<Record<string, string[]>>({})
   const [draft, setDraft] = useState('')
   const [status, setStatus] = useState<ConnectionStatus>('connecting')
@@ -399,6 +408,9 @@ function ChatApp({
   const [deletingMessage, setDeletingMessage] = useState<Message | null>(null)
   const [isDeletingMessage, setIsDeletingMessage] = useState(false)
   const [conversationActionId, setConversationActionId] = useState<string | null>(
+    null,
+  )
+  const [userBlockActionName, setUserBlockActionName] = useState<string | null>(
     null,
   )
   const [memberActionId, setMemberActionId] = useState<string | null>(null)
@@ -531,6 +543,29 @@ function ChatApp({
       setError(requestError instanceof Error ? requestError.message : 'Could not load chats.')
     })
   }, [loadConversations])
+
+  useEffect(() => {
+    fetch(
+      `${API_URL}/api/users/blocked?username=${encodeURIComponent(user.username)}`,
+    )
+      .then(async (response) => {
+        if (!response.ok) throw new Error(await readError(response))
+        return (await response.json()) as string[]
+      })
+      .then(
+        (usernames) =>
+          setBlockedUsernames(
+            new Set(usernames.map((name) => name.toLocaleLowerCase())),
+          ),
+      )
+      .catch((requestError) => {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : 'Could not load blocked users.',
+        )
+      })
+  }, [user.username])
 
   useEffect(() => {
     const connection = new HubConnectionBuilder()
@@ -789,6 +824,18 @@ function ChatApp({
         )
       },
     )
+    connection.on('UserBlockChanged', (event: UserBlockChangedEvent) => {
+      setBlockedUsernames((current) => {
+        const next = new Set(current)
+        const normalized = event.username.toLocaleLowerCase()
+        if (event.isBlocked) {
+          next.add(normalized)
+        } else {
+          next.delete(normalized)
+        }
+        return next
+      })
+    })
     connection.on('UserTyping', (event: TypingEvent) => {
       setTypingUsers((current) => {
         const previous = current[event.conversationId] ?? []
@@ -1456,6 +1503,44 @@ function ChatApp({
     }
   }
 
+  async function toggleUserBlock(targetUsername: string) {
+    if (userBlockActionName) return
+
+    const normalizedTarget = targetUsername.toLocaleLowerCase()
+    const isBlocked = blockedUsernames.has(normalizedTarget)
+    setUserBlockActionName(normalizedTarget)
+    setError('')
+    try {
+      const response = await fetch(
+        `${API_URL}/api/users/blocked/${encodeURIComponent(
+          targetUsername,
+        )}?username=${encodeURIComponent(user.username)}`,
+        { method: isBlocked ? 'DELETE' : 'PUT' },
+      )
+      if (!response.ok) throw new Error(await readError(response))
+
+      const changed = (await response.json()) as UserBlockChangedEvent
+      setBlockedUsernames((current) => {
+        const next = new Set(current)
+        const changedUsername = changed.username.toLocaleLowerCase()
+        if (changed.isBlocked) {
+          next.add(changedUsername)
+        } else {
+          next.delete(changedUsername)
+        }
+        return next
+      })
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : `Could not ${isBlocked ? 'unblock' : 'block'} this user.`,
+      )
+    } finally {
+      setUserBlockActionName(null)
+    }
+  }
+
   async function uploadUserAvatar(file: File) {
     const formData = new FormData()
     formData.append('image', file)
@@ -2112,7 +2197,13 @@ function ChatApp({
                 </div>
                 )
               })
-            : onlineUsers.map((name) => (
+            : onlineUsers.map((name) => {
+                const normalizedName = name.toLocaleLowerCase()
+                const isCurrentUser =
+                  normalizedName === user.username.toLocaleLowerCase()
+                const isBlocked = blockedUsernames.has(normalizedName)
+
+                return (
                 <div className="person" key={name}>
                   <span
                     className="avatar avatar-small"
@@ -2123,10 +2214,21 @@ function ChatApp({
                   </span>
                   <span className="person-copy">
                     <strong>{name}</strong>
-                    <small>{name === user.username ? 'You' : 'Available'}</small>
+                    <small>
+                      {isCurrentUser ? 'You' : isBlocked ? 'Blocked' : 'Available'}
+                    </small>
                   </span>
+                  {!isCurrentUser && (
+                    <OnlineUserActions
+                      username={name}
+                      isBlocked={isBlocked}
+                      disabled={userBlockActionName === normalizedName}
+                      onToggleBlock={() => void toggleUserBlock(name)}
+                    />
+                  )}
                 </div>
-              ))}
+                )
+              })}
         </div>
         <div className="people-note">
           <span>✦</span>

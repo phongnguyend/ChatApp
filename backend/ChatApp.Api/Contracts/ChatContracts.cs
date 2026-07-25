@@ -49,6 +49,8 @@ public sealed record UpdateDisplayNameRequest(string DisplayName);
 
 public sealed record UserDisplayNameUpdatedDto(Guid UserId, string DisplayName);
 
+public sealed record UserBlockChangedDto(string Username, bool IsBlocked);
+
 public sealed record ConversationAvatarUpdatedDto(
     Guid ConversationId,
     string AvatarUrl);

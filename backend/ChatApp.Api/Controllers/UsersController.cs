@@ -1,6 +1,7 @@
 using ChatApp.Api.Contracts;
 using ChatApp.Api.Data;
 using ChatApp.Api.Hubs;
+using ChatApp.Api.Models;
 using ChatApp.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -49,6 +50,108 @@ public sealed class UsersController(
             .ToListAsync(cancellationToken);
 
         return Ok(users);
+    }
+
+    [HttpGet("blocked")]
+    public async Task<ActionResult<IReadOnlyList<string>>> GetBlockedUsers(
+        [FromQuery] string username,
+        CancellationToken cancellationToken)
+    {
+        var normalized = Username.Normalize(username);
+        var blockerId = await db.Users
+            .Where(x => x.NormalizedUsername == normalized && x.Status == "active")
+            .Select(x => (Guid?)x.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (blockerId is null)
+        {
+            return NotFound();
+        }
+
+        var blockedUsernames = await db.UserBlocks
+            .AsNoTracking()
+            .Where(x => x.BlockerUserId == blockerId)
+            .OrderBy(x => x.BlockedUser.Username)
+            .Select(x => x.BlockedUser.Username)
+            .ToListAsync(cancellationToken);
+        return Ok(blockedUsernames);
+    }
+
+    [HttpPut("blocked/{targetUsername}")]
+    public async Task<ActionResult<UserBlockChangedDto>> BlockUser(
+        string targetUsername,
+        [FromQuery] string username,
+        CancellationToken cancellationToken)
+    {
+        var blockerNormalized = Username.Normalize(username);
+        var targetNormalized = Username.Normalize(targetUsername);
+        var users = await db.Users
+            .Where(x =>
+                x.Status == "active" &&
+                (x.NormalizedUsername == blockerNormalized ||
+                 x.NormalizedUsername == targetNormalized))
+            .ToListAsync(cancellationToken);
+        var blocker = users.SingleOrDefault(x =>
+            x.NormalizedUsername == blockerNormalized);
+        var target = users.SingleOrDefault(x =>
+            x.NormalizedUsername == targetNormalized);
+        if (blocker is null || target is null)
+        {
+            return NotFound();
+        }
+        if (blocker.Id == target.Id)
+        {
+            return BadRequest(new { message = "You cannot block yourself." });
+        }
+
+        var existing = await db.UserBlocks.FindAsync(
+            [blocker.Id, target.Id],
+            cancellationToken);
+        if (existing is null)
+        {
+            db.UserBlocks.Add(new UserBlock
+            {
+                BlockerUser = blocker,
+                BlockedUser = target
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        var changed = new UserBlockChangedDto(target.Username, true);
+        await NotifyBlocker(blocker.Id, changed, cancellationToken);
+        return Ok(changed);
+    }
+
+    [HttpDelete("blocked/{targetUsername}")]
+    public async Task<ActionResult<UserBlockChangedDto>> UnblockUser(
+        string targetUsername,
+        [FromQuery] string username,
+        CancellationToken cancellationToken)
+    {
+        var blockerNormalized = Username.Normalize(username);
+        var targetNormalized = Username.Normalize(targetUsername);
+        var blocker = await db.Users.SingleOrDefaultAsync(
+            x => x.NormalizedUsername == blockerNormalized && x.Status == "active",
+            cancellationToken);
+        var target = await db.Users.SingleOrDefaultAsync(
+            x => x.NormalizedUsername == targetNormalized && x.Status == "active",
+            cancellationToken);
+        if (blocker is null || target is null)
+        {
+            return NotFound();
+        }
+
+        var existing = await db.UserBlocks.FindAsync(
+            [blocker.Id, target.Id],
+            cancellationToken);
+        if (existing is not null)
+        {
+            db.UserBlocks.Remove(existing);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        var changed = new UserBlockChangedDto(target.Username, false);
+        await NotifyBlocker(blocker.Id, changed, cancellationToken);
+        return Ok(changed);
     }
 
     [HttpPost("avatar")]
@@ -132,5 +235,18 @@ public sealed class UsersController(
             user.Username,
             user.DisplayName,
             user.AvatarUrl));
+    }
+
+    private async Task NotifyBlocker(
+        Guid blockerId,
+        UserBlockChangedDto changed,
+        CancellationToken cancellationToken)
+    {
+        var connectionIds = presence.ConnectionIdsForUser(blockerId);
+        if (connectionIds.Count > 0)
+        {
+            await hubContext.Clients.Clients(connectionIds)
+                .SendAsync("UserBlockChanged", changed, cancellationToken);
+        }
     }
 }
