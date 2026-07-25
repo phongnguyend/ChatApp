@@ -65,6 +65,8 @@ public sealed class ConversationsController(
                     : x.Conversation.LastMessage.Content ??
                       (x.Conversation.LastMessage.MessageType == "image"
                           ? "Sent an image"
+                          : x.Conversation.LastMessage.MessageType == "video"
+                              ? "Sent a video"
                           : x.Conversation.LastMessage.MessageType == "file"
                               ? "Sent a file"
                               : null),
@@ -872,9 +874,12 @@ public sealed class ConversationsController(
                 SenderUserId = sender.Id,
                 Sender = sender,
                 MessageType = attachments.All(attachment =>
-                    attachmentStorage.IsDisplayableImage(attachment.ContentType))
+                        attachmentStorage.IsDisplayableImage(attachment.ContentType))
                     ? "image"
-                    : "file",
+                    : attachments.All(attachment =>
+                        attachmentStorage.IsDisplayableVideo(attachment.ContentType))
+                        ? "video"
+                        : "file",
                 Content = string.IsNullOrWhiteSpace(messageContent) ? null : messageContent,
                 ClientMessageId = cleanClientMessageId,
                 SequenceNumber = nextSequence + 1,

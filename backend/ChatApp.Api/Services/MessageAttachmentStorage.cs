@@ -13,6 +13,12 @@ public sealed class MessageAttachmentStorage(IWebHostEnvironment environment)
         "image/gif"
     ];
 
+    private static readonly HashSet<string> VideoContentTypes =
+    [
+        "video/webm",
+        "video/mp4"
+    ];
+
     private string RootPath => Path.Combine(
         environment.ContentRootPath,
         "wwwroot",
@@ -20,7 +26,10 @@ public sealed class MessageAttachmentStorage(IWebHostEnvironment environment)
         "attachments");
 
     public bool IsDisplayableImage(string contentType) =>
-        ImageContentTypes.Contains(contentType);
+        ImageContentTypes.Contains(NormalizeContentType(contentType));
+
+    public bool IsDisplayableVideo(string contentType) =>
+        VideoContentTypes.Contains(NormalizeContentType(contentType));
 
     public async Task<string> SaveAsync(
         Guid conversationId,
@@ -112,6 +121,17 @@ public sealed class MessageAttachmentStorage(IWebHostEnvironment environment)
                     $"\"{CleanFileName(file.FileName)}\" is not a valid image.");
             }
         }
+        else if (IsDisplayableVideo(file.ContentType))
+        {
+            using var input = file.OpenReadStream();
+            Span<byte> header = stackalloc byte[12];
+            var read = input.Read(header);
+            if (!HasValidVideoSignature(file.ContentType, header[..read]))
+            {
+                throw new InvalidDataException(
+                    $"\"{CleanFileName(file.FileName)}\" is not a valid video.");
+            }
+        }
     }
 
     private string GetFullPath(string storageKey)
@@ -130,7 +150,7 @@ public sealed class MessageAttachmentStorage(IWebHostEnvironment environment)
     private static bool HasValidImageSignature(
         string contentType,
         ReadOnlySpan<byte> header) =>
-        contentType.ToLowerInvariant() switch
+        NormalizeContentType(contentType) switch
         {
             "image/jpeg" => header.Length >= 3 &&
                 header[0] == 0xff && header[1] == 0xd8 && header[2] == 0xff,
@@ -145,4 +165,19 @@ public sealed class MessageAttachmentStorage(IWebHostEnvironment environment)
                 header[8..12].SequenceEqual("WEBP"u8),
             _ => false
         };
+
+    private static bool HasValidVideoSignature(
+        string contentType,
+        ReadOnlySpan<byte> header) =>
+        NormalizeContentType(contentType) switch
+        {
+            "video/webm" => header.Length >= 4 &&
+                header[..4].SequenceEqual(new byte[] { 0x1a, 0x45, 0xdf, 0xa3 }),
+            "video/mp4" => header.Length >= 8 &&
+                header[4..8].SequenceEqual("ftyp"u8),
+            _ => false
+        };
+
+    private static string NormalizeContentType(string contentType) =>
+        contentType.Split(';', 2)[0].Trim().ToLowerInvariant();
 }

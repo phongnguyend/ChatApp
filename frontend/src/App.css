@@ -1223,6 +1223,14 @@
   background: #eeece7;
 }
 
+.message-video {
+  display: block;
+  width: min(100%, 420px);
+  max-height: 420px;
+  border-radius: 14px;
+  background: var(--navy);
+}
+
 .message-file {
   min-width: min(300px, 72vw);
   padding: 10px 12px;
@@ -1332,7 +1340,7 @@
   grid-area: composer;
   position: relative;
   margin: 0 28px 22px;
-  padding: 10px 94px 24px 94px;
+  padding: 10px 94px 24px 174px;
   border: 1px solid #dedbd3;
   border-radius: 14px;
   background: white;
@@ -1492,6 +1500,56 @@
   background: #f1efe9;
 }
 
+.attachment-video-button {
+  position: absolute;
+  left: 90px;
+  bottom: 20px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: #777b76;
+  background: #f1efe9;
+}
+
+.attachment-screen-button {
+  position: absolute;
+  left: 130px;
+  bottom: 20px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: #777b76;
+  background: #f1efe9;
+}
+
+.attachment-screen-button:hover:not(:disabled) {
+  color: var(--coral);
+  background: #f9e9e4;
+}
+
+.attachment-screen-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.attachment-video-button:hover:not(:disabled) {
+  color: var(--coral);
+  background: #f9e9e4;
+}
+
+.attachment-video-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .attachment-camera-button:hover:not(:disabled) {
   color: var(--coral);
   background: #f9e9e4;
@@ -1539,6 +1597,34 @@
   letter-spacing: -0.035em;
 }
 
+.video-recording-status {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 6px 9px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: white;
+  background: rgba(20, 25, 25, 0.72);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.video-recording-status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f05a49;
+  box-shadow: 0 0 0 3px rgba(240, 90, 73, 0.2);
+}
+
+.camera-capture-button.recording {
+  background: #b84f41;
+  box-shadow: 0 8px 20px rgba(184, 79, 65, 0.2);
+}
+
 .attachment-button:hover:not(:disabled) {
   color: var(--coral);
   background: #f9e9e4;
@@ -1550,7 +1636,7 @@
 }
 
 .pending-attachments {
-  margin: 0 0 9px -80px;
+  margin: 0 0 9px -160px;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -2431,6 +2517,8 @@ input.visually-hidden {
 
   .attachment-button,
   .attachment-camera-button,
+  .attachment-video-button,
+  .attachment-screen-button,
   .emoji-picker-button,
   .send-button {
     bottom: 10px;

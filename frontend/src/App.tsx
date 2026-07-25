@@ -186,6 +186,9 @@ function messagePreview(message: Message) {
   if (attachments.every((attachment) => attachment.contentType.startsWith('image/'))) {
     return attachments.length === 1 ? 'Sent an image' : `Sent ${attachments.length} images`
   }
+  if (attachments.every((attachment) => attachment.contentType.startsWith('video/'))) {
+    return attachments.length === 1 ? 'Sent a video' : `Sent ${attachments.length} videos`
+  }
   return attachments.length === 1 ? 'Sent a file' : `Sent ${attachments.length} files`
 }
 

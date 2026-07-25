@@ -49,7 +49,9 @@ public sealed class AttachmentsController(
             return NotFound();
         }
 
-        if (!download && storage.IsDisplayableImage(attachment.ContentType))
+        if (!download &&
+            (storage.IsDisplayableImage(attachment.ContentType) ||
+             storage.IsDisplayableVideo(attachment.ContentType)))
         {
             return File(
                 stream,
