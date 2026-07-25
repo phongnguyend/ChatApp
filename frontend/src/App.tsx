@@ -1045,7 +1045,10 @@ function ChatApp({
     }
   }
 
-  async function makeGroupOwner(member: ConversationMember) {
+  async function updateGroupMemberRole(
+    member: ConversationMember,
+    role: 'owner' | 'member',
+  ) {
     if (!activeId || memberActionId) return
 
     setMemberActionId(member.id)
@@ -1058,7 +1061,7 @@ function ChatApp({
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ role: 'owner' }),
+          body: JSON.stringify({ role }),
         },
       )
       if (!response.ok) throw new Error(await readError(response))
@@ -1072,7 +1075,9 @@ function ChatApp({
       setError(
         requestError instanceof Error
           ? requestError.message
-          : 'Could not make this person an owner.',
+          : role === 'owner'
+            ? 'Could not make this person an owner.'
+            : 'Could not remove this person’s Owner role.',
       )
     } finally {
       setMemberActionId(null)
@@ -2006,7 +2011,12 @@ function ChatApp({
                       isOwner={member.role === 'owner'}
                       canRemove={activeConversation.title !== 'General'}
                       disabled={memberActionId === member.id}
-                      onMakeOwner={() => void makeGroupOwner(member)}
+                      onMakeOwner={() =>
+                        void updateGroupMemberRole(member, 'owner')
+                      }
+                      onRemoveOwner={() =>
+                        void updateGroupMemberRole(member, 'member')
+                      }
                       onRemove={() => setMemberToRemove(member)}
                     />
                   )}

@@ -930,9 +930,10 @@ public sealed class ConversationsController(
         UpdateConversationMemberRoleRequest request,
         CancellationToken cancellationToken)
     {
-        if (!string.Equals(request.Role, "owner", StringComparison.OrdinalIgnoreCase))
+        var role = request.Role?.Trim().ToLowerInvariant() ?? "";
+        if (role is not ("owner" or "member"))
         {
-            return BadRequest(new { message = "Members can only be promoted to Owner." });
+            return BadRequest(new { message = "Choose either Owner or Member." });
         }
 
         var normalized = Username.Normalize(username);
@@ -942,6 +943,13 @@ public sealed class ConversationsController(
         if (requester is null)
         {
             return NotFound();
+        }
+        if (requester.Id == memberUserId && role == "member")
+        {
+            return BadRequest(new
+            {
+                message = "Another owner must remove your Owner role."
+            });
         }
 
         await using var transaction = await db.Database.BeginTransactionAsync(
@@ -971,7 +979,7 @@ public sealed class ConversationsController(
         {
             return NotFound(new { message = "That person is no longer in the group." });
         }
-        if (targetMembership.Role == "owner")
+        if (targetMembership.Role == role)
         {
             return Ok(await GetMemberDtos(id, cancellationToken));
         }
@@ -985,13 +993,14 @@ public sealed class ConversationsController(
         {
             Conversation = conversation,
             MessageType = "system",
-            Content =
-                $"{requester.DisplayName} made {targetMembership.User.DisplayName} an owner.",
+            Content = role == "owner"
+                ? $"{requester.DisplayName} made {targetMembership.User.DisplayName} an owner."
+                : $"{requester.DisplayName} removed {targetMembership.User.DisplayName} as an owner.",
             SequenceNumber = nextSequence + 1,
             CreatedAt = now
         };
 
-        targetMembership.Role = "owner";
+        targetMembership.Role = role;
         conversation.UpdatedAt = now;
         conversation.LastMessage = systemMessage;
         conversation.LastMessageId = systemMessage.Id;

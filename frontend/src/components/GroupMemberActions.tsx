@@ -7,6 +7,7 @@ type GroupMemberActionsProps = {
   canRemove: boolean
   disabled?: boolean
   onMakeOwner: () => void
+  onRemoveOwner: () => void
   onRemove: () => void
 }
 
@@ -16,6 +17,7 @@ export function GroupMemberActions({
   canRemove,
   disabled = false,
   onMakeOwner,
+  onRemoveOwner,
   onRemove,
 }: GroupMemberActionsProps) {
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -94,6 +96,19 @@ export function GroupMemberActions({
             >
               <Crown size={15} />
               Make Owner
+            </button>
+          )}
+          {isOwner && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setIsOpen(false)
+                onRemoveOwner()
+              }}
+            >
+              <Crown size={15} />
+              Remove Owner
             </button>
           )}
           {canRemove && (
