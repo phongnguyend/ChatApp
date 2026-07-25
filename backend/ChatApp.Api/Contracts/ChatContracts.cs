@@ -18,7 +18,8 @@ public sealed record ConversationDto(
     string? LastMessageSenderName,
     DateTimeOffset? LastMessageAt,
     int UnreadCount,
-    int MemberCount);
+    int MemberCount,
+    bool IsMuted = false);
 
 public sealed record CreateConversationRequest(
     string Title,
@@ -29,6 +30,12 @@ public sealed record CreateDirectConversationRequest(string Username);
 public sealed record AddConversationMembersRequest(IReadOnlyList<string>? Usernames);
 
 public sealed record UpdateConversationMemberRoleRequest(string Role);
+
+public sealed record UpdateConversationMuteRequest(bool IsMuted);
+
+public sealed record ConversationMuteChangedDto(
+    Guid ConversationId,
+    bool IsMuted);
 
 public sealed record UpdateConversationTitleRequest(string Title);
 

@@ -26,6 +26,7 @@ public sealed class ConversationsController(
         CancellationToken cancellationToken)
     {
         var normalized = Username.Normalize(username);
+        var now = DateTimeOffset.UtcNow;
         var userId = await db.Users
             .Where(x => x.NormalizedUsername == normalized)
             .Select(x => (Guid?)x.Id)
@@ -77,10 +78,48 @@ public sealed class ConversationsController(
                     : x.Conversation.LastMessage.Sender.DisplayName,
                 x.Conversation.LastMessageAt,
                 x.UnreadCount,
-                x.Conversation.Members.Count(member => member.LeftAt == null)))
+                x.Conversation.Members.Count(member => member.LeftAt == null),
+                x.MutedUntil != null && x.MutedUntil > now))
             .ToListAsync(cancellationToken);
 
         return Ok(conversations);
+    }
+
+    [HttpPatch("{id:guid}/members/me/mute")]
+    public async Task<ActionResult<ConversationMuteChangedDto>> UpdateMute(
+        Guid id,
+        [FromQuery] string username,
+        UpdateConversationMuteRequest request,
+        CancellationToken cancellationToken)
+    {
+        var normalized = Username.Normalize(username);
+        var membership = await db.ConversationMembers
+            .Include(x => x.User)
+            .SingleOrDefaultAsync(
+                x =>
+                    x.ConversationId == id &&
+                    x.User.NormalizedUsername == normalized &&
+                    x.LeftAt == null,
+                cancellationToken);
+        if (membership is null)
+        {
+            return NotFound();
+        }
+
+        membership.MutedUntil = request.IsMuted
+            ? DateTimeOffset.UtcNow.AddYears(10)
+            : null;
+        await db.SaveChangesAsync(cancellationToken);
+
+        var changed = new ConversationMuteChangedDto(id, request.IsMuted);
+        var connectionIds = presence.ConnectionIdsForUser(membership.UserId);
+        if (connectionIds.Count > 0)
+        {
+            await hubContext.Clients.Clients(connectionIds)
+                .SendAsync("ConversationMuteChanged", changed, cancellationToken);
+        }
+
+        return Ok(changed);
     }
 
     [HttpPost]

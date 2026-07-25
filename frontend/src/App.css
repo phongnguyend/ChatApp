@@ -324,9 +324,13 @@
   background: rgba(127, 127, 127, 0.12);
 }
 
+.conversation-row {
+  position: relative;
+}
+
 .conversation-item {
   width: 100%;
-  padding: 10px;
+  padding: 10px 43px 10px 10px;
   border: 0;
   border-radius: 11px;
   display: grid;
@@ -341,12 +345,12 @@
     background 140ms ease;
 }
 
-.conversation-item:hover {
+.conversation-row:hover .conversation-item {
   color: white;
   background: rgba(255, 255, 255, 0.055);
 }
 
-.conversation-item.active {
+.conversation-row.active .conversation-item {
   color: white;
   background: var(--navy-soft);
 }
@@ -423,6 +427,107 @@
   flex: 0 0 auto;
   color: #6e8984;
   font-size: 10px;
+}
+
+.conversation-indicators {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.conversation-muted-icon {
+  flex: 0 0 auto;
+  color: #728985;
+}
+
+.conversation-actions {
+  position: absolute;
+  z-index: 5;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+}
+
+.conversation-actions-trigger {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: #9eb1ae;
+  background: transparent;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 120ms ease,
+    background 120ms ease;
+}
+
+.conversation-row:hover .conversation-actions-trigger,
+.conversation-row:focus-within .conversation-actions-trigger,
+.conversation-actions-trigger[aria-expanded='true'] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.conversation-actions-trigger:hover,
+.conversation-actions-trigger[aria-expanded='true'] {
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.conversation-actions-trigger:disabled {
+  cursor: wait;
+  opacity: 0.45;
+}
+
+.conversation-actions-menu {
+  position: absolute;
+  z-index: 10;
+  right: 0;
+  bottom: 34px;
+  width: 178px;
+  padding: 5px;
+  border: 1px solid #dcd8cf;
+  border-radius: 11px;
+  display: grid;
+  gap: 2px;
+  color: #555a56;
+  background: white;
+  box-shadow: 0 14px 36px rgba(5, 17, 19, 0.28);
+}
+
+.conversation-actions.opens-below .conversation-actions-menu {
+  top: 34px;
+  bottom: auto;
+}
+
+.conversation-actions-menu button {
+  min-height: 36px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.conversation-actions-menu button:hover {
+  color: #7d483e;
+  background: #f6e8e4;
+}
+
+.conversation-actions-menu button.conversation-leave-action {
+  color: #a44a3d;
 }
 
 .unread-badge {

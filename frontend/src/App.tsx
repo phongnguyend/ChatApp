@@ -6,6 +6,7 @@ import {
 } from '@microsoft/signalr'
 import {
   Check,
+  BellOff,
   Hash,
   LoaderCircle,
   LogOut,
@@ -42,6 +43,7 @@ import {
 } from './components/MessageActions'
 import { EmojiPicker } from './components/EmojiPicker'
 import { GroupMemberActions } from './components/GroupMemberActions'
+import { ConversationActions } from './components/ConversationActions'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5045'
 
@@ -63,6 +65,7 @@ type Conversation = {
   lastMessageAt: string | null
   unreadCount: number
   memberCount: number
+  isMuted: boolean
 }
 
 type SearchUser = User
@@ -84,6 +87,11 @@ type ConversationRenamedEvent = {
 
 type ConversationRemovedEvent = {
   conversationId: string
+}
+
+type ConversationMuteChangedEvent = {
+  conversationId: string
+  isMuted: boolean
 }
 
 type UserAvatarUpdatedEvent = {
@@ -374,7 +382,8 @@ function ChatApp({
   const [renameTitle, setRenameTitle] = useState('')
   const [renameError, setRenameError] = useState('')
   const [isRenaming, setIsRenaming] = useState(false)
-  const [isLeaveDialogOpen, setIsLeaveDialogOpen] = useState(false)
+  const [conversationToLeave, setConversationToLeave] =
+    useState<Conversation | null>(null)
   const [leaveError, setLeaveError] = useState('')
   const [isLeaving, setIsLeaving] = useState(false)
   const [avatarDialog, setAvatarDialog] = useState<'user' | 'group' | null>(null)
@@ -389,6 +398,9 @@ function ChatApp({
   const [editMessageDraft, setEditMessageDraft] = useState('')
   const [deletingMessage, setDeletingMessage] = useState<Message | null>(null)
   const [isDeletingMessage, setIsDeletingMessage] = useState(false)
+  const [conversationActionId, setConversationActionId] = useState<string | null>(
+    null,
+  )
   const [memberActionId, setMemberActionId] = useState<string | null>(null)
   const [memberToRemove, setMemberToRemove] = useState<ConversationMember | null>(
     null,
@@ -424,7 +436,7 @@ function ChatApp({
       return next
     })
     setIsRenameDialogOpen(false)
-    setIsLeaveDialogOpen(false)
+    setConversationToLeave(null)
     setAvatarDialog(null)
   }, [])
 
@@ -765,6 +777,18 @@ function ChatApp({
     connection.on('ConversationRemoved', (event: ConversationRemovedEvent) => {
       removeConversation(event.conversationId)
     })
+    connection.on(
+      'ConversationMuteChanged',
+      (event: ConversationMuteChangedEvent) => {
+        setConversations((current) =>
+          current.map((conversation) =>
+            conversation.id === event.conversationId
+              ? { ...conversation, isMuted: event.isMuted }
+              : conversation,
+          ),
+        )
+      },
+    )
     connection.on('UserTyping', (event: TypingEvent) => {
       setTypingUsers((current) => {
         const previous = current[event.conversationId] ?? []
@@ -1366,22 +1390,24 @@ function ChatApp({
   }
 
   async function leaveGroup() {
-    if (!activeConversation || activeConversation.type !== 'group' || isLeaving) {
+    if (!conversationToLeave || conversationToLeave.type !== 'group' || isLeaving) {
       return
     }
 
+    const conversation = conversationToLeave
     setIsLeaving(true)
     setLeaveError('')
     try {
       const response = await fetch(
         `${API_URL}/api/conversations/${
-          activeConversation.id
+          conversation.id
         }/members/me?username=${encodeURIComponent(user.username)}`,
         { method: 'DELETE' },
       )
       if (!response.ok) throw new Error(await readError(response))
 
-      removeConversation(activeConversation.id)
+      removeConversation(conversation.id)
+      setConversationToLeave(null)
     } catch (requestError) {
       setLeaveError(
         requestError instanceof Error
@@ -1390,6 +1416,43 @@ function ChatApp({
       )
     } finally {
       setIsLeaving(false)
+    }
+  }
+
+  async function toggleConversationMute(conversation: Conversation) {
+    if (conversationActionId) return
+
+    setConversationActionId(conversation.id)
+    setError('')
+    try {
+      const response = await fetch(
+        `${API_URL}/api/conversations/${
+          conversation.id
+        }/members/me/mute?username=${encodeURIComponent(user.username)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isMuted: !conversation.isMuted }),
+        },
+      )
+      if (!response.ok) throw new Error(await readError(response))
+
+      const changed = (await response.json()) as ConversationMuteChangedEvent
+      setConversations((current) =>
+        current.map((item) =>
+          item.id === changed.conversationId
+            ? { ...item, isMuted: changed.isMuted }
+            : item,
+        ),
+      )
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Could not update conversation notifications.',
+      )
+    } finally {
+      setConversationActionId(null)
     }
   }
 
@@ -1509,62 +1572,88 @@ function ChatApp({
           </div>
           <nav aria-label="Conversations">
             {conversations.map((conversation) => (
-              <button
-                className={`conversation-item ${
+              <div
+                className={`conversation-row ${
                   conversation.id === activeId ? 'active' : ''
                 }`}
                 key={conversation.id}
-                onClick={() => {
-                  setActiveId(conversation.id)
-                  setIsSidebarOpen(false)
-                }}
               >
-                <span
-                  className={`channel-icon ${
-                    conversation.type === 'direct' ? 'direct-icon' : ''
-                  }`}
-                  style={
-                    conversation.type === 'direct' && !conversation.avatarUrl
-                      ? { backgroundColor: avatarColor(conversation.title ?? '') }
-                      : undefined
-                  }
+                <button
+                  className="conversation-item"
+                  onClick={() => {
+                    setActiveId(conversation.id)
+                    setIsSidebarOpen(false)
+                  }}
                 >
-                  {conversation.avatarUrl ? (
-                    <AvatarContent
-                      avatarUrl={conversation.avatarUrl}
-                      name={conversation.title ?? 'Conversation'}
-                    />
-                  ) : conversation.type === 'direct' ? (
-                    initials(conversation.title ?? 'Direct')
-                  ) : (
-                    <Hash size={17} />
-                  )}
-                </span>
-                <span className="conversation-copy">
-                  <strong>{conversationDisplayTitle(conversation)}</strong>
-                  {conversation.lastMessage && conversation.lastMessageAt ? (
-                    <small className="conversation-summary">
-                      <span className="preview-sender">
-                        {conversation.lastMessageSenderUserId === null
-                          ? 'System'
-                          : conversation.lastMessageSenderUserId === user.id
-                            ? 'You'
-                            : (conversation.lastMessageSenderName ?? 'Someone')}
-                        :
-                      </span>
-                      <span className="preview-message">{conversation.lastMessage}</span>
-                      <time dateTime={conversation.lastMessageAt}>
-                        {formatTime(conversation.lastMessageAt)}
-                      </time>
-                    </small>
-                  ) : (
-                    <small>Start the conversation</small>
-                  )}
-                </span>
-                {conversation.unreadCount > 0 && (
-                  <span className="unread-badge">{conversation.unreadCount}</span>
-                )}
-              </button>
+                  <span
+                    className={`channel-icon ${
+                      conversation.type === 'direct' ? 'direct-icon' : ''
+                    }`}
+                    style={
+                      conversation.type === 'direct' && !conversation.avatarUrl
+                        ? { backgroundColor: avatarColor(conversation.title ?? '') }
+                        : undefined
+                    }
+                  >
+                    {conversation.avatarUrl ? (
+                      <AvatarContent
+                        avatarUrl={conversation.avatarUrl}
+                        name={conversation.title ?? 'Conversation'}
+                      />
+                    ) : conversation.type === 'direct' ? (
+                      initials(conversation.title ?? 'Direct')
+                    ) : (
+                      <Hash size={17} />
+                    )}
+                  </span>
+                  <span className="conversation-copy">
+                    <strong>{conversationDisplayTitle(conversation)}</strong>
+                    {conversation.lastMessage && conversation.lastMessageAt ? (
+                      <small className="conversation-summary">
+                        <span className="preview-sender">
+                          {conversation.lastMessageSenderUserId === null
+                            ? 'System'
+                            : conversation.lastMessageSenderUserId === user.id
+                              ? 'You'
+                              : (conversation.lastMessageSenderName ?? 'Someone')}
+                          :
+                        </span>
+                        <span className="preview-message">{conversation.lastMessage}</span>
+                        <time dateTime={conversation.lastMessageAt}>
+                          {formatTime(conversation.lastMessageAt)}
+                        </time>
+                      </small>
+                    ) : (
+                      <small>Start the conversation</small>
+                    )}
+                  </span>
+                  <span className="conversation-indicators">
+                    {conversation.isMuted && (
+                      <BellOff
+                        className="conversation-muted-icon"
+                        size={13}
+                        aria-label="Muted"
+                      />
+                    )}
+                    {conversation.unreadCount > 0 && (
+                      <span className="unread-badge">{conversation.unreadCount}</span>
+                    )}
+                  </span>
+                </button>
+                <ConversationActions
+                  title={conversationDisplayTitle(conversation)}
+                  isMuted={conversation.isMuted}
+                  canLeave={
+                    conversation.type === 'group' && conversation.title !== 'General'
+                  }
+                  disabled={conversationActionId === conversation.id}
+                  onToggleMute={() => void toggleConversationMute(conversation)}
+                  onLeave={() => {
+                    setLeaveError('')
+                    setConversationToLeave(conversation)
+                  }}
+                />
+              </div>
             ))}
           </nav>
         </div>
@@ -1693,7 +1782,7 @@ function ChatApp({
                   aria-label="Leave this group"
                   onClick={() => {
                     setLeaveError('')
-                    setIsLeaveDialogOpen(true)
+                    setConversationToLeave(activeConversation)
                   }}
                 >
                   <LogOut size={16} />
@@ -2370,19 +2459,19 @@ function ChatApp({
         </div>
       )}
 
-      {isLeaveDialogOpen && activeConversation?.type === 'group' && (
+      {conversationToLeave?.type === 'group' && (
         <div className="modal-backdrop" role="presentation">
           <div className="modal-card leave-group-dialog">
             <div className="modal-header">
               <div>
                 <p className="eyebrow">Group settings</p>
-                <h2>Leave {activeConversation.title}?</h2>
+                <h2>Leave {conversationToLeave.title}?</h2>
               </div>
               <button
                 className="icon-button"
                 type="button"
                 aria-label="Close"
-                onClick={() => setIsLeaveDialogOpen(false)}
+                onClick={() => setConversationToLeave(null)}
               >
                 <X size={20} />
               </button>
@@ -2404,7 +2493,7 @@ function ChatApp({
                 className="secondary-button"
                 type="button"
                 disabled={isLeaving}
-                onClick={() => setIsLeaveDialogOpen(false)}
+                onClick={() => setConversationToLeave(null)}
               >
                 Cancel
               </button>
@@ -2417,7 +2506,7 @@ function ChatApp({
                 {isLeaving ? (
                   <LoaderCircle className="spin" size={18} />
                 ) : (
-                  'Leave group'
+                  'Leave conversation'
                 )}
               </button>
             </div>
