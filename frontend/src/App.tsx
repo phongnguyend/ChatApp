@@ -41,6 +41,7 @@ import {
   MessageActions,
 } from './components/MessageActions'
 import { EmojiPicker } from './components/EmojiPicker'
+import { GroupMemberActions } from './components/GroupMemberActions'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5045'
 
@@ -388,6 +389,10 @@ function ChatApp({
   const [editMessageDraft, setEditMessageDraft] = useState('')
   const [deletingMessage, setDeletingMessage] = useState<Message | null>(null)
   const [isDeletingMessage, setIsDeletingMessage] = useState(false)
+  const [memberActionId, setMemberActionId] = useState<string | null>(null)
+  const [memberToRemove, setMemberToRemove] = useState<ConversationMember | null>(
+    null,
+  )
   const connectionRef = useRef<HubConnection | null>(null)
   const activeIdRef = useRef<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
@@ -399,6 +404,9 @@ function ChatApp({
     ? messagesByConversation[activeId] ?? EMPTY_MESSAGES
     : EMPTY_MESSAGES
   const activeMembers = activeId ? membersByConversation[activeId] ?? [] : []
+  const canManageGroupMembers = activeMembers.some(
+    (member) => member.id === user.id && member.role === 'owner',
+  )
 
   const removeConversation = useCallback((conversationId: string) => {
     setConversations((current) =>
@@ -1034,6 +1042,68 @@ function ChatApp({
           ? requestError.message
           : 'Could not update the reaction.',
       )
+    }
+  }
+
+  async function makeGroupOwner(member: ConversationMember) {
+    if (!activeId || memberActionId) return
+
+    setMemberActionId(member.id)
+    setError('')
+    try {
+      const response = await fetch(
+        `${API_URL}/api/conversations/${activeId}/members/${
+          member.id
+        }/role?username=${encodeURIComponent(user.username)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: 'owner' }),
+        },
+      )
+      if (!response.ok) throw new Error(await readError(response))
+
+      const members = (await response.json()) as ConversationMember[]
+      setMembersByConversation((current) => ({
+        ...current,
+        [activeId]: members,
+      }))
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Could not make this person an owner.',
+      )
+    } finally {
+      setMemberActionId(null)
+    }
+  }
+
+  async function removeGroupMember() {
+    if (!activeId || !memberToRemove || memberActionId) return
+
+    const member = memberToRemove
+    setMemberActionId(member.id)
+    setError('')
+    try {
+      const response = await fetch(
+        `${API_URL}/api/conversations/${activeId}/members/${
+          member.id
+        }?username=${encodeURIComponent(user.username)}`,
+        { method: 'DELETE' },
+      )
+      if (!response.ok) throw new Error(await readError(response))
+
+      setMemberToRemove(null)
+      await loadMembers(activeId)
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Could not remove this person from the group.',
+      )
+    } finally {
+      setMemberActionId(null)
     }
   }
 
@@ -1895,7 +1965,13 @@ function ChatApp({
         </div>
         <div className="people-list">
           {activeConversation?.type === 'group'
-            ? activeMembers.map((member) => (
+            ? activeMembers.map((member) => {
+                const canManageMember =
+                  member.id !== user.id &&
+                  canManageGroupMembers &&
+                  (member.role !== 'owner' || activeConversation.title !== 'General')
+
+                return (
                 <div className="person" key={member.id}>
                   <span
                     className="avatar avatar-small"
@@ -1911,7 +1987,7 @@ function ChatApp({
                     />
                     {member.isOnline && <i className="presence-dot" />}
                   </span>
-                  <span>
+                  <span className="person-copy">
                     <strong>
                       {member.displayName}
                       {member.id === user.id ? ' (you)' : ''}
@@ -1924,8 +2000,19 @@ function ChatApp({
                           : 'Offline'}
                     </small>
                   </span>
+                  {canManageMember && (
+                    <GroupMemberActions
+                      displayName={member.displayName}
+                      isOwner={member.role === 'owner'}
+                      canRemove={activeConversation.title !== 'General'}
+                      disabled={memberActionId === member.id}
+                      onMakeOwner={() => void makeGroupOwner(member)}
+                      onRemove={() => setMemberToRemove(member)}
+                    />
+                  )}
                 </div>
-              ))
+                )
+              })
             : onlineUsers.map((name) => (
                 <div className="person" key={name}>
                   <span
@@ -1935,7 +2022,7 @@ function ChatApp({
                     {initials(name)}
                     <i className="presence-dot" />
                   </span>
-                  <span>
+                  <span className="person-copy">
                     <strong>{name}</strong>
                     <small>{name === user.username ? 'You' : 'Available'}</small>
                   </span>
@@ -2521,6 +2608,55 @@ function ChatApp({
                 onClick={() => void deleteMessage()}
               >
                 {isDeletingMessage ? 'Deleting...' : 'Delete message'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {memberToRemove && (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            className="modal-card confirmation-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="remove-member-title"
+          >
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">Remove member</p>
+                <h2 id="remove-member-title">Remove {memberToRemove.displayName}?</h2>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                aria-label="Close"
+                onClick={() => setMemberToRemove(null)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <p>
+              They will lose access to this group and its messages until someone
+              adds them again.
+            </p>
+            <div className="modal-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setMemberToRemove(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="danger-button"
+                type="button"
+                disabled={memberActionId === memberToRemove.id}
+                onClick={() => void removeGroupMember()}
+              >
+                {memberActionId === memberToRemove.id
+                  ? 'Removing...'
+                  : 'Remove member'}
               </button>
             </div>
           </div>

@@ -72,6 +72,7 @@ public sealed class SessionsController(ChatDbContext db) : ControllerBase
         else if (membership.LeftAt is not null)
         {
             membership.LeftAt = null;
+            membership.Role = "member";
             membership.JoinedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(cancellationToken);
         }
@@ -129,6 +130,7 @@ public sealed class SessionsController(ChatDbContext db) : ControllerBase
             else
             {
                 membership.LeftAt = null;
+                membership.Role = "member";
                 membership.IsArchived = false;
             }
         }

@@ -550,6 +550,7 @@ public sealed class ConversationsController(
         };
 
         membership.LeftAt = now;
+        membership.Role = "member";
         membership.IsArchived = true;
         membership.UnreadCount = 0;
         conversation.UpdatedAt = now;
@@ -921,6 +922,264 @@ public sealed class ConversationsController(
         return Ok(await GetMemberDtos(id, cancellationToken));
     }
 
+    [HttpPatch("{id:guid}/members/{memberUserId:guid}/role")]
+    public async Task<ActionResult<IReadOnlyList<ConversationMemberDto>>> UpdateMemberRole(
+        Guid id,
+        Guid memberUserId,
+        [FromQuery] string username,
+        UpdateConversationMemberRoleRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!string.Equals(request.Role, "owner", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { message = "Members can only be promoted to Owner." });
+        }
+
+        var normalized = Username.Normalize(username);
+        var requester = await db.Users.SingleOrDefaultAsync(
+            x => x.NormalizedUsername == normalized && x.Status == "active",
+            cancellationToken);
+        if (requester is null)
+        {
+            return NotFound();
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync(
+            IsolationLevel.Serializable,
+            cancellationToken);
+        var conversation = await db.Conversations
+            .Include(x => x.Members)
+                .ThenInclude(member => member.User)
+            .SingleOrDefaultAsync(
+                x => x.Id == id && x.Type == "group" && !x.IsArchived,
+                cancellationToken);
+        if (conversation is null)
+        {
+            return NotFound();
+        }
+
+        var requesterMembership = conversation.Members.SingleOrDefault(member =>
+            member.UserId == requester.Id && member.LeftAt == null);
+        if (requesterMembership?.Role != "owner")
+        {
+            return Forbid();
+        }
+
+        var targetMembership = conversation.Members.SingleOrDefault(member =>
+            member.UserId == memberUserId && member.LeftAt == null);
+        if (targetMembership is null)
+        {
+            return NotFound(new { message = "That person is no longer in the group." });
+        }
+        if (targetMembership.Role == "owner")
+        {
+            return Ok(await GetMemberDtos(id, cancellationToken));
+        }
+
+        var nextSequence = await db.Messages
+            .Where(x => x.ConversationId == id)
+            .Select(x => (long?)x.SequenceNumber)
+            .MaxAsync(cancellationToken) ?? 0;
+        var now = DateTimeOffset.UtcNow;
+        var systemMessage = new ChatMessage
+        {
+            Conversation = conversation,
+            MessageType = "system",
+            Content =
+                $"{requester.DisplayName} made {targetMembership.User.DisplayName} an owner.",
+            SequenceNumber = nextSequence + 1,
+            CreatedAt = now
+        };
+
+        targetMembership.Role = "owner";
+        conversation.UpdatedAt = now;
+        conversation.LastMessage = systemMessage;
+        conversation.LastMessageId = systemMessage.Id;
+        conversation.LastMessageAt = now;
+        db.Messages.Add(systemMessage);
+
+        await db.ConversationMembers
+            .Where(member =>
+                member.ConversationId == id &&
+                member.UserId != requester.Id &&
+                member.LeftAt == null)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(
+                    member => member.UnreadCount,
+                    member => member.UnreadCount + 1),
+                cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        var memberCount = conversation.Members.Count(member => member.LeftAt == null);
+        var groupName = ChatHub.ConversationGroup(id);
+        await hubContext.Clients.Group(groupName)
+            .SendAsync(
+                "MembersChanged",
+                new MembersChangedDto(id, memberCount),
+                cancellationToken);
+        await hubContext.Clients.Group(groupName)
+            .SendAsync(
+                "MessageReceived",
+                new MessageDto(
+                    systemMessage.Id,
+                    id,
+                    null,
+                    null,
+                    null,
+                    systemMessage.Content,
+                    systemMessage.MessageType,
+                    null,
+                    systemMessage.SequenceNumber,
+                    null,
+                    systemMessage.CreatedAt,
+                    null,
+                    null),
+                cancellationToken);
+
+        return Ok(await GetMemberDtos(id, cancellationToken));
+    }
+
+    [HttpDelete("{id:guid}/members/{memberUserId:guid}")]
+    public async Task<IActionResult> RemoveMember(
+        Guid id,
+        Guid memberUserId,
+        [FromQuery] string username,
+        CancellationToken cancellationToken)
+    {
+        var normalized = Username.Normalize(username);
+        var requester = await db.Users.SingleOrDefaultAsync(
+            x => x.NormalizedUsername == normalized && x.Status == "active",
+            cancellationToken);
+        if (requester is null)
+        {
+            return NotFound();
+        }
+        if (requester.Id == memberUserId)
+        {
+            return BadRequest(new { message = "Use Leave group to remove yourself." });
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync(
+            IsolationLevel.Serializable,
+            cancellationToken);
+        var conversation = await db.Conversations
+            .Include(x => x.Members)
+                .ThenInclude(member => member.User)
+            .SingleOrDefaultAsync(
+                x => x.Id == id && x.Type == "group" && !x.IsArchived,
+                cancellationToken);
+        if (conversation is null)
+        {
+            return NotFound();
+        }
+        if (conversation.Title == DatabaseInitializer.GeneralConversationTitle)
+        {
+            return BadRequest(new
+            {
+                message = "Members cannot be removed from the General conversation."
+            });
+        }
+
+        var requesterMembership = conversation.Members.SingleOrDefault(member =>
+            member.UserId == requester.Id && member.LeftAt == null);
+        if (requesterMembership?.Role != "owner")
+        {
+            return Forbid();
+        }
+
+        var targetMembership = conversation.Members.SingleOrDefault(member =>
+            member.UserId == memberUserId && member.LeftAt == null);
+        if (targetMembership is null)
+        {
+            return NotFound(new { message = "That person is no longer in the group." });
+        }
+
+        var nextSequence = await db.Messages
+            .Where(x => x.ConversationId == id)
+            .Select(x => (long?)x.SequenceNumber)
+            .MaxAsync(cancellationToken) ?? 0;
+        var now = DateTimeOffset.UtcNow;
+        var systemMessage = new ChatMessage
+        {
+            Conversation = conversation,
+            MessageType = "system",
+            Content =
+                $"{requester.DisplayName} removed {targetMembership.User.DisplayName} from the group.",
+            SequenceNumber = nextSequence + 1,
+            CreatedAt = now
+        };
+
+        targetMembership.LeftAt = now;
+        targetMembership.Role = "member";
+        targetMembership.IsArchived = true;
+        targetMembership.UnreadCount = 0;
+        conversation.UpdatedAt = now;
+        conversation.LastMessage = systemMessage;
+        conversation.LastMessageId = systemMessage.Id;
+        conversation.LastMessageAt = now;
+        db.Messages.Add(systemMessage);
+
+        await db.ConversationMembers
+            .Where(member =>
+                member.ConversationId == id &&
+                member.UserId != requester.Id &&
+                member.UserId != memberUserId &&
+                member.LeftAt == null)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(
+                    member => member.UnreadCount,
+                    member => member.UnreadCount + 1),
+                cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        var groupName = ChatHub.ConversationGroup(id);
+        var targetConnections = presence.ConnectionIdsForUser(memberUserId);
+        foreach (var connectionId in targetConnections)
+        {
+            await hubContext.Groups.RemoveFromGroupAsync(
+                connectionId,
+                groupName,
+                cancellationToken);
+        }
+        if (targetConnections.Count > 0)
+        {
+            await hubContext.Clients.Clients(targetConnections)
+                .SendAsync(
+                    "ConversationRemoved",
+                    new ConversationRemovedDto(id),
+                    cancellationToken);
+        }
+
+        var memberCount = conversation.Members.Count(member => member.LeftAt == null);
+        await hubContext.Clients.Group(groupName)
+            .SendAsync(
+                "MembersChanged",
+                new MembersChangedDto(id, memberCount),
+                cancellationToken);
+        await hubContext.Clients.Group(groupName)
+            .SendAsync(
+                "MessageReceived",
+                new MessageDto(
+                    systemMessage.Id,
+                    id,
+                    null,
+                    null,
+                    null,
+                    systemMessage.Content,
+                    systemMessage.MessageType,
+                    null,
+                    systemMessage.SequenceNumber,
+                    null,
+                    systemMessage.CreatedAt,
+                    null,
+                    null),
+                cancellationToken);
+
+        return NoContent();
+    }
+
     [HttpPost("{id:guid}/members")]
     public async Task<ActionResult<IReadOnlyList<ConversationMemberDto>>> AddMembers(
         Guid id,
@@ -1001,6 +1260,7 @@ public sealed class ConversationsController(
             else
             {
                 membership.LeftAt = null;
+                membership.Role = "member";
                 membership.IsArchived = false;
                 membership.JoinedAt = DateTimeOffset.UtcNow;
                 membership.UnreadCount += 1;
