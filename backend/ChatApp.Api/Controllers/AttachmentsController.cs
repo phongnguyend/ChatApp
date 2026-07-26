@@ -57,7 +57,8 @@ public sealed class AttachmentsController(
 
         if (!download &&
             (storage.IsDisplayableImage(attachment.ContentType) ||
-             storage.IsDisplayableVideo(attachment.ContentType)))
+             storage.IsDisplayableVideo(attachment.ContentType) ||
+             storage.IsDisplayableAudio(attachment.ContentType)))
         {
             return File(
                 stream,

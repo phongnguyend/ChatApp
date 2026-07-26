@@ -205,6 +205,15 @@ function messagePreview(message: Message) {
       ? "Sent a video"
       : `Sent ${attachments.length} videos`;
   }
+  if (
+    attachments.every((attachment) =>
+      attachment.contentType.startsWith("audio/"),
+    )
+  ) {
+    return attachments.length === 1
+      ? "Sent a voice message"
+      : `Sent ${attachments.length} voice messages`;
+  }
   return attachments.length === 1
     ? "Sent a file"
     : `Sent ${attachments.length} files`;

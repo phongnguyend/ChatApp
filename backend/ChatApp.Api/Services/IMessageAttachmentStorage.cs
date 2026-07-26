@@ -8,6 +8,8 @@ public interface IMessageAttachmentStorage
 
     bool IsDisplayableVideo(string contentType);
 
+    bool IsDisplayableAudio(string contentType);
+
     Task<string> SaveAsync(
         Guid conversationId,
         Guid messageId,

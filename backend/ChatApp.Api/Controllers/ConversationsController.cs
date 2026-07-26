@@ -68,6 +68,8 @@ public sealed class ConversationsController(
                           ? "Sent an image"
                           : x.Conversation.LastMessage.MessageType == "video"
                               ? "Sent a video"
+                          : x.Conversation.LastMessage.MessageType == "audio"
+                              ? "Sent a voice message"
                           : x.Conversation.LastMessage.MessageType == "file"
                               ? "Sent a file"
                               : null),
@@ -885,6 +887,9 @@ public sealed class ConversationsController(
                     : attachments.All(attachment =>
                         attachmentStorage.IsDisplayableVideo(attachment.ContentType))
                         ? "video"
+                    : attachments.All(attachment =>
+                        attachmentStorage.IsDisplayableAudio(attachment.ContentType))
+                        ? "audio"
                         : "file",
                 Content = string.IsNullOrWhiteSpace(messageContent) ? null : messageContent,
                 ClientMessageId = cleanClientMessageId,
@@ -948,6 +953,8 @@ public sealed class ConversationsController(
                     ? "Sent an image"
                     : result.MessageType == "video"
                         ? "Sent a video"
+                    : result.MessageType == "audio"
+                        ? "Sent a voice message"
                         : "Sent a file");
             await pushNotifications.NotifyMessageAsync(
                 id,

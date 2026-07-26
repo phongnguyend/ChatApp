@@ -20,6 +20,15 @@ public sealed class MessageAttachmentStorage(
         "video/mp4"
     ];
 
+    private static readonly HashSet<string> AudioContentTypes =
+    [
+        "audio/webm",
+        "audio/ogg",
+        "audio/mp4",
+        "audio/mpeg",
+        "audio/wav"
+    ];
+
     public int MaxFilesPerMessage => MaximumFilesPerMessage;
 
     public bool IsDisplayableImage(string contentType) =>
@@ -27,6 +36,9 @@ public sealed class MessageAttachmentStorage(
 
     public bool IsDisplayableVideo(string contentType) =>
         VideoContentTypes.Contains(NormalizeContentType(contentType));
+
+    public bool IsDisplayableAudio(string contentType) =>
+        AudioContentTypes.Contains(NormalizeContentType(contentType));
 
     public async Task<string> SaveAsync(
         Guid conversationId,
@@ -111,6 +123,17 @@ public sealed class MessageAttachmentStorage(
                     $"\"{CleanFileName(file.FileName)}\" is not a valid video.");
             }
         }
+        else if (IsDisplayableAudio(file.ContentType))
+        {
+            using var input = file.OpenReadStream();
+            Span<byte> header = stackalloc byte[12];
+            var read = input.Read(header);
+            if (!HasValidAudioSignature(file.ContentType, header[..read]))
+            {
+                throw new InvalidDataException(
+                    $"\"{CleanFileName(file.FileName)}\" is not a valid audio recording.");
+            }
+        }
     }
 
     private static string GetObjectKey(string storageKey)
@@ -151,6 +174,26 @@ public sealed class MessageAttachmentStorage(
                 header[..4].SequenceEqual(new byte[] { 0x1a, 0x45, 0xdf, 0xa3 }),
             "video/mp4" => header.Length >= 8 &&
                 header[4..8].SequenceEqual("ftyp"u8),
+            _ => false
+        };
+
+    private static bool HasValidAudioSignature(
+        string contentType,
+        ReadOnlySpan<byte> header) =>
+        NormalizeContentType(contentType) switch
+        {
+            "audio/webm" => header.Length >= 4 &&
+                header[..4].SequenceEqual(new byte[] { 0x1a, 0x45, 0xdf, 0xa3 }),
+            "audio/ogg" => header.Length >= 4 &&
+                header[..4].SequenceEqual("OggS"u8),
+            "audio/mp4" => header.Length >= 8 &&
+                header[4..8].SequenceEqual("ftyp"u8),
+            "audio/mpeg" => header.Length >= 3 &&
+                (header[..3].SequenceEqual("ID3"u8) ||
+                 (header[0] == 0xff && (header[1] & 0xe0) == 0xe0)),
+            "audio/wav" => header.Length >= 12 &&
+                header[..4].SequenceEqual("RIFF"u8) &&
+                header[8..12].SequenceEqual("WAVE"u8),
             _ => false
         };
 

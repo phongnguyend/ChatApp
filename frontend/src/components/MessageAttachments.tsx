@@ -3,6 +3,7 @@ import {
   Download,
   FileText,
   LoaderCircle,
+  Mic,
   MonitorUp,
   Paperclip,
   Square,
@@ -30,7 +31,7 @@ type MessageAttachmentPickerProps = {
 const MAX_FILES = 5
 const MAX_FILE_SIZE = 15 * 1024 * 1024
 const MAX_RECORDING_SECONDS = 30
-type CaptureMode = 'photo' | 'video' | 'screen'
+type CaptureMode = 'photo' | 'video' | 'screen' | 'audio'
 
 export function MessageAttachmentPicker({
   files,
@@ -41,6 +42,7 @@ export function MessageAttachmentPicker({
   const inputRef = useRef<HTMLInputElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const screenStreamRef = useRef<MediaStream | null>(null)
+  const audioStreamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const recordingChunksRef = useRef<Blob[]>([])
   const recordingIntervalRef = useRef<number | null>(null)
@@ -54,6 +56,47 @@ export function MessageAttachmentPicker({
 
   useEffect(() => {
     if (!captureMode) return
+
+    if (captureMode === 'audio') {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setCameraError('Microphone access is not supported in this browser.')
+        return
+      }
+
+      let cancelled = false
+      setIsCameraReady(false)
+      setCameraError('')
+      navigator.mediaDevices
+        .getUserMedia({ audio: true, video: false })
+        .then((stream) => {
+          if (cancelled) {
+            stream.getTracks().forEach((track) => track.stop())
+            return
+          }
+
+          audioStreamRef.current = stream
+          setIsCameraReady(true)
+        })
+        .catch((microphoneError: unknown) => {
+          setCameraError(
+            microphoneError instanceof DOMException &&
+              microphoneError.name === 'NotAllowedError'
+              ? 'Microphone permission was denied. Allow access and try again.'
+              : 'Could not open the microphone. Check that another app is not using it.',
+          )
+        })
+
+      return () => {
+        cancelled = true
+        discardRecordingRef.current = true
+        if (recorderRef.current?.state === 'recording') {
+          recorderRef.current.stop()
+        }
+        clearRecordingTimers()
+        audioStreamRef.current?.getTracks().forEach((track) => track.stop())
+        audioStreamRef.current = null
+      }
+    }
 
     if (captureMode === 'screen') {
       const stream = screenStreamRef.current
@@ -235,21 +278,37 @@ export function MessageAttachmentPicker({
     }
   }
 
-  function startVideoRecording() {
-    const stream = videoRef.current?.srcObject
+  function startRecording() {
+    const stream =
+      captureMode === 'audio'
+        ? audioStreamRef.current
+        : videoRef.current?.srcObject
     if (!(stream instanceof MediaStream) || !window.MediaRecorder) {
-      setCameraError('Video recording is not supported in this browser.')
+      setCameraError(
+        `${captureMode === 'audio' ? 'Voice' : 'Video'} recording is not supported in this browser.`,
+      )
       return
     }
 
-    const supportedType = [
-      'video/webm;codecs=vp9,opus',
-      'video/webm;codecs=vp8,opus',
-      'video/webm',
-      'video/mp4',
-    ].find((type) => MediaRecorder.isTypeSupported(type))
+    const supportedType = (
+      captureMode === 'audio'
+        ? [
+            'audio/webm;codecs=opus',
+            'audio/ogg;codecs=opus',
+            'audio/mp4',
+            'audio/webm',
+          ]
+        : [
+            'video/webm;codecs=vp9,opus',
+            'video/webm;codecs=vp8,opus',
+            'video/webm',
+            'video/mp4',
+          ]
+    ).find((type) => MediaRecorder.isTypeSupported(type))
     if (!supportedType) {
-      setCameraError('This browser cannot create a supported video recording.')
+      setCameraError(
+        `This browser cannot create a supported ${captureMode === 'audio' ? 'voice' : 'video'} recording.`,
+      )
       return
     }
 
@@ -257,14 +316,17 @@ export function MessageAttachmentPicker({
     try {
       recorder = new MediaRecorder(stream, {
         mimeType: supportedType,
-        videoBitsPerSecond: 2_000_000,
         audioBitsPerSecond: 128_000,
+        ...(captureMode === 'audio' ? {} : { videoBitsPerSecond: 2_000_000 }),
       })
     } catch {
-      setCameraError('Could not start video recording.')
+      setCameraError(
+        `Could not start ${captureMode === 'audio' ? 'voice' : 'video'} recording.`,
+      )
       return
     }
 
+    const recordingMode = captureMode
     recorderRef.current = recorder
     recordingChunksRef.current = []
     discardRecordingRef.current = false
@@ -288,14 +350,28 @@ export function MessageAttachmentPicker({
         return
       }
       if (blob.size > MAX_FILE_SIZE) {
-        onError('The captured video is larger than 15 MB.')
+        onError(
+          `The recorded ${recordingMode === 'audio' ? 'voice message' : 'video'} is larger than 15 MB.`,
+        )
         setCaptureMode(null)
         return
       }
 
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-      const extension = contentType === 'video/mp4' ? 'mp4' : 'webm'
-      const filePrefix = captureMode === 'screen' ? 'screen-recording' : 'video'
+      const extension =
+        contentType === 'audio/ogg'
+          ? 'ogg'
+          : contentType === 'audio/mp4'
+            ? 'm4a'
+            : contentType === 'video/mp4'
+              ? 'mp4'
+              : 'webm'
+      const filePrefix =
+        recordingMode === 'audio'
+          ? 'voice-message'
+          : recordingMode === 'screen'
+            ? 'screen-recording'
+            : 'video'
       addFiles([
         new File([blob], `${filePrefix}-${timestamp}.${extension}`, {
           type: contentType,
@@ -314,7 +390,7 @@ export function MessageAttachmentPicker({
     }, MAX_RECORDING_SECONDS * 1000)
   }
 
-  function stopVideoRecording() {
+  function stopRecording() {
     if (recorderRef.current?.state === 'recording') {
       recorderRef.current.stop()
     }
@@ -326,7 +402,11 @@ export function MessageAttachmentPicker({
         <div className="pending-attachments" aria-label="Selected attachments">
           {files.map((file, index) => (
             <span className="pending-attachment" key={`${file.name}-${file.size}-${index}`}>
-              <FileText size={14} />
+              {file.type.startsWith('audio/') ? (
+                <Mic size={14} />
+              ) : (
+                <FileText size={14} />
+              )}
               <span>{file.name}</span>
               <button
                 type="button"
@@ -393,6 +473,19 @@ export function MessageAttachmentPicker({
       >
         <MonitorUp size={18} />
       </button>
+      <button
+        className="attachment-audio-button"
+        type="button"
+        disabled={disabled || files.length >= MAX_FILES}
+        aria-label="Record a voice message"
+        title="Record a voice message"
+        onClick={() => {
+          setCameraError('')
+          setCaptureMode('audio')
+        }}
+      >
+        <Mic size={18} />
+      </button>
 
       {captureMode && (
         <div className="attachment-camera-backdrop" role="presentation">
@@ -405,7 +498,9 @@ export function MessageAttachmentPicker({
                 ? 'Take a photo'
                 : captureMode === 'screen'
                   ? 'Record your screen'
-                  : 'Record a video'
+                  : captureMode === 'audio'
+                    ? 'Record a voice message'
+                    : 'Record a video'
             }
           >
             <div className="attachment-camera-heading">
@@ -415,28 +510,36 @@ export function MessageAttachmentPicker({
                     ? 'Camera'
                     : captureMode === 'screen'
                       ? 'Screen sharing'
-                      : 'Video camera'}
+                      : captureMode === 'audio'
+                        ? 'Microphone'
+                        : 'Video camera'}
                 </p>
                 <h2>
                   {captureMode === 'photo'
                     ? 'Take a photo'
                     : captureMode === 'screen'
                       ? 'Record your screen'
-                      : 'Record a video'}
+                      : captureMode === 'audio'
+                        ? 'Record a voice message'
+                        : 'Record a video'}
                 </h2>
               </div>
               <button
                 className="icon-button"
                 type="button"
-                aria-label="Close camera"
+                aria-label="Close recorder"
                 onClick={closeCapture}
               >
                 <X size={20} />
               </button>
             </div>
 
-            <div className="camera-viewfinder">
-              {!cameraError && (
+            <div
+              className={`camera-viewfinder ${
+                captureMode === 'audio' ? 'voice-recorder-view' : ''
+              }`}
+            >
+              {!cameraError && captureMode !== 'audio' && (
                 <video
                   ref={videoRef}
                   autoPlay
@@ -445,12 +548,25 @@ export function MessageAttachmentPicker({
                   onCanPlay={() => setIsCameraReady(true)}
                 />
               )}
+              {!cameraError && captureMode === 'audio' && isCameraReady && (
+                <div className="voice-recorder-ready">
+                  <span>
+                    <Mic size={32} />
+                  </span>
+                  <strong>
+                    {isRecording ? 'Recording your voice' : 'Microphone ready'}
+                  </strong>
+                  <small>Maximum recording length is 30 seconds.</small>
+                </div>
+              )}
               {!isCameraReady && !cameraError && (
                 <span className="camera-loading">
                   <LoaderCircle className="spin" size={24} />
                   {captureMode === 'screen'
                     ? 'Preparing screen preview…'
-                    : 'Opening camera…'}
+                    : captureMode === 'audio'
+                      ? 'Opening microphone…'
+                      : 'Opening camera…'}
                 </span>
               )}
               {cameraError && <p role="alert">{cameraError}</p>}
@@ -488,14 +604,22 @@ export function MessageAttachmentPicker({
                   }`}
                   type="button"
                   disabled={!isCameraReady}
-                  onClick={isRecording ? stopVideoRecording : startVideoRecording}
+                  onClick={isRecording ? stopRecording : startRecording}
                 >
-                  {isRecording ? <Square size={16} /> : <Video size={18} />}
+                  {isRecording ? (
+                    <Square size={16} />
+                  ) : captureMode === 'audio' ? (
+                    <Mic size={18} />
+                  ) : (
+                    <Video size={18} />
+                  )}
                   {isRecording
                     ? 'Stop recording'
                     : captureMode === 'screen'
                       ? 'Start screen recording'
-                      : 'Start recording'}
+                      : captureMode === 'audio'
+                        ? 'Start voice recording'
+                        : 'Start recording'}
                 </button>
               )}
             </div>
@@ -538,6 +662,18 @@ export function MessageAttachmentList({
           >
             <a href={getUrl(attachment.id, true)}>Download {attachment.fileName}</a>
           </video>
+        ) : attachment.contentType.startsWith('audio/') ? (
+          <div className="message-audio" key={attachment.id}>
+            <span>
+              <Mic size={17} />
+              Voice message
+            </span>
+            <audio src={getUrl(attachment.id)} controls preload="metadata">
+              <a href={getUrl(attachment.id, true)}>
+                Download {attachment.fileName}
+              </a>
+            </audio>
+          </div>
         ) : (
           <a
             className="message-file"

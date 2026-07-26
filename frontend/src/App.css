@@ -1564,6 +1564,34 @@
   background: var(--navy);
 }
 
+.message-audio {
+  min-width: min(320px, 76vw);
+  padding: 10px 12px;
+  border: 1px solid #e2ded5;
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+  background: white;
+}
+
+.message-audio > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #626762;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.message-audio > span svg {
+  color: var(--coral);
+}
+
+.message-audio audio {
+  width: 100%;
+  height: 36px;
+}
+
 .message-file {
   min-width: min(300px, 72vw);
   padding: 10px 12px;
@@ -1673,7 +1701,7 @@
   grid-area: composer;
   position: relative;
   margin: 0 28px 22px;
-  padding: 10px 94px 24px 174px;
+  padding: 10px 94px 24px 214px;
   border: 1px solid #dedbd3;
   border-radius: 14px;
   background: white;
@@ -1863,6 +1891,31 @@
   background: #f1efe9;
 }
 
+.attachment-audio-button {
+  position: absolute;
+  left: 170px;
+  bottom: 20px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: #777b76;
+  background: #f1efe9;
+}
+
+.attachment-audio-button:hover:not(:disabled) {
+  color: var(--coral);
+  background: #f9e9e4;
+}
+
+.attachment-audio-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .attachment-screen-button:hover:not(:disabled) {
   color: var(--coral);
   background: #f9e9e4;
@@ -1958,6 +2011,43 @@
   box-shadow: 0 8px 20px rgba(184, 79, 65, 0.2);
 }
 
+.voice-recorder-view {
+  min-height: 240px;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(238, 112, 91, 0.16), transparent 42%),
+    var(--navy);
+}
+
+.voice-recorder-ready {
+  display: grid;
+  place-items: center;
+  gap: 9px;
+  color: white;
+  text-align: center;
+}
+
+.voice-recorder-ready > span {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: white;
+  background: var(--coral);
+  box-shadow: 0 0 0 10px rgba(238, 112, 91, 0.14);
+}
+
+.voice-recorder-ready strong {
+  font-size: 15px;
+}
+
+.voice-recorder-ready small {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 11px;
+}
+
 .attachment-button:hover:not(:disabled) {
   color: var(--coral);
   background: #f9e9e4;
@@ -1969,7 +2059,7 @@
 }
 
 .pending-attachments {
-  margin: 0 0 9px -160px;
+  margin: 0 0 9px -200px;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -2882,6 +2972,7 @@ input.visually-hidden {
   .attachment-camera-button,
   .attachment-video-button,
   .attachment-screen-button,
+  .attachment-audio-button,
   .emoji-picker-button,
   .send-button {
     bottom: 10px;
