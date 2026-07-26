@@ -4,6 +4,10 @@ using ChatApp.Api.Services;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
+var uploadStorageSection = builder.Configuration.GetSection(
+    UploadStorageOptions.SectionName);
+var uploadStorageProvider =
+    uploadStorageSection.GetValue<string>("Provider") ?? "Local";
 
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
@@ -11,15 +15,45 @@ builder.Services.AddHttpClient();
 builder.Services.AddDbContext<ChatDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("ChatDatabase")));
 builder.Services.AddOptions<UploadStorageOptions>()
-    .Bind(builder.Configuration.GetSection(UploadStorageOptions.SectionName))
+    .Bind(uploadStorageSection)
     .Validate(
-        options => !string.IsNullOrWhiteSpace(options.Path),
+        options =>
+            !options.Provider.Equals("Local", StringComparison.OrdinalIgnoreCase) ||
+            !string.IsNullOrWhiteSpace(options.Path),
         "UploadStorage:Path must not be empty.")
+    .ValidateOnStart();
+builder.Services.AddOptions<AzureBlobOptions>()
+    .Bind(uploadStorageSection.GetSection("AzureBlob"))
+    .Validate(
+        options =>
+            !uploadStorageProvider.Equals(
+                "AzureBlob",
+                StringComparison.OrdinalIgnoreCase) ||
+            options.IsValid(),
+        "Azure Blob storage configuration is incomplete.")
     .ValidateOnStart();
 builder.Services.Configure<AzureNotificationOptions>(
     builder.Configuration.GetSection(AzureNotificationOptions.SectionName));
 builder.Services.AddSingleton<PresenceTracker>();
-builder.Services.AddSingleton<IUploadObjectStorage, LocalUploadObjectStorage>();
+if (uploadStorageProvider.Equals(
+    "AzureBlob",
+    StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<
+        IUploadObjectStorage,
+        AzureBlobUploadObjectStorage>();
+}
+else if (uploadStorageProvider.Equals(
+    "Local",
+    StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<IUploadObjectStorage, LocalUploadObjectStorage>();
+}
+else
+{
+    throw new InvalidOperationException(
+        $"Unsupported upload storage provider \"{uploadStorageProvider}\".");
+}
 builder.Services.AddScoped<IAvatarStorage, AvatarStorage>();
 builder.Services.AddScoped<IMessageAttachmentStorage, MessageAttachmentStorage>();
 builder.Services.AddScoped<AzurePushNotificationService>();

@@ -13,18 +13,25 @@ presence, typing indicators, unread counts, profile and group avatar uploads,
 camera capture, automatic SignalR reconnection, and responsive desktop/mobile
 layouts. Browser push notifications are delivered through Azure Notification
 Hubs, the Azure browser-push service used alongside Azure Communication Services.
-Uploaded avatars and message attachments are stored under the configured
-`UploadStorage:Path` directory (`/uploads` by default), while their relative URLs
-are persisted in SQL Server. Override it with `UploadStorage__Path` in the
-environment when needed. Local development uses the API's `uploads` directory so
-it does not require permission to write to a drive-root folder. The complete
-relational model below is represented by EF Core entities and migrations.
+Uploaded avatars and message attachments use the configured upload storage
+provider, while their relative URLs are persisted in SQL Server. Local
+development uses `LocalUploadObjectStorage` and the API's `uploads` directory.
+The complete relational model below is represented by EF Core entities and
+migrations.
 
 Physical upload persistence is isolated behind `IUploadObjectStorage`; the
-default `LocalUploadObjectStorage` writes to the configured folder. An Azure Blob
-or AWS S3 implementation can replace it through dependency injection without
-changing controllers, avatar handling, attachment handling, URLs, or database
-storage keys.
+local and Azure Blob implementations can be selected without changing
+controllers, avatar handling, attachment handling, URLs, or database storage
+keys.
+
+Set `UploadStorage:Provider` to `AzureBlob` to use Azure Blob Storage. Configure
+`UploadStorage:AzureBlob` with `Container`, `Path`, and `LocalCacheFolder`, plus
+either a `ConnectionString` or `UseManagedIdentity: true` and
+`StorageAccountName`. Uploads stream directly to Azure. Reads use the local cache
+first and atomically populate it from Azure on a cache miss. The configured
+container must already exist. Keep connection strings out of `appsettings.json`;
+use
+`UploadStorage__AzureBlob__ConnectionString` or user secrets.
 
 ## Project structure
 

@@ -57,6 +57,7 @@ bld/
 .vs/
 # Locally uploaded files
 ChatApp.Api/uploads/*
+ChatApp.Api/upload-cache/*
 
 # Visual Studio 2017 auto generated files
 Generated\ Files/
