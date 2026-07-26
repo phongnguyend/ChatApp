@@ -14,11 +14,15 @@ Directory.CreateDirectory(avatarUploadPath);
 
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
+builder.Services.AddHttpClient();
 builder.Services.AddDbContext<ChatDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("ChatDatabase")));
+builder.Services.Configure<AzureNotificationOptions>(
+    builder.Configuration.GetSection(AzureNotificationOptions.SectionName));
 builder.Services.AddSingleton<PresenceTracker>();
 builder.Services.AddScoped<AvatarStorage>();
 builder.Services.AddScoped<MessageAttachmentStorage>();
+builder.Services.AddScoped<AzurePushNotificationService>();
 
 var allowedOrigins = builder.Configuration
     .GetSection("AllowedOrigins")

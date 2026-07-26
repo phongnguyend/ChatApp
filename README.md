@@ -11,7 +11,9 @@ The app includes persistent message history, pair-unique direct messages,
 multi-person group creation, live group member management, user discovery, online
 presence, typing indicators, unread counts, profile and group avatar uploads,
 camera capture, automatic SignalR reconnection, and responsive desktop/mobile
-layouts. Uploaded avatars are stored under the API's `wwwroot/uploads/avatars`
+layouts. Browser push notifications are delivered through Azure Notification
+Hubs, the Azure browser-push service used alongside Azure Communication Services.
+Uploaded avatars are stored under the API's `wwwroot/uploads/avatars`
 directory while their relative URLs are persisted in SQL Server. The complete
 relational model below is represented by EF Core entities and migrations.
 
@@ -62,6 +64,32 @@ npm run dev
 ```
 
 Open `http://localhost:5173`, enter a username, and join the General conversation.
+
+## Azure browser push notifications
+
+Azure Communication Services Chat push notifications target the native Android
+and iOS Chat SDKs. Because Huddle is a browser app with its own SignalR chat
+backend, it uses Azure Notification Hubs Browser Push for web notifications.
+
+1. Create an Azure Notification Hubs namespace and notification hub.
+2. In the hub's **Browser (Web Push)** settings, configure a VAPID public/private
+   key pair.
+3. Provide the API with the hub's full-access connection string, hub name, the
+   matching VAPID public key, and the public frontend URL:
+
+```powershell
+$env:AzureNotifications__ConnectionString = "<notification-hub-connection-string>"
+$env:AzureNotifications__HubName = "<notification-hub-name>"
+$env:AzureNotifications__VapidPublicKey = "<vapid-public-key>"
+$env:AzureNotifications__FrontendBaseUrl = "https://chat.example.com"
+dotnet run --project backend/ChatApp.Api
+```
+
+Keep the connection string server-side. Do not add it to `appsettings.json` or
+the React environment. Once configured, users can enable or disable
+notifications with the bell button in the conversation header. Notifications
+are shown for incoming messages even while Huddle is visible, respect
+conversation mute state, and open the relevant conversation when clicked.
 
 To verify the production builds and live persistence flow:
 

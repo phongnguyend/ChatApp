@@ -11,6 +11,7 @@ namespace ChatApp.Api.Hubs;
 public sealed class ChatHub(
     ChatDbContext db,
     PresenceTracker presence,
+    AzurePushNotificationService pushNotifications,
     ILogger<ChatHub> logger) : Hub
 {
     private const string UsernameQueryKey = "username";
@@ -26,7 +27,12 @@ public sealed class ChatHub(
             return;
         }
 
-        presence.Connect(Context.ConnectionId, user.Id, user.Username, user.AvatarUrl);
+        presence.Connect(
+            Context.ConnectionId,
+            user.Id,
+            user.Username,
+            user.DisplayName,
+            user.AvatarUrl);
 
         var conversationIds = await db.ConversationMembers
             .Where(x => x.UserId == user.Id && x.LeftAt == null)
@@ -178,6 +184,12 @@ public sealed class ChatHub(
             .SendAsync(
                 "UserTyping",
                 new TypingDto(request.ConversationId, session.Username, false));
+        await pushNotifications.NotifyMessageAsync(
+            request.ConversationId,
+            session.UserId,
+            session.DisplayName,
+            content,
+            Context.ConnectionAborted);
     }
 
     public async Task SetTyping(Guid conversationId, bool isTyping)

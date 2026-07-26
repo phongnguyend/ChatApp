@@ -726,6 +726,32 @@
   background: #f3f1eb;
 }
 
+.push-notification-button {
+  flex: 0 0 auto;
+  color: #676c67;
+  background: #f3f1eb;
+}
+
+.push-notification-button.active {
+  color: var(--coral);
+  background: #f9e9e4;
+}
+
+.push-notification-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.sidebar-user .push-notification-button {
+  color: inherit;
+  background: transparent;
+}
+
+.sidebar-user .push-notification-button.active {
+  color: #f18a75;
+  background: rgba(231, 101, 75, 0.14);
+}
+
 .leave-group-action {
   color: #aa4c3f;
 }

@@ -18,7 +18,8 @@ public sealed class ConversationsController(
     IHubContext<ChatHub> hubContext,
     PresenceTracker presence,
     AvatarStorage avatarStorage,
-    MessageAttachmentStorage attachmentStorage) : ControllerBase
+    MessageAttachmentStorage attachmentStorage,
+    AzurePushNotificationService pushNotifications) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<ConversationDto>>> GetForUser(
@@ -937,6 +938,18 @@ public sealed class ConversationsController(
 
             await hubContext.Clients.Group(ChatHub.ConversationGroup(id))
                 .SendAsync("MessageReceived", result, cancellationToken);
+            var notificationPreview = result.Content ??
+                (result.MessageType == "image"
+                    ? "Sent an image"
+                    : result.MessageType == "video"
+                        ? "Sent a video"
+                        : "Sent a file");
+            await pushNotifications.NotifyMessageAsync(
+                id,
+                sender.Id,
+                sender.DisplayName,
+                notificationPreview,
+                cancellationToken);
             return Ok(result);
         }
         catch

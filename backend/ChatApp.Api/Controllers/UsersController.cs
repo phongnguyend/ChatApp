@@ -225,6 +225,7 @@ public sealed class UsersController(
         user.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
 
+        presence.UpdateDisplayName(user.Id, displayName);
         await hubContext.Clients.All.SendAsync(
             "UserDisplayNameUpdated",
             new UserDisplayNameUpdatedDto(user.Id, displayName),

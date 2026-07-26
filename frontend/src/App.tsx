@@ -48,6 +48,7 @@ import { EmojiPicker } from './components/EmojiPicker'
 import { GroupMemberActions } from './components/GroupMemberActions'
 import { ConversationActions } from './components/ConversationActions'
 import { OnlineUserActions } from './components/OnlineUserActions'
+import { PushNotificationButton } from './components/PushNotificationButton'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5045'
 
@@ -444,6 +445,9 @@ function ChatApp({
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const draftInputRef = useRef<HTMLTextAreaElement | null>(null)
   const typingTimerRef = useRef<number | null>(null)
+  const linkedConversationIdRef = useRef(
+    new URLSearchParams(window.location.search).get('conversation'),
+  )
 
   const activeConversation = conversations.find((item) => item.id === activeId)
   const activeMessages = activeId
@@ -566,6 +570,19 @@ function ChatApp({
       setActiveId(conversations[0].id)
     }
   }, [activeId, conversations])
+
+  useEffect(() => {
+    const linkedConversationId = linkedConversationIdRef.current
+    if (!linkedConversationId || conversations.length === 0) return
+
+    if (conversations.some((conversation) => conversation.id === linkedConversationId)) {
+      setActiveId(linkedConversationId)
+    }
+    linkedConversationIdRef.current = null
+    const url = new URL(window.location.href)
+    url.searchParams.delete('conversation')
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+  }, [conversations])
 
   const loadConversations = useCallback(async () => {
     const response = await fetch(
@@ -1823,6 +1840,11 @@ function ChatApp({
             <strong>{user.displayName}</strong>
             <small>Online</small>
           </span>
+          <PushNotificationButton
+            apiUrl={API_URL}
+            username={user.username}
+            onError={setError}
+          />
           <button
             className="icon-button"
             type="button"

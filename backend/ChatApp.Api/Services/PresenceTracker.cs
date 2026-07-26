@@ -10,8 +10,10 @@ public sealed class PresenceTracker
         string connectionId,
         Guid userId,
         string username,
+        string displayName,
         string? avatarUrl) =>
-        _connections[connectionId] = new Session(userId, username, avatarUrl);
+        _connections[connectionId] =
+            new Session(userId, username, displayName, avatarUrl);
 
     public void UpdateAvatar(Guid userId, string avatarUrl)
     {
@@ -20,6 +22,17 @@ public sealed class PresenceTracker
             _connections.TryUpdate(
                 connection.Key,
                 connection.Value with { AvatarUrl = avatarUrl },
+                connection.Value);
+        }
+    }
+
+    public void UpdateDisplayName(Guid userId, string displayName)
+    {
+        foreach (var connection in _connections.Where(x => x.Value.UserId == userId))
+        {
+            _connections.TryUpdate(
+                connection.Key,
+                connection.Value with { DisplayName = displayName },
                 connection.Value);
         }
     }
@@ -43,5 +56,9 @@ public sealed class PresenceTracker
             .Select(x => x.Key)
             .ToArray();
 
-    public sealed record Session(Guid UserId, string Username, string? AvatarUrl);
+    public sealed record Session(
+        Guid UserId,
+        string Username,
+        string DisplayName,
+        string? AvatarUrl);
 }
