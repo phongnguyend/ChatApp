@@ -768,6 +768,15 @@
   background: #fae8e4;
 }
 
+.connection-pill.reconnecting {
+  color: #a75b16;
+  background: #fff0dc;
+}
+
+.connection-pill.reconnecting > span {
+  background: #e68a2e;
+}
+
 .chat-error {
   grid-area: error;
   padding: 9px 20px;
