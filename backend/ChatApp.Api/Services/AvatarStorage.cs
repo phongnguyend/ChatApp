@@ -1,10 +1,6 @@
-using Microsoft.Extensions.Options;
-
 namespace ChatApp.Api.Services;
 
-public sealed class AvatarStorage(
-    IWebHostEnvironment environment,
-    IOptions<UploadStorageOptions> options)
+public sealed class AvatarStorage(IUploadObjectStorage storage) : IAvatarStorage
 {
     public const long MaxFileSize = 5 * 1024 * 1024;
 
@@ -41,57 +37,38 @@ public sealed class AvatarStorage(
             }
         }
 
-        var uploadDirectory = GetUploadDirectory();
-        Directory.CreateDirectory(uploadDirectory);
-
         var fileName = $"{Guid.NewGuid():N}{extension}";
-        var filePath = Path.Combine(uploadDirectory, fileName);
         await using var source = image.OpenReadStream();
-        await using var destination = new FileStream(
-            filePath,
-            FileMode.CreateNew,
-            FileAccess.Write,
-            FileShare.None,
-            81920,
-            useAsync: true);
-        await source.CopyToAsync(destination, cancellationToken);
+        await storage.WriteAsync(
+            $"avatars/{fileName}",
+            source,
+            cancellationToken);
 
         return $"/uploads/avatars/{fileName}";
     }
 
-    public FileStream OpenRead(string fileName) =>
-        new(
-            GetFilePath(fileName),
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            81920,
-            useAsync: true);
-
-    private string GetUploadDirectory()
+    public Task<Stream?> OpenReadAsync(
+        string fileName,
+        CancellationToken cancellationToken)
     {
-        var configuredPath = options.Value.Path;
-        var rootPath = Path.IsPathRooted(configuredPath)
-            ? configuredPath
-            : Path.Combine(environment.ContentRootPath, configuredPath);
-
-        return Path.Combine(Path.GetFullPath(rootPath), "avatars");
+        ValidateFileName(fileName);
+        return storage.OpenReadAsync($"avatars/{fileName}", cancellationToken);
     }
 
-    private string GetFilePath(string fileName)
+    private static void ValidateFileName(string fileName)
     {
         var extension = Path.GetExtension(fileName);
         var name = Path.GetFileNameWithoutExtension(fileName);
-        if (fileName != Path.GetFileName(fileName) ||
-            !Guid.TryParseExact(name, "N", out _) ||
-            !Extensions.Values.Contains(
+        if (fileName == Path.GetFileName(fileName) &&
+            Guid.TryParseExact(name, "N", out _) &&
+            Extensions.Values.Contains(
                 extension,
                 StringComparer.OrdinalIgnoreCase))
         {
-            throw new InvalidDataException("Invalid avatar file name.");
+            return;
         }
 
-        return Path.Combine(GetUploadDirectory(), fileName);
+        throw new InvalidDataException("Invalid avatar file name.");
     }
 
     private static bool HasValidSignature(string contentType, ReadOnlySpan<byte> header) =>

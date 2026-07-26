@@ -9,7 +9,7 @@ namespace ChatApp.Api.Controllers;
 [Route("api/attachments")]
 public sealed class AttachmentsController(
     ChatDbContext db,
-    MessageAttachmentStorage storage) : ControllerBase
+    IMessageAttachmentStorage storage) : ControllerBase
 {
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(
@@ -39,20 +39,18 @@ public sealed class AttachmentsController(
             return NotFound();
         }
 
-        FileStream stream;
+        Stream? stream;
         try
         {
-            stream = storage.OpenRead(attachment.StorageKey);
-        }
-        catch (FileNotFoundException)
-        {
-            return NotFound();
-        }
-        catch (DirectoryNotFoundException)
-        {
-            return NotFound();
+            stream = await storage.OpenReadAsync(
+                attachment.StorageKey,
+                cancellationToken);
         }
         catch (InvalidDataException)
+        {
+            return NotFound();
+        }
+        if (stream is null)
         {
             return NotFound();
         }

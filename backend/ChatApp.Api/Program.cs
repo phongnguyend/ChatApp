@@ -19,8 +19,9 @@ builder.Services.AddOptions<UploadStorageOptions>()
 builder.Services.Configure<AzureNotificationOptions>(
     builder.Configuration.GetSection(AzureNotificationOptions.SectionName));
 builder.Services.AddSingleton<PresenceTracker>();
-builder.Services.AddScoped<AvatarStorage>();
-builder.Services.AddScoped<MessageAttachmentStorage>();
+builder.Services.AddSingleton<IUploadObjectStorage, LocalUploadObjectStorage>();
+builder.Services.AddScoped<IAvatarStorage, AvatarStorage>();
+builder.Services.AddScoped<IMessageAttachmentStorage, MessageAttachmentStorage>();
 builder.Services.AddScoped<AzurePushNotificationService>();
 
 var allowedOrigins = builder.Configuration

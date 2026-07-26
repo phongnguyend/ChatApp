@@ -5,25 +5,23 @@ namespace ChatApp.Api.Controllers;
 
 [ApiController]
 [Route("uploads/avatars")]
-public sealed class AvatarsController(AvatarStorage storage) : ControllerBase
+public sealed class AvatarsController(IAvatarStorage storage) : ControllerBase
 {
     [HttpGet("{fileName}")]
-    public IActionResult Get(string fileName)
+    public async Task<IActionResult> Get(
+        string fileName,
+        CancellationToken cancellationToken)
     {
-        FileStream stream;
+        Stream? stream;
         try
         {
-            stream = storage.OpenRead(fileName);
-        }
-        catch (FileNotFoundException)
-        {
-            return NotFound();
-        }
-        catch (DirectoryNotFoundException)
-        {
-            return NotFound();
+            stream = await storage.OpenReadAsync(fileName, cancellationToken);
         }
         catch (InvalidDataException)
+        {
+            return NotFound();
+        }
+        if (stream is null)
         {
             return NotFound();
         }

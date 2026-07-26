@@ -13,7 +13,7 @@ namespace ChatApp.Api.Controllers;
 [Route("api/users")]
 public sealed class UsersController(
     ChatDbContext db,
-    AvatarStorage avatarStorage,
+    IAvatarStorage avatarStorage,
     PresenceTracker presence,
     IHubContext<ChatHub> hubContext) : ControllerBase
 {

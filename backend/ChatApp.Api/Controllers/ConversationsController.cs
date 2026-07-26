@@ -17,8 +17,8 @@ public sealed class ConversationsController(
     ChatDbContext db,
     IHubContext<ChatHub> hubContext,
     PresenceTracker presence,
-    AvatarStorage avatarStorage,
-    MessageAttachmentStorage attachmentStorage,
+    IAvatarStorage avatarStorage,
+    IMessageAttachmentStorage attachmentStorage,
     AzurePushNotificationService pushNotifications) : ControllerBase
 {
     [HttpGet]
@@ -766,7 +766,8 @@ public sealed class ConversationsController(
 
         var messageContent = content?.Trim();
         var cleanClientMessageId = clientMessageId?.Trim() ?? "";
-        if (files.Count is < 1 or > MessageAttachmentStorage.MaxFilesPerMessage)
+        if (files.Count is < 1 ||
+            files.Count > attachmentStorage.MaxFilesPerMessage)
         {
             return BadRequest(new { message = "Choose between 1 and 5 attachments." });
         }
@@ -841,7 +842,9 @@ public sealed class ConversationsController(
         {
             foreach (var storageKey in storedKeys)
             {
-                attachmentStorage.Delete(storageKey);
+                await attachmentStorage.DeleteAsync(
+                    storageKey,
+                    CancellationToken.None);
             }
             return BadRequest(new { message = exception.Message });
         }
@@ -849,7 +852,9 @@ public sealed class ConversationsController(
         {
             foreach (var storageKey in storedKeys)
             {
-                attachmentStorage.Delete(storageKey);
+                await attachmentStorage.DeleteAsync(
+                    storageKey,
+                    CancellationToken.None);
             }
             throw;
         }
@@ -958,7 +963,9 @@ public sealed class ConversationsController(
             {
                 foreach (var storageKey in storedKeys)
                 {
-                    attachmentStorage.Delete(storageKey);
+                    await attachmentStorage.DeleteAsync(
+                        storageKey,
+                        CancellationToken.None);
                 }
             }
             throw;

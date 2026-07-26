@@ -20,6 +20,12 @@ environment when needed. Local development uses the API's `uploads` directory so
 it does not require permission to write to a drive-root folder. The complete
 relational model below is represented by EF Core entities and migrations.
 
+Physical upload persistence is isolated behind `IUploadObjectStorage`; the
+default `LocalUploadObjectStorage` writes to the configured folder. An Azure Blob
+or AWS S3 implementation can replace it through dependency injection without
+changing controllers, avatar handling, attachment handling, URLs, or database
+storage keys.
+
 ## Project structure
 
 ```text

@@ -1,12 +1,9 @@
-using Microsoft.Extensions.Options;
-
 namespace ChatApp.Api.Services;
 
 public sealed class MessageAttachmentStorage(
-    IWebHostEnvironment environment,
-    IOptions<UploadStorageOptions> options)
+    IUploadObjectStorage storage) : IMessageAttachmentStorage
 {
-    public const int MaxFilesPerMessage = 5;
+    private const int MaximumFilesPerMessage = 5;
     public const long MaxFileSize = 15 * 1024 * 1024;
 
     private static readonly HashSet<string> ImageContentTypes =
@@ -23,18 +20,7 @@ public sealed class MessageAttachmentStorage(
         "video/mp4"
     ];
 
-    private string RootPath
-    {
-        get
-        {
-            var configuredPath = options.Value.Path;
-            var rootPath = Path.IsPathRooted(configuredPath)
-                ? configuredPath
-                : Path.Combine(environment.ContentRootPath, configuredPath);
-
-            return Path.Combine(Path.GetFullPath(rootPath), "attachments");
-        }
-    }
+    public int MaxFilesPerMessage => MaximumFilesPerMessage;
 
     public bool IsDisplayableImage(string contentType) =>
         ImageContentTypes.Contains(NormalizeContentType(contentType));
@@ -57,47 +43,29 @@ public sealed class MessageAttachmentStorage(
             extension = "";
         }
 
-        var relativeDirectory = Path.Combine(
-            conversationId.ToString("N"),
-            messageId.ToString("N"));
-        var uploadDirectory = Path.Combine(RootPath, relativeDirectory);
-        Directory.CreateDirectory(uploadDirectory);
-
+        var relativeDirectory =
+            $"{conversationId:N}/{messageId:N}";
         var storedFileName = $"{Guid.NewGuid():N}{extension.ToLowerInvariant()}";
-        var storageKey = Path.Combine(relativeDirectory, storedFileName)
-            .Replace(Path.DirectorySeparatorChar, '/');
-        var filePath = GetFullPath(storageKey);
+        var storageKey = $"{relativeDirectory}/{storedFileName}";
 
         await using var source = file.OpenReadStream();
-        await using var destination = new FileStream(
-            filePath,
-            FileMode.CreateNew,
-            FileAccess.Write,
-            FileShare.None,
-            81920,
-            useAsync: true);
-        await source.CopyToAsync(destination, cancellationToken);
+        await storage.WriteAsync(
+            GetObjectKey(storageKey),
+            source,
+            cancellationToken);
 
         return storageKey;
     }
 
-    public FileStream OpenRead(string storageKey) =>
-        new(
-            GetFullPath(storageKey),
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            81920,
-            useAsync: true);
+    public Task<Stream?> OpenReadAsync(
+        string storageKey,
+        CancellationToken cancellationToken) =>
+        storage.OpenReadAsync(GetObjectKey(storageKey), cancellationToken);
 
-    public void Delete(string storageKey)
-    {
-        var filePath = GetFullPath(storageKey);
-        if (File.Exists(filePath))
-        {
-            File.Delete(filePath);
-        }
-    }
+    public Task DeleteAsync(
+        string storageKey,
+        CancellationToken cancellationToken) =>
+        storage.DeleteAsync(GetObjectKey(storageKey), cancellationToken);
 
     public string CleanFileName(string fileName)
     {
@@ -145,17 +113,14 @@ public sealed class MessageAttachmentStorage(
         }
     }
 
-    private string GetFullPath(string storageKey)
+    private static string GetObjectKey(string storageKey)
     {
-        var normalizedKey = storageKey.Replace('/', Path.DirectorySeparatorChar);
-        var fullRoot = Path.GetFullPath(RootPath) + Path.DirectorySeparatorChar;
-        var fullPath = Path.GetFullPath(Path.Combine(RootPath, normalizedKey));
-        if (!fullPath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(storageKey))
         {
             throw new InvalidDataException("Invalid attachment storage key.");
         }
 
-        return fullPath;
+        return $"attachments/{storageKey}";
     }
 
     private static bool HasValidImageSignature(
