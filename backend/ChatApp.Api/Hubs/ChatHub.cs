@@ -45,7 +45,7 @@ public sealed class ChatHub(
                 ConversationGroup(conversationId));
         }
 
-        await Clients.All.SendAsync("PresenceChanged", presence.OnlineUsernames());
+        await Clients.All.SendAsync("PresenceChanged", presence.OnlineUsers());
         await base.OnConnectedAsync();
     }
 
@@ -62,7 +62,7 @@ public sealed class ChatHub(
                 await db.SaveChangesAsync();
             }
 
-            await Clients.All.SendAsync("PresenceChanged", presence.OnlineUsernames());
+            await Clients.All.SendAsync("PresenceChanged", presence.OnlineUsers());
         }
 
         await base.OnDisconnectedAsync(exception);

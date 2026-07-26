@@ -50,6 +50,18 @@ public sealed class PresenceTracker
             .Order(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
+    public IReadOnlyList<OnlineUser> OnlineUsers() =>
+        _connections.Values
+            .GroupBy(x => x.UserId)
+            .Select(group => group.First())
+            .OrderBy(x => x.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .Select(x => new OnlineUser(
+                x.UserId,
+                x.Username,
+                x.DisplayName,
+                x.AvatarUrl))
+            .ToArray();
+
     public IReadOnlyList<string> ConnectionIdsForUser(Guid userId) =>
         _connections
             .Where(x => x.Value.UserId == userId)
@@ -58,6 +70,12 @@ public sealed class PresenceTracker
 
     public sealed record Session(
         Guid UserId,
+        string Username,
+        string DisplayName,
+        string? AvatarUrl);
+
+    public sealed record OnlineUser(
+        Guid Id,
         string Username,
         string DisplayName,
         string? AvatarUrl);

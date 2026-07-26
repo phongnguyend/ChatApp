@@ -2283,6 +2283,13 @@
   bottom: auto;
 }
 
+.floating-member-actions-menu {
+  position: fixed;
+  z-index: 50;
+  right: auto;
+  bottom: auto;
+}
+
 .member-actions-menu button {
   min-height: 36px;
   padding: 0 9px;
@@ -2370,6 +2377,66 @@
 
 .modal-card .primary-button {
   margin-top: 22px;
+}
+
+.online-profile-dialog {
+  width: min(380px, 100%);
+}
+
+.online-profile-content {
+  padding: 8px 0 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: #777c77;
+  text-align: center;
+}
+
+.online-profile-avatar {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  margin-bottom: 18px;
+  border-radius: 28px;
+  display: grid;
+  place-items: center;
+  color: white;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.online-profile-avatar .presence-dot {
+  right: 2px;
+  bottom: 2px;
+  width: 16px;
+  height: 16px;
+  border: 3px solid var(--paper);
+}
+
+.online-profile-content > strong {
+  color: #323733;
+  font-family: 'Manrope', sans-serif;
+  font-size: 19px;
+}
+
+.online-profile-content > span:not(.online-profile-avatar) {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.online-profile-content > small {
+  margin-top: 12px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: #357b69;
+  background: #e7f4ef;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.online-profile-content > small.offline {
+  color: #777c77;
+  background: #eceae5;
 }
 
 .rename-group-form .rename-note {

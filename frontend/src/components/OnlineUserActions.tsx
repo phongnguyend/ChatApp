@@ -1,22 +1,53 @@
-import { Ban, Check, EllipsisVertical } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { Ban, Check, EllipsisVertical, UserRound } from 'lucide-react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 type OnlineUserActionsProps = {
-  username: string
+  displayName: string
   isBlocked: boolean
   disabled?: boolean
+  onViewProfile: () => void
   onToggleBlock: () => void
 }
 
 export function OnlineUserActions({
-  username,
+  displayName,
   isBlocked,
   disabled = false,
+  onViewProfile,
   onToggleBlock,
 }: OnlineUserActionsProps) {
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
   const [isOpen, setIsOpen] = useState(false)
-  const [opensBelow, setOpensBelow] = useState(false)
+  const [menuPosition, setMenuPosition] = useState({ left: 0, top: 0 })
+
+  function updateMenuPosition() {
+    const trigger = rootRef.current?.querySelector(
+      '.member-actions-trigger',
+    )
+    if (!(trigger instanceof HTMLElement)) return
+
+    const triggerRect = trigger.getBoundingClientRect()
+    const menuWidth = menuRef.current?.offsetWidth ?? 174
+    const menuHeight = menuRef.current?.offsetHeight ?? 84
+    const viewportPadding = 8
+    const gap = 4
+    const fitsBelow =
+      window.innerHeight - triggerRect.bottom >= menuHeight + gap
+    const top = fitsBelow
+      ? triggerRect.bottom + gap
+      : triggerRect.top - menuHeight - gap
+    const left = Math.min(
+      Math.max(viewportPadding, triggerRect.right - menuWidth),
+      window.innerWidth - menuWidth - viewportPadding,
+    )
+
+    setMenuPosition({
+      left,
+      top: Math.max(viewportPadding, top),
+    })
+  }
 
   useEffect(() => {
     if (!isOpen) return
@@ -24,7 +55,8 @@ export function OnlineUserActions({
     function closeOnOutsideClick(event: PointerEvent) {
       if (
         event.target instanceof Node &&
-        !rootRef.current?.contains(event.target)
+        !rootRef.current?.contains(event.target) &&
+        !menuRef.current?.contains(event.target)
       ) {
         setIsOpen(false)
       }
@@ -36,10 +68,18 @@ export function OnlineUserActions({
 
     document.addEventListener('pointerdown', closeOnOutsideClick)
     document.addEventListener('keydown', closeOnEscape)
+    window.addEventListener('resize', updateMenuPosition)
+    window.addEventListener('scroll', updateMenuPosition, true)
     return () => {
       document.removeEventListener('pointerdown', closeOnOutsideClick)
       document.removeEventListener('keydown', closeOnEscape)
+      window.removeEventListener('resize', updateMenuPosition)
+      window.removeEventListener('scroll', updateMenuPosition, true)
     }
+  }, [isOpen])
+
+  useLayoutEffect(() => {
+    if (isOpen) updateMenuPosition()
   }, [isOpen])
 
   useEffect(() => {
@@ -47,54 +87,54 @@ export function OnlineUserActions({
   }, [disabled])
 
   return (
-    <div
-      className={`member-actions online-user-actions ${
-        opensBelow ? 'opens-below' : ''
-      }`}
-      ref={rootRef}
-    >
+    <div className="member-actions online-user-actions" ref={rootRef}>
       <button
         className="member-actions-trigger"
         type="button"
         disabled={disabled}
-        aria-label={`Manage ${username}`}
+        aria-label={`Manage ${displayName}`}
         aria-expanded={isOpen}
         onClick={() => {
-          if (!isOpen) {
-            const actionRect = rootRef.current?.getBoundingClientRect()
-            const listRect = rootRef.current
-              ?.closest('.people-list')
-              ?.getBoundingClientRect()
-            setOpensBelow(
-              Boolean(
-                actionRect &&
-                  listRect &&
-                  actionRect.top - listRect.top < 90,
-              ),
-            )
-          }
           setIsOpen((current) => !current)
         }}
       >
         <EllipsisVertical size={16} />
       </button>
 
-      {isOpen && (
-        <div className="member-actions-menu" role="menu">
-          <button
-            className={isBlocked ? '' : 'member-remove-action'}
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setIsOpen(false)
-              onToggleBlock()
-            }}
+      {isOpen &&
+        createPortal(
+          <div
+            className="member-actions-menu floating-member-actions-menu"
+            role="menu"
+            ref={menuRef}
+            style={menuPosition}
           >
-            {isBlocked ? <Check size={15} /> : <Ban size={15} />}
-            {isBlocked ? 'Unblock user' : 'Block user'}
-          </button>
-        </div>
-      )}
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setIsOpen(false)
+                onViewProfile()
+              }}
+            >
+              <UserRound size={15} />
+              View profile
+            </button>
+            <button
+              className={isBlocked ? '' : 'member-remove-action'}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setIsOpen(false)
+                onToggleBlock()
+              }}
+            >
+              {isBlocked ? <Check size={15} /> : <Ban size={15} />}
+              {isBlocked ? 'Unblock user' : 'Block user'}
+            </button>
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }

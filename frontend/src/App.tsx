@@ -79,6 +79,10 @@ type ConversationMember = User & {
   isOnline: boolean;
 };
 
+type ViewedProfile = User & {
+  isOnline: boolean;
+};
+
 type MembersChangedEvent = {
   conversationId: string;
   memberCount: number;
@@ -421,7 +425,7 @@ function ChatApp({
   const [messagesByConversation, setMessagesByConversation] = useState<
     Record<string, Message[]>
   >({});
-  const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
+  const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
   const [blockedUsernames, setBlockedUsernames] = useState<Set<string>>(
     () => new Set(),
   );
@@ -477,6 +481,8 @@ function ChatApp({
   const [userBlockActionName, setUserBlockActionName] = useState<string | null>(
     null,
   );
+  const [viewedProfile, setViewedProfile] =
+    useState<ViewedProfile | null>(null);
   const [memberActionId, setMemberActionId] = useState<string | null>(null);
   const [memberToRemove, setMemberToRemove] =
     useState<ConversationMember | null>(null);
@@ -793,10 +799,21 @@ function ChatApp({
         }));
       },
     );
-    connection.on("PresenceChanged", (usernames: string[]) => {
-      setOnlineUsers(usernames);
+    connection.on("PresenceChanged", (users: User[]) => {
+      setOnlineUsers(users);
+      setViewedProfile((current) => {
+        if (!current) return null;
+        const onlineUser = users.find(
+          (candidate) => candidate.id === current.id,
+        );
+        return onlineUser
+          ? { ...onlineUser, isOnline: true }
+          : { ...current, isOnline: false };
+      });
       const onlineSet = new Set(
-        usernames.map((name) => name.toLocaleLowerCase()),
+        users.map((onlineUser) =>
+          onlineUser.username.toLocaleLowerCase(),
+        ),
       );
       setMembersByConversation((current) =>
         Object.fromEntries(
@@ -865,6 +882,18 @@ function ChatApp({
             : item,
         ),
       );
+      setOnlineUsers((current) =>
+        current.map((item) =>
+          item.id === event.userId
+            ? { ...item, avatarUrl: event.avatarUrl }
+            : item,
+        ),
+      );
+      setViewedProfile((current) =>
+        current?.id === event.userId
+          ? { ...current, avatarUrl: event.avatarUrl }
+          : current,
+      );
       setSelectedUsers((current) =>
         current.map((item) =>
           item.id === event.userId
@@ -915,6 +944,22 @@ function ChatApp({
               ? { ...item, displayName: event.displayName }
               : item,
           ),
+        );
+        setOnlineUsers((current) =>
+          current
+            .map((item) =>
+              item.id === event.userId
+                ? { ...item, displayName: event.displayName }
+                : item,
+            )
+            .sort((left, right) =>
+              left.displayName.localeCompare(right.displayName),
+            ),
+        );
+        setViewedProfile((current) =>
+          current?.id === event.userId
+            ? { ...current, displayName: event.displayName }
+            : current,
         );
         setSelectedUsers((current) =>
           current.map((item) =>
@@ -2633,12 +2678,17 @@ function ChatApp({
                             : "Offline"}
                       </small>
                     </span>
-                    {canManageMember && (
+                    {member.id !== user.id && (
                       <GroupMemberActions
                         displayName={member.displayName}
                         isOwner={member.role === "owner"}
-                        canRemove={activeConversation.title !== "General"}
+                        canChangeRole={canManageMember}
+                        canRemove={
+                          canManageMember &&
+                          activeConversation.title !== "General"
+                        }
                         disabled={memberActionId === member.id}
+                        onViewProfile={() => setViewedProfile(member)}
                         onMakeOwner={() =>
                           void updateGroupMemberRole(member, "owner")
                         }
@@ -2651,23 +2701,35 @@ function ChatApp({
                   </div>
                 );
               })
-            : onlineUsers.map((name) => {
-                const normalizedName = name.toLocaleLowerCase();
+            : onlineUsers.map((onlineUser) => {
+                const normalizedName =
+                  onlineUser.username.toLocaleLowerCase();
                 const isCurrentUser =
                   normalizedName === user.username.toLocaleLowerCase();
                 const isBlocked = blockedUsernames.has(normalizedName);
 
                 return (
-                  <div className="person" key={name}>
+                  <div className="person" key={onlineUser.id}>
                     <span
                       className="avatar avatar-small"
-                      style={{ backgroundColor: avatarColor(name) }}
+                      style={
+                        !onlineUser.avatarUrl
+                          ? {
+                              backgroundColor: avatarColor(
+                                onlineUser.username,
+                              ),
+                            }
+                          : undefined
+                      }
                     >
-                      {initials(name)}
+                      <AvatarContent
+                        avatarUrl={onlineUser.avatarUrl}
+                        name={onlineUser.displayName}
+                      />
                       <i className="presence-dot" />
                     </span>
                     <span className="person-copy">
-                      <strong>{name}</strong>
+                      <strong>{onlineUser.displayName}</strong>
                       <small>
                         {isCurrentUser
                           ? "You"
@@ -2678,10 +2740,18 @@ function ChatApp({
                     </span>
                     {!isCurrentUser && (
                       <OnlineUserActions
-                        username={name}
+                        displayName={onlineUser.displayName}
                         isBlocked={isBlocked}
                         disabled={userBlockActionName === normalizedName}
-                        onToggleBlock={() => void toggleUserBlock(name)}
+                        onViewProfile={() =>
+                          setViewedProfile({
+                            ...onlineUser,
+                            isOnline: true,
+                          })
+                        }
+                        onToggleBlock={() =>
+                          void toggleUserBlock(onlineUser.username)
+                        }
                       />
                     )}
                   </div>
@@ -2693,6 +2763,55 @@ function ChatApp({
           <p>Small conversations can lead to big ideas.</p>
         </div>
       </aside>
+
+      {viewedProfile && (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            className="modal-card online-profile-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="online-profile-title"
+          >
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">User profile</p>
+                <h2 id="online-profile-title">{viewedProfile.displayName}</h2>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                aria-label="Close profile"
+                onClick={() => setViewedProfile(null)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="online-profile-content">
+              <span
+                className="online-profile-avatar"
+                style={
+                  !viewedProfile.avatarUrl
+                    ? {
+                        backgroundColor: avatarColor(viewedProfile.username),
+                      }
+                    : undefined
+                }
+              >
+                <AvatarContent
+                  avatarUrl={viewedProfile.avatarUrl}
+                  name={viewedProfile.displayName}
+                />
+                {viewedProfile.isOnline && <i className="presence-dot" />}
+              </span>
+              <strong>{viewedProfile.displayName}</strong>
+              <span>@{viewedProfile.username}</span>
+              <small className={viewedProfile.isOnline ? "" : "offline"}>
+                {viewedProfile.isOnline ? "Online now" : "Offline"}
+              </small>
+            </div>
+          </div>
+        </div>
+      )}
 
       {conversationDialog && (
         <div className="modal-backdrop" role="presentation">
