@@ -13,8 +13,11 @@ presence, typing indicators, unread counts, profile and group avatar uploads,
 camera capture, automatic SignalR reconnection, and responsive desktop/mobile
 layouts. Browser push notifications are delivered through Azure Notification
 Hubs, the Azure browser-push service used alongside Azure Communication Services.
-Uploaded avatars are stored under the API's `wwwroot/uploads/avatars`
-directory while their relative URLs are persisted in SQL Server. The complete
+Uploaded avatars and message attachments are stored under the configured
+`UploadStorage:Path` directory (`/uploads` by default), while their relative URLs
+are persisted in SQL Server. Override it with `UploadStorage__Path` in the
+environment when needed. Local development uses the API's `uploads` directory so
+it does not require permission to write to a drive-root folder. The complete
 relational model below is represented by EF Core entities and migrations.
 
 ## Project structure

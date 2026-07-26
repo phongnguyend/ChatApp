@@ -1,6 +1,10 @@
+using Microsoft.Extensions.Options;
+
 namespace ChatApp.Api.Services;
 
-public sealed class AvatarStorage(IWebHostEnvironment environment)
+public sealed class AvatarStorage(
+    IWebHostEnvironment environment,
+    IOptions<UploadStorageOptions> options)
 {
     public const long MaxFileSize = 5 * 1024 * 1024;
 
@@ -37,11 +41,7 @@ public sealed class AvatarStorage(IWebHostEnvironment environment)
             }
         }
 
-        var uploadDirectory = Path.Combine(
-            environment.ContentRootPath,
-            "wwwroot",
-            "uploads",
-            "avatars");
+        var uploadDirectory = GetUploadDirectory();
         Directory.CreateDirectory(uploadDirectory);
 
         var fileName = $"{Guid.NewGuid():N}{extension}";
@@ -57,6 +57,41 @@ public sealed class AvatarStorage(IWebHostEnvironment environment)
         await source.CopyToAsync(destination, cancellationToken);
 
         return $"/uploads/avatars/{fileName}";
+    }
+
+    public FileStream OpenRead(string fileName) =>
+        new(
+            GetFilePath(fileName),
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            81920,
+            useAsync: true);
+
+    private string GetUploadDirectory()
+    {
+        var configuredPath = options.Value.Path;
+        var rootPath = Path.IsPathRooted(configuredPath)
+            ? configuredPath
+            : Path.Combine(environment.ContentRootPath, configuredPath);
+
+        return Path.Combine(Path.GetFullPath(rootPath), "avatars");
+    }
+
+    private string GetFilePath(string fileName)
+    {
+        var extension = Path.GetExtension(fileName);
+        var name = Path.GetFileNameWithoutExtension(fileName);
+        if (fileName != Path.GetFileName(fileName) ||
+            !Guid.TryParseExact(name, "N", out _) ||
+            !Extensions.Values.Contains(
+                extension,
+                StringComparer.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException("Invalid avatar file name.");
+        }
+
+        return Path.Combine(GetUploadDirectory(), fileName);
     }
 
     private static bool HasValidSignature(string contentType, ReadOnlySpan<byte> header) =>

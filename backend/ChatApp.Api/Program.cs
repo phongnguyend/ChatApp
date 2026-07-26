@@ -2,21 +2,20 @@ using ChatApp.Api.Data;
 using ChatApp.Api.Hubs;
 using ChatApp.Api.Services;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
-var avatarUploadPath = Path.Combine(
-    builder.Environment.ContentRootPath,
-    "wwwroot",
-    "uploads",
-    "avatars");
-Directory.CreateDirectory(avatarUploadPath);
 
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
 builder.Services.AddHttpClient();
 builder.Services.AddDbContext<ChatDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("ChatDatabase")));
+builder.Services.AddOptions<UploadStorageOptions>()
+    .Bind(builder.Configuration.GetSection(UploadStorageOptions.SectionName))
+    .Validate(
+        options => !string.IsNullOrWhiteSpace(options.Path),
+        "UploadStorage:Path must not be empty.")
+    .ValidateOnStart();
 builder.Services.Configure<AzureNotificationOptions>(
     builder.Configuration.GetSection(AzureNotificationOptions.SectionName));
 builder.Services.AddSingleton<PresenceTracker>();
@@ -39,12 +38,6 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-app.UseStaticFiles();
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new PhysicalFileProvider(avatarUploadPath),
-    RequestPath = "/uploads/avatars"
-});
 app.UseCors("ReactApp");
 app.MapControllers();
 app.MapHub<ChatHub>("/hubs/chat");

@@ -1,6 +1,10 @@
+using Microsoft.Extensions.Options;
+
 namespace ChatApp.Api.Services;
 
-public sealed class MessageAttachmentStorage(IWebHostEnvironment environment)
+public sealed class MessageAttachmentStorage(
+    IWebHostEnvironment environment,
+    IOptions<UploadStorageOptions> options)
 {
     public const int MaxFilesPerMessage = 5;
     public const long MaxFileSize = 15 * 1024 * 1024;
@@ -19,11 +23,18 @@ public sealed class MessageAttachmentStorage(IWebHostEnvironment environment)
         "video/mp4"
     ];
 
-    private string RootPath => Path.Combine(
-        environment.ContentRootPath,
-        "wwwroot",
-        "uploads",
-        "attachments");
+    private string RootPath
+    {
+        get
+        {
+            var configuredPath = options.Value.Path;
+            var rootPath = Path.IsPathRooted(configuredPath)
+                ? configuredPath
+                : Path.Combine(environment.ContentRootPath, configuredPath);
+
+            return Path.Combine(Path.GetFullPath(rootPath), "attachments");
+        }
+    }
 
     public bool IsDisplayableImage(string contentType) =>
         ImageContentTypes.Contains(NormalizeContentType(contentType));

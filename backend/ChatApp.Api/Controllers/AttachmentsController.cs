@@ -48,6 +48,14 @@ public sealed class AttachmentsController(
         {
             return NotFound();
         }
+        catch (DirectoryNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (InvalidDataException)
+        {
+            return NotFound();
+        }
 
         if (!download &&
             (storage.IsDisplayableImage(attachment.ContentType) ||
