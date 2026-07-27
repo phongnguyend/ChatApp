@@ -5,7 +5,8 @@
 - a Linux Azure App Service running the .NET 10 API;
 - an Azure Static Web App for the Vite frontend;
 - a private Azure Blob Storage container for uploads;
-- an Azure SQL logical server and Basic database.
+- an Azure SQL logical server and Basic database;
+- an Azure Notification Hubs namespace and browser-push notification hub.
 
 The API receives its SQL connection string and application settings from App
 Service. Its system-assigned managed identity is granted `Storage Blob Data
@@ -22,15 +23,29 @@ az group create --name chatapp-dev --location southeastasia
 $secureSqlPassword = Read-Host `
   "SQL administrator password" `
   -AsSecureString
+$browserPushSubject = Read-Host `
+  "VAPID subject (for example, mailto:admin@example.com)"
+$secureVapidPrivateKey = Read-Host `
+  "VAPID private key" `
+  -AsSecureString
+$browserPushVapidPublicKey = Read-Host "VAPID public key"
 
 $passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR(
   $secureSqlPassword
 )
+$vapidPrivateKeyPointer = `
+  [Runtime.InteropServices.Marshal]::SecureStringToBSTR(
+    $secureVapidPrivateKey
+  )
 
 try {
   $sqlPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR(
     $passwordPointer
   )
+  $browserPushVapidPrivateKey = `
+    [Runtime.InteropServices.Marshal]::PtrToStringBSTR(
+      $vapidPrivateKeyPointer
+    )
 
   az deployment group create `
     --name chatapp-dev `
@@ -39,11 +54,16 @@ try {
     --parameters `
       environmentName=dev `
       location=southeastasia `
-      sqlAdministratorPassword=$sqlPassword
+      sqlAdministratorPassword=$sqlPassword `
+      browserPushSubject=$browserPushSubject `
+      browserPushVapidPrivateKey=$browserPushVapidPrivateKey `
+      browserPushVapidPublicKey=$browserPushVapidPublicKey
 }
 finally {
   [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($passwordPointer)
+  [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($vapidPrivateKeyPointer)
   Remove-Variable sqlPassword -ErrorAction SilentlyContinue
+  Remove-Variable browserPushVapidPrivateKey -ErrorAction SilentlyContinue
 }
 ```
 
@@ -115,19 +135,23 @@ chatapp-infra-{environment}
 For example, selecting `prod` loads `chatapp-infra-prod`. Create and authorize
 each required environment variable group with these variables:
 
-| Variable                   | Example               | Notes                                            |
-| -------------------------- | --------------------- | ------------------------------------------------ |
-| `azureServiceConnection`   | `sc-chatapp-dev`      | Azure Resource Manager service connection        |
-| `resourceGroupName`        | `chatapp-dev`         | Created by the pipeline when absent              |
-| `resourceGroupLocation`    | `southeastasia`       | Location of the resource group metadata          |
-| `workloadName`             | `chatapp`             | Bicep resource-name prefix                       |
-| `location`                 | `southeastasia`       | App Service, Storage, and SQL region             |
-| `staticWebAppLocation`     | `eastus2`             | Supported Static Web Apps region                 |
-| `sqlAdministratorLogin`    | `chatappadmin`        | Azure SQL administrator login                    |
-| `sqlAdministratorPassword` | —                     | Mark this variable as secret                     |
-| `uploadsContainerName`     | `chatapp-uploads`     | Private Blob container name                      |
-| `apiAppName`               | `chatapp-dev-api-...` | App Service name used by the release pipeline    |
-| `staticWebAppName`         | `chatapp-dev-web-...` | Static Web App name used by the release pipeline |
+| Variable                            | Example                          | Notes                                            |
+| ----------------------------------- | -------------------------------- | ------------------------------------------------ |
+| `azureServiceConnection`            | `sc-chatapp-dev`                 | Azure Resource Manager service connection        |
+| `resourceGroupName`                 | `chatapp-dev`                    | Created by the pipeline when absent              |
+| `resourceGroupLocation`             | `southeastasia`                  | Location of the resource group metadata          |
+| `workloadName`                      | `chatapp`                        | Bicep resource-name prefix                       |
+| `location`                          | `southeastasia`                  | App Service, Storage, and SQL region             |
+| `staticWebAppLocation`              | `eastus2`                        | Supported Static Web Apps region                 |
+| `sqlAdministratorLogin`             | `chatappadmin`                   | Azure SQL administrator login                    |
+| `sqlAdministratorPassword`          | `(secret)`                       | Mark this variable as secret                     |
+| `uploadsContainerName`              | `chatapp-uploads`                | Private Blob container name                      |
+| `apiAppName`                        | `chatapp-dev-api-...`            | App Service name used by the release pipeline    |
+| `staticWebAppName`                  | `chatapp-dev-web-...`            | Static Web App name used by the release pipeline |
+| `staticWebAppUrl`                   | `https://...azurestaticapps.net` | Static Web App production URL                    |
+| `azureNotificationsSubject`         | `mailto:admin@example.com`       | Web Push VAPID subject                           |
+| `azureNotificationsVapidPrivateKey` | `(secret)`                       | VAPID private key; mark as secret                |
+| `azureNotificationsVapidPublicKey`  | `(public key)`                   | Public VAPID key used by browser clients         |
 
 The selected pipeline environment is passed directly to the Bicep
 `environmentName` parameter, so it does not need to be duplicated in the

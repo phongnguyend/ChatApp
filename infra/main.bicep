@@ -28,6 +28,18 @@ param sqlAdministratorPassword string
 @maxLength(63)
 param uploadsContainerName string = 'chatapp-uploads'
 
+@secure()
+@description('Contact URI used as the Web Push VAPID subject, such as mailto:admin@example.com.')
+param browserPushSubject string
+
+@secure()
+@description('Private VAPID key used by Azure Notification Hubs for browser push.')
+param browserPushVapidPrivateKey string
+
+@secure()
+@description('Public VAPID key exposed to browser clients by the API.')
+param browserPushVapidPublicKey string
+
 var uniqueSuffix = uniqueString(resourceGroup().id)
 var resourceNamePrefix = toLower('${workloadName}-${environmentName}')
 var appServicePlanName = '${resourceNamePrefix}-plan'
@@ -36,6 +48,8 @@ var staticWebAppName = take('${resourceNamePrefix}-web-${uniqueSuffix}', 60)
 var storageAccountName = 'st${uniqueString(resourceGroup().id, workloadName, environmentName)}'
 var sqlServerName = take('${resourceNamePrefix}-sql-${uniqueSuffix}', 63)
 var sqlDatabaseName = 'chatapp'
+var notificationHubNamespaceName = take('${resourceNamePrefix}-nh-${uniqueSuffix}', 50)
+var notificationHubName = take('${resourceNamePrefix}-notifications', 265)
 var blobDataContributorRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
@@ -141,6 +155,46 @@ resource staticWebApp 'Microsoft.Web/staticSites@2023-12-01' = {
   }
 }
 
+resource notificationHubNamespace 'Microsoft.NotificationHubs/namespaces@2023-09-01' = {
+  name: notificationHubNamespaceName
+  location: location
+  sku: {
+    name: 'Free'
+  }
+  properties: {
+    namespaceType: 'NotificationHub'
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+resource notificationHub 'Microsoft.NotificationHubs/namespaces/notificationHubs@2023-09-01' = {
+  parent: notificationHubNamespace
+  name: notificationHubName
+  location: location
+  properties: {
+    #disable-next-line use-secure-value-for-secure-inputs
+    browserCredential: {
+      properties: {
+        subject: browserPushSubject
+        vapidPrivateKey: browserPushVapidPrivateKey
+        vapidPublicKey: browserPushVapidPublicKey
+      }
+    }
+  }
+}
+
+resource notificationHubApiAuthorizationRule 'Microsoft.NotificationHubs/namespaces/notificationHubs/authorizationRules@2023-09-01' = {
+  parent: notificationHub
+  name: 'ApiFullAccess'
+  properties: {
+    rights: [
+      'Listen'
+      'Manage'
+      'Send'
+    ]
+  }
+}
+
 resource apiApp 'Microsoft.Web/sites@2023-12-01' = {
   name: apiAppName
   location: location
@@ -192,6 +246,18 @@ resource apiApp 'Microsoft.Web/sites@2023-12-01' = {
           name: 'AzureNotifications__FrontendBaseUrl'
           value: 'https://${staticWebApp.properties.defaultHostname}'
         }
+        {
+          name: 'AzureNotifications__ConnectionString'
+          value: notificationHubApiAuthorizationRule.listKeys().primaryConnectionString
+        }
+        {
+          name: 'AzureNotifications__HubName'
+          value: notificationHub.name
+        }
+        {
+          name: 'AzureNotifications__VapidPublicKey'
+          value: browserPushVapidPublicKey
+        }
       ]
       connectionStrings: [
         {
@@ -227,3 +293,5 @@ output staticWebAppUrl string = 'https://${staticWebApp.properties.defaultHostna
 output storageAccountName string = storageAccount.name
 output sqlServerFullyQualifiedDomainName string = sqlServer.properties.fullyQualifiedDomainName
 output sqlDatabaseName string = sqlDatabase.name
+output notificationHubNamespaceName string = notificationHubNamespace.name
+output notificationHubName string = notificationHub.name

@@ -1,13 +1,6 @@
 name: infra-$(Date:yyyyMMdd).$(Rev:r)
 
-trigger:
-  branches:
-    include:
-      - main
-  paths:
-    include:
-      - infra/*
-
+trigger: none
 pr: none
 
 parameters:
@@ -58,6 +51,9 @@ stages:
                   "sqlAdministratorLogin=$SQL_ADMINISTRATOR_LOGIN"
                   "sqlAdministratorPassword=$SQL_ADMINISTRATOR_PASSWORD"
                   "uploadsContainerName=$UPLOADS_CONTAINER_NAME"
+                  "browserPushSubject=$BROWSER_PUSH_SUBJECT"
+                  "browserPushVapidPrivateKey=$BROWSER_PUSH_VAPID_PRIVATE_KEY"
+                  "browserPushVapidPublicKey=$BROWSER_PUSH_VAPID_PUBLIC_KEY"
                 )
 
                 az deployment group validate \
@@ -83,3 +79,6 @@ stages:
               SQL_ADMINISTRATOR_LOGIN: $(sqlAdministratorLogin)
               SQL_ADMINISTRATOR_PASSWORD: $(sqlAdministratorPassword)
               UPLOADS_CONTAINER_NAME: $(uploadsContainerName)
+              BROWSER_PUSH_SUBJECT: $(azureNotificationsSubject)
+              BROWSER_PUSH_VAPID_PRIVATE_KEY: $(azureNotificationsVapidPrivateKey)
+              BROWSER_PUSH_VAPID_PUBLIC_KEY: $(azureNotificationsVapidPublicKey)
