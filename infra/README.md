@@ -1,0 +1,145 @@
+# Azure infrastructure
+
+`main.bicep` creates the resources used by ChatApp:
+
+- a Linux Azure App Service running the .NET 10 API;
+- an Azure Static Web App for the Vite frontend;
+- a private Azure Blob Storage container for uploads;
+- an Azure SQL logical server and Basic database.
+
+The API receives its SQL connection string and application settings from App
+Service. Its system-assigned managed identity is granted `Storage Blob Data
+Contributor` on the storage account, so no storage access key is stored in the
+application configuration.
+
+## Deploy
+
+Create a resource group and deploy the template:
+
+```powershell
+az group create --name rg-chatapp-dev --location southeastasia
+
+$secureSqlPassword = Read-Host `
+  "SQL administrator password" `
+  -AsSecureString
+
+$passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR(
+  $secureSqlPassword
+)
+
+try {
+  $sqlPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR(
+    $passwordPointer
+  )
+
+  az deployment group create `
+    --name chatapp-dev `
+    --resource-group rg-chatapp-dev `
+    --template-file ./infra/main.bicep `
+    --parameters `
+      environmentName=dev `
+      location=southeastasia `
+      sqlAdministratorPassword=$sqlPassword
+}
+finally {
+  [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($passwordPointer)
+  Remove-Variable sqlPassword -ErrorAction SilentlyContinue
+}
+```
+
+The password is read without echoing it and removed from the PowerShell session
+after Azure CLI completes. The account running the deployment must be allowed to
+create role assignments.
+
+If `eastus2` is not an appropriate Static Web Apps region for the subscription,
+override `staticWebAppLocation`.
+
+## Deploy the applications
+
+The template provisions hosting but does not publish application code. Retrieve
+the generated URLs and names from the deployment:
+
+```powershell
+$outputs = az deployment group show `
+  --resource-group rg-chatapp-dev `
+  --name chatapp-dev `
+  --query properties.outputs `
+  | ConvertFrom-Json
+
+$apiUrl = $outputs.apiUrl.value
+$apiAppName = $outputs.apiAppName.value
+$staticWebAppName = $outputs.staticWebAppName.value
+```
+
+Publish the API with a zip deployment (or use the same values in CI):
+
+```powershell
+dotnet publish ./backend/ChatApp.Api/ChatApp.Api.csproj `
+  --configuration Release `
+  --output ./artifacts/api
+
+Compress-Archive `
+  -Path ./artifacts/api/* `
+  -DestinationPath ./artifacts/api.zip `
+  -Force
+
+az webapp deploy `
+  --resource-group rg-chatapp-dev `
+  --name $apiAppName `
+  --src-path ./artifacts/api.zip `
+  --type zip
+```
+
+Build the frontend with the API URL before deploying it to the Static Web App:
+
+```powershell
+$env:VITE_API_URL = $apiUrl
+npm --prefix ./frontend ci
+npm --prefix ./frontend run build
+```
+
+Use the Static Web App deployment token in the frontend deployment workflow to
+upload `frontend/dist`. Keep that token in the CI system's secret store.
+
+## Azure DevOps pipeline
+
+`azure-pipelines.yml` validates and deploys `main.bicep`. When manually running
+the pipeline, select `dev`, `test`, `staging`, or `prod` from the `Environment`
+parameter. The pipeline loads the corresponding variable group using this
+naming convention:
+
+```text
+chatapp-infra-{environment}
+```
+
+For example, selecting `prod` loads `chatapp-infra-prod`. Create and authorize
+each required environment variable group with these variables:
+
+| Variable | Example | Notes |
+| --- | --- | --- |
+| `azureServiceConnection` | `sc-chatapp-dev` | Azure Resource Manager service connection |
+| `resourceGroupName` | `rg-chatapp-dev` | Created by the pipeline when absent |
+| `resourceGroupLocation` | `southeastasia` | Location of the resource group metadata |
+| `workloadName` | `chatapp` | Bicep resource-name prefix |
+| `location` | `southeastasia` | App Service, Storage, and SQL region |
+| `staticWebAppLocation` | `eastus2` | Supported Static Web Apps region |
+| `sqlAdministratorLogin` | `chatappadmin` | Azure SQL administrator login |
+| `sqlAdministratorPassword` | — | Mark this variable as secret |
+| `uploadsContainerName` | `chatapp-uploads` | Private Blob container name |
+
+The selected pipeline environment is passed directly to the Bicep
+`environmentName` parameter, so it does not need to be duplicated in the
+variable group.
+
+The service principal behind `azureServiceConnection` needs permission to
+create resources in the subscription and create the storage role assignment.
+When creating the Azure DevOps pipeline, select
+`infra/azure-pipelines.yml` as its YAML path and authorize both the service
+connection and variable group.
+
+## Security notes
+
+The SQL firewall rule permits connections from Azure services so the public App
+Service can reach SQL. For a production environment with stricter isolation,
+move App Service and SQL behind virtual-network integration and a private
+endpoint, then disable SQL public network access.

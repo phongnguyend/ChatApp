@@ -1,0 +1,85 @@
+name: infra-$(Date:yyyyMMdd).$(Rev:r)
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - infra/*
+
+pr: none
+
+parameters:
+  - name: environment
+    displayName: Environment
+    type: string
+    default: dev
+    values:
+      - dev
+      - test
+      - staging
+      - prod
+
+variables:
+  - group: ${{ format('chatapp-infra-{0}', parameters.environment) }}
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  - stage: DeployInfrastructure
+    displayName: Deploy Azure infrastructure
+    jobs:
+      - job: DeployBicep
+        displayName: Validate and deploy Bicep
+        steps:
+          - checkout: self
+
+          - task: AzureCLI@2
+            displayName: Validate and deploy main.bicep
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+
+                az group create \
+                  --name "$RESOURCE_GROUP_NAME" \
+                  --location "$RESOURCE_GROUP_LOCATION" \
+                  --output none
+
+                deployment_parameters=(
+                  "workloadName=$WORKLOAD_NAME"
+                  "environmentName=$ENVIRONMENT_NAME"
+                  "location=$AZURE_LOCATION"
+                  "staticWebAppLocation=$STATIC_WEB_APP_LOCATION"
+                  "sqlAdministratorLogin=$SQL_ADMINISTRATOR_LOGIN"
+                  "sqlAdministratorPassword=$SQL_ADMINISTRATOR_PASSWORD"
+                  "uploadsContainerName=$UPLOADS_CONTAINER_NAME"
+                )
+
+                az deployment group validate \
+                  --resource-group "$RESOURCE_GROUP_NAME" \
+                  --template-file "$(Build.SourcesDirectory)/infra/main.bicep" \
+                  --parameters "${deployment_parameters[@]}" \
+                  --output none
+
+                az deployment group create \
+                  --name "chatapp-${{ parameters.environment }}-$(Build.BuildId)" \
+                  --resource-group "$RESOURCE_GROUP_NAME" \
+                  --template-file "$(Build.SourcesDirectory)/infra/main.bicep" \
+                  --parameters "${deployment_parameters[@]}" \
+                  --query properties.outputs \
+                  --output json
+            env:
+              RESOURCE_GROUP_NAME: $(resourceGroupName)
+              RESOURCE_GROUP_LOCATION: $(resourceGroupLocation)
+              WORKLOAD_NAME: $(workloadName)
+              ENVIRONMENT_NAME: ${{ parameters.environment }}
+              AZURE_LOCATION: $(location)
+              STATIC_WEB_APP_LOCATION: $(staticWebAppLocation)
+              SQL_ADMINISTRATOR_LOGIN: $(sqlAdministratorLogin)
+              SQL_ADMINISTRATOR_PASSWORD: $(sqlAdministratorPassword)
+              UPLOADS_CONTAINER_NAME: $(uploadsContainerName)
