@@ -17,7 +17,7 @@ application configuration.
 Create a resource group and deploy the template:
 
 ```powershell
-az group create --name rg-chatapp-dev --location southeastasia
+az group create --name chatapp-dev --location southeastasia
 
 $secureSqlPassword = Read-Host `
   "SQL administrator password" `
@@ -34,7 +34,7 @@ try {
 
   az deployment group create `
     --name chatapp-dev `
-    --resource-group rg-chatapp-dev `
+    --resource-group chatapp-dev `
     --template-file ./infra/main.bicep `
     --parameters `
       environmentName=dev `
@@ -61,7 +61,7 @@ the generated URLs and names from the deployment:
 
 ```powershell
 $outputs = az deployment group show `
-  --resource-group rg-chatapp-dev `
+  --resource-group chatapp-dev `
   --name chatapp-dev `
   --query properties.outputs `
   | ConvertFrom-Json
@@ -84,7 +84,7 @@ Compress-Archive `
   -Force
 
 az webapp deploy `
-  --resource-group rg-chatapp-dev `
+  --resource-group chatapp-dev `
   --name $apiAppName `
   --src-path ./artifacts/api.zip `
   --type zip
@@ -115,17 +115,19 @@ chatapp-infra-{environment}
 For example, selecting `prod` loads `chatapp-infra-prod`. Create and authorize
 each required environment variable group with these variables:
 
-| Variable | Example | Notes |
-| --- | --- | --- |
-| `azureServiceConnection` | `sc-chatapp-dev` | Azure Resource Manager service connection |
-| `resourceGroupName` | `rg-chatapp-dev` | Created by the pipeline when absent |
-| `resourceGroupLocation` | `southeastasia` | Location of the resource group metadata |
-| `workloadName` | `chatapp` | Bicep resource-name prefix |
-| `location` | `southeastasia` | App Service, Storage, and SQL region |
-| `staticWebAppLocation` | `eastus2` | Supported Static Web Apps region |
-| `sqlAdministratorLogin` | `chatappadmin` | Azure SQL administrator login |
-| `sqlAdministratorPassword` | — | Mark this variable as secret |
-| `uploadsContainerName` | `chatapp-uploads` | Private Blob container name |
+| Variable                   | Example               | Notes                                            |
+| -------------------------- | --------------------- | ------------------------------------------------ |
+| `azureServiceConnection`   | `sc-chatapp-dev`      | Azure Resource Manager service connection        |
+| `resourceGroupName`        | `chatapp-dev`         | Created by the pipeline when absent              |
+| `resourceGroupLocation`    | `southeastasia`       | Location of the resource group metadata          |
+| `workloadName`             | `chatapp`             | Bicep resource-name prefix                       |
+| `location`                 | `southeastasia`       | App Service, Storage, and SQL region             |
+| `staticWebAppLocation`     | `eastus2`             | Supported Static Web Apps region                 |
+| `sqlAdministratorLogin`    | `chatappadmin`        | Azure SQL administrator login                    |
+| `sqlAdministratorPassword` | —                     | Mark this variable as secret                     |
+| `uploadsContainerName`     | `chatapp-uploads`     | Private Blob container name                      |
+| `apiAppName`               | `chatapp-dev-api-...` | App Service name used by the release pipeline    |
+| `staticWebAppName`         | `chatapp-dev-web-...` | Static Web App name used by the release pipeline |
 
 The selected pipeline environment is passed directly to the Bicep
 `environmentName` parameter, so it does not need to be duplicated in the

@@ -1,0 +1,135 @@
+name: release-$(Date:yyyyMMdd).$(Rev:r)
+
+trigger: none
+pr: none
+
+parameters:
+  - name: environment
+    displayName: Environment
+    type: string
+    default: dev
+    values:
+      - dev
+      - test
+      - staging
+      - prod
+
+variables:
+  - group: ${{ format('chatapp-infra-{0}', parameters.environment) }}
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  - stage: BuildAndDeploy
+    displayName: Build and deploy applications
+    jobs:
+      - job: Release
+        displayName: Release API and frontend
+        steps:
+          - checkout: self
+
+          - task: UseDotNet@2
+            displayName: Install .NET 10 SDK
+            inputs:
+              packageType: sdk
+              version: 10.x
+
+          - task: NodeTool@0
+            displayName: Install Node.js
+            inputs:
+              versionSpec: 24.x
+
+          - task: AzureCLI@2
+            displayName: Get Static Web App deployment token
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+
+                static_web_app_token="$(
+                  az staticwebapp secrets list \
+                    --resource-group "$RESOURCE_GROUP_NAME" \
+                    --name "$STATIC_WEB_APP_NAME" \
+                    --query properties.apiKey \
+                    --output tsv
+                )"
+
+                if [ -z "$static_web_app_token" ]; then
+                  echo "Could not retrieve the Static Web App deployment token." >&2
+                  exit 1
+                fi
+
+                echo "##vso[task.setvariable variable=staticWebAppDeploymentToken;issecret=true]$static_web_app_token"
+            env:
+              RESOURCE_GROUP_NAME: $(resourceGroupName)
+              STATIC_WEB_APP_NAME: $(staticWebAppName)
+
+          - script: |
+              set -euo pipefail
+              dotnet publish backend/ChatApp.Api/ChatApp.Api.csproj \
+                --configuration Release \
+                --output "$(Build.ArtifactStagingDirectory)/api"
+            displayName: Build API
+
+          - task: ArchiveFiles@2
+            displayName: Package API
+            inputs:
+              rootFolderOrFile: $(Build.ArtifactStagingDirectory)/api
+              includeRootFolder: false
+              archiveType: zip
+              archiveFile: $(Build.ArtifactStagingDirectory)/api.zip
+              replaceExistingArchive: true
+
+          - script: npm ci
+            displayName: Install frontend dependencies
+            workingDirectory: frontend
+
+          - script: npm run build
+            displayName: Build frontend
+            workingDirectory: frontend
+            env:
+              VITE_API_URL: https://$(apiAppName).azurewebsites.net
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish API artifact
+            inputs:
+              targetPath: $(Build.ArtifactStagingDirectory)/api.zip
+              artifact: api-${{ parameters.environment }}
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish frontend artifact
+            inputs:
+              targetPath: frontend/dist
+              artifact: frontend-${{ parameters.environment }}
+
+          - task: AzureCLI@2
+            displayName: Deploy API
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+
+                az webapp deploy \
+                  --resource-group "$RESOURCE_GROUP_NAME" \
+                  --name "$API_APP_NAME" \
+                  --src-path "$API_PACKAGE_PATH" \
+                  --type zip \
+                  --output none
+            env:
+              RESOURCE_GROUP_NAME: $(resourceGroupName)
+              API_APP_NAME: $(apiAppName)
+              API_PACKAGE_PATH: $(Build.ArtifactStagingDirectory)/api.zip
+
+          - task: AzureStaticWebApp@0
+            displayName: Deploy frontend
+            inputs:
+              app_location: frontend/dist
+              output_location: ''
+              skip_app_build: true
+              skip_api_build: true
+              azure_static_web_apps_api_token: $(staticWebAppDeploymentToken)
