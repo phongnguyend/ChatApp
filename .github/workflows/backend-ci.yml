@@ -1,0 +1,45 @@
+name: Backend CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - backend/**
+      - .github/workflows/backend-ci.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - backend/**
+      - .github/workflows/backend-ci.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore ChatApp.slnx
+
+      - name: Build
+        run: dotnet build ChatApp.slnx --configuration Release --no-restore
