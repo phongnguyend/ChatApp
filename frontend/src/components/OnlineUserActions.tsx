@@ -1,4 +1,10 @@
-import { Ban, Check, EllipsisVertical, UserRound } from 'lucide-react'
+import {
+  Ban,
+  Check,
+  EllipsisVertical,
+  MessageCircleMore,
+  UserRound,
+} from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
@@ -6,6 +12,7 @@ type OnlineUserActionsProps = {
   displayName: string
   isBlocked: boolean
   disabled?: boolean
+  onChat: () => void
   onViewProfile: () => void
   onToggleBlock: () => void
 }
@@ -14,6 +21,7 @@ export function OnlineUserActions({
   displayName,
   isBlocked,
   disabled = false,
+  onChat,
   onViewProfile,
   onToggleBlock,
 }: OnlineUserActionsProps) {
@@ -30,7 +38,7 @@ export function OnlineUserActions({
 
     const triggerRect = trigger.getBoundingClientRect()
     const menuWidth = menuRef.current?.offsetWidth ?? 174
-    const menuHeight = menuRef.current?.offsetHeight ?? 84
+    const menuHeight = menuRef.current?.offsetHeight ?? 124
     const viewportPadding = 8
     const gap = 4
     const fitsBelow =
@@ -109,6 +117,17 @@ export function OnlineUserActions({
             ref={menuRef}
             style={menuPosition}
           >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setIsOpen(false)
+                onChat()
+              }}
+            >
+              <MessageCircleMore size={15} />
+              Chat
+            </button>
             <button
               type="button"
               role="menuitem"

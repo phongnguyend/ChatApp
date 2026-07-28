@@ -1601,9 +1601,13 @@ function ChatApp({
     }
   }
 
-  async function createDirectConversation(targetUser: SearchUser) {
+  async function createDirectConversation(
+    targetUser: SearchUser,
+    showDialogError = true,
+  ) {
     setCreatingDirectUserId(targetUser.id);
-    setDialogError("");
+    if (showDialogError) setDialogError("");
+    else setError("");
 
     try {
       const response = await fetch(
@@ -1624,16 +1628,18 @@ function ChatApp({
         ...current.filter((item) => item.id !== conversation.id),
       ]);
       setActiveId(conversation.id);
+      setConversationTab("chat");
       setConversationDialog(null);
       setUserQuery("");
       setIsSidebarOpen(false);
       await connectionRef.current?.invoke("JoinConversation", conversation.id);
     } catch (requestError) {
-      setDialogError(
+      const message =
         requestError instanceof Error
           ? requestError.message
-          : "Could not start that conversation.",
-      );
+          : "Could not start that conversation.";
+      if (showDialogError) setDialogError(message);
+      else setError(message);
     } finally {
       setCreatingDirectUserId(null);
     }
@@ -2848,7 +2854,13 @@ function ChatApp({
                           canManageMember &&
                           activeConversation.title !== "General"
                         }
-                        disabled={memberActionId === member.id}
+                        disabled={
+                          memberActionId === member.id ||
+                          creatingDirectUserId === member.id
+                        }
+                        onChat={() =>
+                          void createDirectConversation(member, false)
+                        }
                         onViewProfile={() => setViewedProfile(member)}
                         onMakeOwner={() =>
                           void updateGroupMemberRole(member, "owner")
@@ -2903,7 +2915,13 @@ function ChatApp({
                       <OnlineUserActions
                         displayName={onlineUser.displayName}
                         isBlocked={isBlocked}
-                        disabled={userBlockActionName === normalizedName}
+                        disabled={
+                          userBlockActionName === normalizedName ||
+                          creatingDirectUserId === onlineUser.id
+                        }
+                        onChat={() =>
+                          void createDirectConversation(onlineUser, false)
+                        }
                         onViewProfile={() =>
                           setViewedProfile({
                             ...onlineUser,

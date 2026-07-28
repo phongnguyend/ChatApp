@@ -1,4 +1,10 @@
-import { Crown, EllipsisVertical, UserMinus, UserRound } from 'lucide-react'
+import {
+  Crown,
+  EllipsisVertical,
+  MessageCircleMore,
+  UserMinus,
+  UserRound,
+} from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
@@ -8,6 +14,7 @@ type GroupMemberActionsProps = {
   canChangeRole: boolean
   canRemove: boolean
   disabled?: boolean
+  onChat: () => void
   onViewProfile: () => void
   onMakeOwner: () => void
   onRemoveOwner: () => void
@@ -20,6 +27,7 @@ export function GroupMemberActions({
   canChangeRole,
   canRemove,
   disabled = false,
+  onChat,
   onViewProfile,
   onMakeOwner,
   onRemoveOwner,
@@ -38,7 +46,7 @@ export function GroupMemberActions({
 
     const triggerRect = trigger.getBoundingClientRect()
     const menuWidth = menuRef.current?.offsetWidth ?? 174
-    const menuHeight = menuRef.current?.offsetHeight ?? 124
+    const menuHeight = menuRef.current?.offsetHeight ?? 164
     const viewportPadding = 8
     const gap = 4
     const fitsBelow =
@@ -115,6 +123,17 @@ export function GroupMemberActions({
             ref={menuRef}
             style={menuPosition}
           >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setIsOpen(false)
+                onChat()
+              }}
+            >
+              <MessageCircleMore size={15} />
+              Chat
+            </button>
             <button
               type="button"
               role="menuitem"
