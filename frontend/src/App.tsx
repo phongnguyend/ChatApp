@@ -13,7 +13,6 @@ import {
   Images,
   LoaderCircle,
   LogOut,
-  MapPin,
   Menu,
   MessageCircleMore,
   Pencil,
@@ -44,6 +43,10 @@ import {
 import { type ChatReaction, MessageActions } from "./components/MessageActions";
 import { EmojiPicker } from "./components/EmojiPicker";
 import { GroupMemberActions } from "./components/GroupMemberActions";
+import {
+  LocationShareButton,
+  type SharedLocation,
+} from "./components/LocationShareButton";
 import { ConversationActions } from "./components/ConversationActions";
 import { OnlineUserActions } from "./components/OnlineUserActions";
 import { PushNotificationButton } from "./components/PushNotificationButton";
@@ -495,7 +498,6 @@ function ChatApp({
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
-  const [isSharingLocation, setIsSharingLocation] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editMessageDraft, setEditMessageDraft] = useState("");
   const [deletingMessage, setDeletingMessage] = useState<Message | null>(null);
@@ -1303,72 +1305,21 @@ function ChatApp({
     }
   }
 
-  async function shareCurrentLocation() {
-    const conversationId = activeId;
+  async function shareCurrentLocation(location: SharedLocation) {
     const connection = connectionRef.current;
     if (
-      !conversationId ||
+      !activeId ||
       !connection ||
-      connection.state !== HubConnectionState.Connected ||
-      isSharingLocation
+      connection.state !== HubConnectionState.Connected
     ) {
-      return;
+      throw new Error(LIVE_CHAT_OFFLINE_ERROR);
     }
 
-    if (!navigator.geolocation) {
-      setError("Location sharing is not supported by this browser.");
-      return;
-    }
-
-    setIsSharingLocation(true);
-    setError("");
-    try {
-      const position = await new Promise<GeolocationPosition>(
-        (resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            timeout: 15_000,
-            maximumAge: 30_000,
-          });
-        },
-      );
-      const latitude = position.coords.latitude.toFixed(6);
-      const longitude = position.coords.longitude.toFixed(6);
-      const locationUrl =
-        `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}` +
-        `#map=16/${latitude}/${longitude}`;
-
-      await connection.invoke("SendMessage", {
-        conversationId,
-        content: `My current location: ${locationUrl}`,
-        clientMessageId: crypto.randomUUID(),
-      });
-    } catch (requestError) {
-      const geolocationError =
-        typeof requestError === "object" &&
-        requestError !== null &&
-        "code" in requestError &&
-        typeof requestError.code === "number"
-          ? (requestError as GeolocationPositionError)
-          : null;
-      if (geolocationError) {
-        setError(
-          geolocationError.code === geolocationError.PERMISSION_DENIED
-            ? "Location permission was denied."
-            : geolocationError.code === geolocationError.TIMEOUT
-              ? "Could not get your location in time."
-              : "Your current location is unavailable.",
-        );
-      } else {
-        setError(
-          requestError instanceof Error
-            ? requestError.message
-            : "Your location was not shared.",
-        );
-      }
-    } finally {
-      setIsSharingLocation(false);
-    }
+    await connection.invoke("SendMessage", {
+      conversationId: activeId,
+      content: `My current location: ${location.url}`,
+      clientMessageId: crypto.randomUUID(),
+    });
   }
 
   async function editMessage(
@@ -2694,25 +2645,16 @@ function ChatApp({
             disabled={!activeConversation || !isOnline || isSendingMessage}
             onSelect={insertEmoji}
           />
-          <button
-            className="location-button"
-            type="button"
+          <LocationShareButton
+            key={activeId}
             disabled={
               !activeConversation ||
               !isOnline ||
-              isSendingMessage ||
-              isSharingLocation
+              isSendingMessage
             }
-            aria-label="Share current location"
-            title="Share current location"
-            onClick={() => void shareCurrentLocation()}
-          >
-            {isSharingLocation ? (
-              <LoaderCircle className="spin" size={18} />
-            ) : (
-              <MapPin size={18} />
-            )}
-          </button>
+            onShare={shareCurrentLocation}
+            onError={setError}
+          />
           <button
             className="send-button"
             type="submit"
