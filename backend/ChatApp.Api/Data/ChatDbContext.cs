@@ -114,7 +114,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         entity.ToTable("Messages", table =>
             table.HasCheckConstraint(
                 "CK_Messages_Type",
-                "[MessageType] IN ('text', 'image', 'file', 'audio', 'video', 'system')"));
+                "[MessageType] IN ('text', 'image', 'file', 'audio', 'video', 'location', 'system')"));
         entity.HasKey(x => x.Id);
         entity.Property(x => x.MessageType).HasMaxLength(20).HasDefaultValue("text");
         entity.Property(x => x.Content).HasColumnType("nvarchar(max)");

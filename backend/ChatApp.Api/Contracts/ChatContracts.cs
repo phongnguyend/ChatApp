@@ -125,6 +125,7 @@ public sealed record SendMessageRequest(
     Guid ConversationId,
     string Content,
     string ClientMessageId,
-    Guid? ReplyToMessageId = null);
+    Guid? ReplyToMessageId = null,
+    string MessageType = "text");
 
 public sealed record TypingDto(Guid ConversationId, string Username, bool IsTyping);

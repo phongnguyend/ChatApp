@@ -80,10 +80,16 @@ public sealed class ChatHub(
         var session = GetSession();
         var content = request.Content?.Trim() ?? "";
         var clientMessageId = request.ClientMessageId?.Trim() ?? "";
+        var messageType = request.MessageType?.Trim().ToLowerInvariant() ?? "text";
 
         if (content.Length is < 1 or > 2000 || clientMessageId.Length is < 1 or > 100)
         {
             throw new HubException("Messages must contain 1–2,000 characters.");
+        }
+
+        if (messageType is not ("text" or "location"))
+        {
+            throw new HubException("Choose a supported message type.");
         }
 
         await EnsureMembership(session.UserId, request.ConversationId);
@@ -140,6 +146,7 @@ public sealed class ChatHub(
             ConversationId = request.ConversationId,
             Conversation = conversation,
             SenderUserId = session.UserId,
+            MessageType = messageType,
             Content = content,
             ClientMessageId = clientMessageId,
             SequenceNumber = nextSequence + 1,
@@ -188,7 +195,7 @@ public sealed class ChatHub(
             request.ConversationId,
             session.UserId,
             session.DisplayName,
-            content,
+            messageType == "location" ? "Shared a location" : content,
             Context.ConnectionAborted);
     }
 

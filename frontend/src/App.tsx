@@ -215,6 +215,7 @@ function MessageContent({ content }: { content: string }) {
 }
 
 function messagePreview(message: Message) {
+  if (message.messageType === "location") return "Shared a location";
   if (message.content) return message.content;
   const attachments = message.attachments ?? [];
   if (attachments.length === 0) return null;
@@ -1319,6 +1320,7 @@ function ChatApp({
       conversationId: activeId,
       content: `My current location: ${location.url}`,
       clientMessageId: crypto.randomUUID(),
+      messageType: "location",
     });
   }
 
@@ -2407,7 +2409,10 @@ function ChatApp({
                               )}
                             <MessageActions
                               isOwn={isOwnMessage}
-                              canEdit={Boolean(message.content)}
+                              canEdit={
+                                message.messageType !== "location" &&
+                                Boolean(message.content)
+                              }
                               canCopy={Boolean(
                                 message.content ||
                                 (message.attachments?.length ?? 0) > 0,

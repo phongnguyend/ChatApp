@@ -10,8 +10,9 @@ A simple real-time chat application built with:
 The app includes persistent message history, pair-unique direct messages,
 multi-person group creation, live group member management, user discovery, online
 presence, typing indicators, unread counts, profile and group avatar uploads,
-camera capture, automatic SignalR reconnection, and responsive desktop/mobile
-layouts. Browser push notifications are delivered through Azure Notification
+camera capture, current-location sharing with confirmation previews, automatic
+SignalR reconnection, and responsive desktop/mobile layouts. Browser push
+notifications are delivered through Azure Notification
 Hubs, the Azure browser-push service used alongside Azure Communication Services.
 Uploaded avatars and message attachments use the configured upload storage
 provider, while their relative URLs are persisted in SQL Server. Local
@@ -288,6 +289,7 @@ CREATE TABLE messages (
                 'file',
                 'audio',
                 'video',
+                'location',
                 'system'
             )
         ),

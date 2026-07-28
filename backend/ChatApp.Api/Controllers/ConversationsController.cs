@@ -63,16 +63,18 @@ public sealed class ConversationsController(
                     : x.Conversation.AvatarUrl,
                 x.Conversation.LastMessage == null || x.Conversation.LastMessage.DeletedAt != null
                     ? null
-                    : x.Conversation.LastMessage.Content ??
-                      (x.Conversation.LastMessage.MessageType == "image"
-                          ? "Sent an image"
-                          : x.Conversation.LastMessage.MessageType == "video"
-                              ? "Sent a video"
-                          : x.Conversation.LastMessage.MessageType == "audio"
-                              ? "Sent a voice message"
-                          : x.Conversation.LastMessage.MessageType == "file"
-                              ? "Sent a file"
-                              : null),
+                    : x.Conversation.LastMessage.MessageType == "location"
+                        ? "Shared a location"
+                        : x.Conversation.LastMessage.Content ??
+                          (x.Conversation.LastMessage.MessageType == "image"
+                              ? "Sent an image"
+                              : x.Conversation.LastMessage.MessageType == "video"
+                                  ? "Sent a video"
+                              : x.Conversation.LastMessage.MessageType == "audio"
+                                  ? "Sent a voice message"
+                              : x.Conversation.LastMessage.MessageType == "file"
+                                  ? "Sent a file"
+                                  : null),
                 x.Conversation.LastMessage == null || x.Conversation.LastMessage.DeletedAt != null
                     ? null
                     : x.Conversation.LastMessage.SenderUserId,

@@ -57,6 +57,7 @@ public sealed class MessagesController(
                     x.Id == id &&
                     x.SenderUserId == user.Id &&
                     x.MessageType != "system" &&
+                    x.MessageType != "location" &&
                     x.DeletedAt == null,
                 cancellationToken);
         if (message is null)
