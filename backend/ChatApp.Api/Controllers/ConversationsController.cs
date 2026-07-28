@@ -749,6 +749,7 @@ public sealed class ConversationsController(
         [FromForm] List<IFormFile> files,
         [FromForm] string? content,
         [FromForm] string clientMessageId,
+        [FromForm] Guid? replyToMessageId,
         CancellationToken cancellationToken)
     {
         var normalized = Username.Normalize(username);
@@ -781,6 +782,13 @@ public sealed class ConversationsController(
             {
                 message = "Messages can contain up to 2,000 characters."
             });
+        }
+        if (replyToMessageId is not null &&
+            !await db.Messages.AnyAsync(
+                x => x.Id == replyToMessageId && x.ConversationId == id,
+                cancellationToken))
+        {
+            return BadRequest(new { message = "The message being replied to no longer exists." });
         }
 
         var existing = await db.Messages
@@ -896,6 +904,7 @@ public sealed class ConversationsController(
                 Content = string.IsNullOrWhiteSpace(messageContent) ? null : messageContent,
                 ClientMessageId = cleanClientMessageId,
                 SequenceNumber = nextSequence + 1,
+                ReplyToMessageId = replyToMessageId,
                 CreatedAt = now,
                 Attachments = attachments
             };
@@ -942,7 +951,7 @@ public sealed class ConversationsController(
                 message.MessageType,
                 message.ClientMessageId,
                 message.SequenceNumber,
-                null,
+                message.ReplyToMessageId,
                 message.CreatedAt,
                 null,
                 null,

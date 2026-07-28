@@ -1,4 +1,4 @@
-import { Copy, Pencil, SmilePlus, Trash2 } from 'lucide-react'
+import { Copy, Pencil, Reply, SmilePlus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
 export type ChatReaction = {
@@ -22,6 +22,7 @@ type MessageActionsProps = {
   reactions: ChatReaction[]
   resolveAvatarUrl: (avatarUrl: string | null) => string | null
   onReaction: (reaction: string) => void
+  onReply: () => void
   onEdit: () => void
   onDelete: () => void
   onCopy: () => void
@@ -37,6 +38,7 @@ export function MessageActions({
   reactions,
   resolveAvatarUrl,
   onReaction,
+  onReply,
   onEdit,
   onDelete,
   onCopy,
@@ -54,6 +56,15 @@ export function MessageActions({
           onClick={() => setIsReactionPickerOpen((current) => !current)}
         >
           <SmilePlus size={15} />
+        </button>
+        <button
+          type="button"
+          disabled={disabled}
+          aria-label="Reply to message"
+          title="Reply"
+          onClick={onReply}
+        >
+          <Reply size={15} />
         </button>
         {canCopy && (
           <button

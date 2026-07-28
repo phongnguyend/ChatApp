@@ -1502,6 +1502,50 @@
   text-align: right;
 }
 
+.message-reply-reference {
+  width: min(360px, 100%);
+  margin: 2px 0 5px;
+  padding: 7px 10px;
+  border: 0;
+  border-left: 3px solid var(--coral);
+  border-radius: 4px 10px 10px 4px;
+  display: grid;
+  gap: 2px;
+  overflow: hidden;
+  color: #555b56;
+  background: #f1efe9;
+  text-align: left;
+}
+
+.message.own-message .message-reply-reference {
+  margin-left: auto;
+}
+
+.message-reply-reference:hover:not(:disabled) {
+  background: #f8e9e5;
+}
+
+.message-reply-reference:disabled {
+  cursor: default;
+}
+
+.message-reply-reference strong {
+  color: #a24e3f;
+  font-size: 10px;
+}
+
+.message-reply-reference span {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message:focus .message-reply-reference,
+.message:focus .message-body > p {
+  box-shadow: 0 0 0 3px rgba(231, 101, 75, 0.12);
+}
+
 .message-edit-form {
   width: min(420px, 72vw);
   margin-top: 4px;
@@ -1724,6 +1768,56 @@
   border-radius: 14px;
   background: white;
   box-shadow: 0 8px 28px rgba(46, 51, 47, 0.06);
+}
+
+.composer-reply-preview {
+  min-width: 0;
+  margin-bottom: 9px;
+  padding: 7px 8px 7px 10px;
+  border-left: 3px solid var(--coral);
+  border-radius: 4px 9px 9px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: #f5f2ec;
+}
+
+.composer-reply-preview > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.composer-reply-preview strong {
+  color: #9d4b3d;
+  font-size: 10px;
+}
+
+.composer-reply-preview small {
+  overflow: hidden;
+  color: #777b76;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-reply-preview > button {
+  width: 27px;
+  height: 27px;
+  flex: 0 0 27px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: #777b76;
+  background: transparent;
+}
+
+.composer-reply-preview > button:hover {
+  color: #9f493c;
+  background: #f4dfda;
 }
 
 .emoji-picker-control {

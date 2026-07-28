@@ -251,6 +251,11 @@ function messagePreview(message: Message) {
     : `Sent ${attachments.length} files`;
 }
 
+function replyPreview(message: Message) {
+  if (message.deletedAt) return "This message was deleted.";
+  return messagePreview(message) ?? "Message";
+}
+
 function avatarSource(avatarUrl: string | null | undefined) {
   if (!avatarUrl) return null;
   try {
@@ -499,6 +504,9 @@ function ChatApp({
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [replyingToMessageId, setReplyingToMessageId] = useState<string | null>(
+    null,
+  );
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editMessageDraft, setEditMessageDraft] = useState("");
   const [deletingMessage, setDeletingMessage] = useState<Message | null>(null);
@@ -527,6 +535,9 @@ function ChatApp({
   const activeMessages = activeId
     ? (messagesByConversation[activeId] ?? EMPTY_MESSAGES)
     : EMPTY_MESSAGES;
+  const replyingToMessage = replyingToMessageId
+    ? activeMessages.find((message) => message.id === replyingToMessageId)
+    : undefined;
   const activeAttachmentItems = useMemo(
     () =>
       activeMessages.flatMap((message) =>
@@ -1214,6 +1225,7 @@ function ChatApp({
 
   useEffect(() => {
     setAttachmentFiles([]);
+    setReplyingToMessageId(null);
     setConversationTab("chat");
   }, [activeId]);
 
@@ -1266,8 +1278,10 @@ function ChatApp({
     }
 
     const filesToSend = attachmentFiles;
+    const replyToMessageId = replyingToMessageId;
     setDraft("");
     setAttachmentFiles([]);
+    setReplyingToMessageId(null);
     setIsSendingMessage(true);
     setError("");
     if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
@@ -1278,6 +1292,9 @@ function ChatApp({
         filesToSend.forEach((file) => formData.append("files", file));
         formData.append("content", content);
         formData.append("clientMessageId", crypto.randomUUID());
+        if (replyToMessageId) {
+          formData.append("replyToMessageId", replyToMessageId);
+        }
         const response = await fetch(
           `${API_URL}/api/conversations/${activeId}/messages/attachments?username=${encodeURIComponent(
             user.username,
@@ -1291,11 +1308,13 @@ function ChatApp({
           conversationId: activeId,
           content,
           clientMessageId: crypto.randomUUID(),
+          replyToMessageId,
         });
       }
     } catch (requestError) {
       setDraft(content);
       setAttachmentFiles(filesToSend);
+      setReplyingToMessageId(replyToMessageId);
       setError(
         requestError instanceof Error
           ? requestError.message
@@ -1321,7 +1340,9 @@ function ChatApp({
       content: `My current location: ${location.url}`,
       clientMessageId: crypto.randomUUID(),
       messageType: "location",
+      replyToMessageId: replyingToMessageId,
     });
+    setReplyingToMessageId(null);
   }
 
   async function editMessage(
@@ -1479,6 +1500,18 @@ function ChatApp({
     } catch {
       setError("Could not copy this message.");
     }
+  }
+
+  function beginReply(message: Message) {
+    setReplyingToMessageId(message.id);
+    setEditingMessageId(null);
+    window.requestAnimationFrame(() => draftInputRef.current?.focus());
+  }
+
+  function scrollToMessage(messageId: string) {
+    const messageElement = document.getElementById(`message-${messageId}`);
+    messageElement?.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => messageElement?.focus(), 350);
   }
 
   function attachmentUrl(attachmentId: string, download = false) {
@@ -2299,6 +2332,11 @@ function ChatApp({
           ) : (
             groupedMessages.map(({ message, startsDay, startsGroup }) => {
               const isOwnMessage = message.senderUserId === user.id;
+              const replyTarget = message.replyToMessageId
+                ? activeMessages.find(
+                    (candidate) => candidate.id === message.replyToMessageId,
+                  )
+                : undefined;
 
               return (
                 <div key={message.id}>
@@ -2316,6 +2354,7 @@ function ChatApp({
                     </article>
                   ) : (
                     <article
+                      id={`message-${message.id}`}
                       className={`message ${
                         startsGroup ? "group-start" : "compact"
                       } ${isOwnMessage ? "own-message" : ""}`}
@@ -2361,6 +2400,39 @@ function ChatApp({
                           </p>
                         ) : (
                           <>
+                            {message.replyToMessageId && (
+                              <button
+                                className="message-reply-reference"
+                                type="button"
+                                disabled={!replyTarget}
+                                aria-label={
+                                  replyTarget
+                                    ? `Go to message from ${
+                                        replyTarget.senderUserId === user.id
+                                          ? "you"
+                                          : (replyTarget.username ??
+                                            "unknown user")
+                                      }`
+                                    : "Original message unavailable"
+                                }
+                                onClick={() =>
+                                  scrollToMessage(message.replyToMessageId!)
+                                }
+                              >
+                                <strong>
+                                  {replyTarget
+                                    ? replyTarget.senderUserId === user.id
+                                      ? "You"
+                                      : (replyTarget.username ?? "Unknown user")
+                                    : "Original message"}
+                                </strong>
+                                <span>
+                                  {replyTarget
+                                    ? replyPreview(replyTarget)
+                                    : "Message unavailable"}
+                                </span>
+                              </button>
+                            )}
                             <MessageAttachmentList
                               attachments={message.attachments ?? []}
                               getUrl={attachmentUrl}
@@ -2425,6 +2497,7 @@ function ChatApp({
                               onReaction={(reaction) =>
                                 void toggleMessageReaction(message.id, reaction)
                               }
+                              onReply={() => beginReply(message)}
                               onEdit={() => {
                                 setEditingMessageId(message.id);
                                 setEditMessageDraft(message.content ?? "");
@@ -2620,6 +2693,33 @@ function ChatApp({
           onSubmit={sendMessage}
           hidden={conversationTab !== "chat"}
         >
+          {replyingToMessageId && (
+            <div className="composer-reply-preview">
+              <span>
+                <strong>
+                  Replying to{" "}
+                  {replyingToMessage
+                    ? replyingToMessage.senderUserId === user.id
+                      ? "yourself"
+                      : (replyingToMessage.username ?? "Unknown user")
+                    : "a message"}
+                </strong>
+                <small>
+                  {replyingToMessage
+                    ? replyPreview(replyingToMessage)
+                    : "Message unavailable"}
+                </small>
+              </span>
+              <button
+                type="button"
+                aria-label="Cancel reply"
+                title="Cancel reply"
+                onClick={() => setReplyingToMessageId(null)}
+              >
+                <X size={15} />
+              </button>
+            </div>
+          )}
           <MessageAttachmentPicker
             files={attachmentFiles}
             disabled={!activeConversation || !isOnline || isSendingMessage}
