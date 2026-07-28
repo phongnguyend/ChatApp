@@ -1464,6 +1464,24 @@
   text-align: left;
 }
 
+.message-body p a {
+  color: #236f9b;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.message.own-message .message-body p a {
+  color: #d9f1ff;
+}
+
+.message-body p a:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
 .message-body p.deleted-message {
   color: #a5a5a0;
   font-style: italic;
@@ -1701,7 +1719,7 @@
   grid-area: composer;
   position: relative;
   margin: 0 28px 22px;
-  padding: 10px 94px 24px 214px;
+  padding: 10px 94px 24px 254px;
   border: 1px solid #dedbd3;
   border-radius: 14px;
   background: white;
@@ -1904,6 +1922,30 @@
   place-items: center;
   color: #777b76;
   background: #f1efe9;
+}
+
+.location-button {
+  position: absolute;
+  left: 210px;
+  bottom: 20px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: #f1efe9;
+}
+
+.location-button:hover:not(:disabled) {
+  color: var(--coral);
+  background: #f9e9e4;
+}
+
+.location-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .attachment-audio-button:hover:not(:disabled) {
@@ -3040,6 +3082,7 @@ input.visually-hidden {
   .attachment-video-button,
   .attachment-screen-button,
   .attachment-audio-button,
+  .location-button,
   .emoji-picker-button,
   .send-button {
     bottom: 10px;
@@ -3048,6 +3091,18 @@ input.visually-hidden {
   .emoji-picker-popover {
     right: 0;
     bottom: 58px;
+  }
+}
+
+@media (max-width: 360px) {
+  .composer {
+    padding-bottom: 98px;
+  }
+
+  .location-button {
+    right: 10px;
+    bottom: 50px;
+    left: auto;
   }
 }
 
