@@ -1180,9 +1180,12 @@
   white-space: nowrap;
 }
 
-.conversation-location-meta > a {
+.conversation-location-meta > a,
+.conversation-location-meta > button {
   width: 30px;
   height: 30px;
+  padding: 0;
+  border: 0;
   border-radius: 9px;
   display: grid;
   flex: 0 0 auto;
@@ -1191,9 +1194,16 @@
   background: #f1efe9;
 }
 
-.conversation-location-meta > a:hover {
+.conversation-location-meta > a:hover,
+.conversation-location-meta > button:hover {
   color: var(--coral);
   background: #f9e9e4;
+}
+
+.conversation-location-meta > a:focus-visible,
+.conversation-location-meta > button:focus-visible {
+  outline: 2px solid var(--coral);
+  outline-offset: 2px;
 }
 
 .center-state,
@@ -1635,9 +1645,12 @@
   white-space: nowrap;
 }
 
-.location-message-meta > a {
+.location-message-meta > a,
+.location-message-meta > button {
   width: 30px;
   height: 30px;
+  padding: 0;
+  border: 0;
   border-radius: 9px;
   display: grid;
   flex: 0 0 auto;
@@ -1646,12 +1659,14 @@
   background: #f1efe9;
 }
 
-.location-message-meta > a:hover {
+.location-message-meta > a:hover,
+.location-message-meta > button:hover {
   color: var(--coral);
   background: #f9e9e4;
 }
 
-.location-message-meta > a:focus-visible {
+.location-message-meta > a:focus-visible,
+.location-message-meta > button:focus-visible {
   outline: 2px solid var(--coral);
   outline-offset: 2px;
 }

@@ -19,6 +19,7 @@ import {
   MapPinned,
   Menu,
   MessageCircleMore,
+  Navigation,
   Pencil,
   Plus,
   Send,
@@ -239,6 +240,51 @@ function sharedLocation(
   };
 }
 
+function openOpenStreetMapDirections(
+  destinationLatitude: number,
+  destinationLongitude: number,
+  onError: (message: string) => void,
+) {
+  if (!navigator.geolocation) {
+    onError("Location services are not supported by this browser.");
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    ({ coords }) => {
+      const route = [
+        `${coords.latitude.toFixed(6)},${coords.longitude.toFixed(6)}`,
+        `${destinationLatitude.toFixed(6)},${destinationLongitude.toFixed(6)}`,
+      ].join(";");
+      const parameters = new URLSearchParams({
+        engine: "fossgis_osrm_car",
+        route,
+      });
+      const directionsUrl =
+        `https://www.openstreetmap.org/directions?${parameters.toString()}`;
+
+      const routeWindow = window.open(directionsUrl, "_blank");
+      if (routeWindow) {
+        routeWindow.opener = null;
+      } else {
+        onError("Your browser blocked the directions tab.");
+      }
+    },
+    (locationError) => {
+      onError(
+        locationError.code === locationError.PERMISSION_DENIED
+          ? "Location permission was denied."
+          : "Your current location could not be determined.",
+      );
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 15_000,
+      maximumAge: 30_000,
+    },
+  );
+}
+
 function MessageContent({ content }: { content: string }) {
   return (
     <p>
@@ -263,9 +309,11 @@ function MessageContent({ content }: { content: string }) {
 function LocationMessageMap({
   latitude,
   longitude,
+  onError,
 }: {
   latitude: number | null;
   longitude: number | null;
+  onError: (message: string) => void;
 }) {
   const location = sharedLocation(latitude, longitude);
   if (!location) return <p>Location unavailable.</p>;
@@ -285,6 +333,20 @@ function LocationMessageMap({
             {location.latitude.toFixed(5)}, {location.longitude.toFixed(5)}
           </strong>
         </span>
+        <button
+          type="button"
+          aria-label="Get directions from your current location"
+          title="Directions"
+          onClick={() =>
+            openOpenStreetMapDirections(
+              location.latitude,
+              location.longitude,
+              onError,
+            )
+          }
+        >
+          <Navigation size={16} />
+        </button>
         <a
           href={location.url}
           target="_blank"
@@ -2758,6 +2820,7 @@ function ChatApp({
                               <LocationMessageMap
                                 latitude={message.locationLatitude}
                                 longitude={message.locationLongitude}
+                                onError={setError}
                               />
                             ) : (
                               message.content && (
@@ -3012,6 +3075,20 @@ function ChatApp({
                             {senderName} / {formatAttachmentDate(createdAt)}
                           </small>
                         </span>
+                        <button
+                          type="button"
+                          aria-label="Get directions from your current location"
+                          title="Directions"
+                          onClick={() =>
+                            openOpenStreetMapDirections(
+                              location.latitude,
+                              location.longitude,
+                              setError,
+                            )
+                          }
+                        >
+                          <Navigation size={16} />
+                        </button>
                         <a
                           href={location.url}
                           target="_blank"
