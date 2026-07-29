@@ -252,23 +252,13 @@ function openOpenStreetMapDirections(
 
   navigator.geolocation.getCurrentPosition(
     ({ coords }) => {
-      const route = [
-        `${coords.latitude.toFixed(6)},${coords.longitude.toFixed(6)}`,
-        `${destinationLatitude.toFixed(6)},${destinationLongitude.toFixed(6)}`,
-      ].join(";");
-      const parameters = new URLSearchParams({
-        engine: "fossgis_osrm_car",
-        route,
-      });
-      const directionsUrl =
-        `https://www.openstreetmap.org/directions?${parameters.toString()}`;
-
-      const routeWindow = window.open(directionsUrl, "_blank");
-      if (routeWindow) {
-        routeWindow.opener = null;
-      } else {
-        onError("Your browser blocked the directions tab.");
-      }
+      openOpenStreetMapRoute(
+        coords.latitude,
+        coords.longitude,
+        destinationLatitude,
+        destinationLongitude,
+        onError,
+      );
     },
     (locationError) => {
       onError(
@@ -283,6 +273,32 @@ function openOpenStreetMapDirections(
       maximumAge: 30_000,
     },
   );
+}
+
+function openOpenStreetMapRoute(
+  originLatitude: number,
+  originLongitude: number,
+  destinationLatitude: number,
+  destinationLongitude: number,
+  onError: (message: string) => void,
+) {
+  const route = [
+    `${originLatitude.toFixed(6)},${originLongitude.toFixed(6)}`,
+    `${destinationLatitude.toFixed(6)},${destinationLongitude.toFixed(6)}`,
+  ].join(";");
+  const parameters = new URLSearchParams({
+    engine: "fossgis_osrm_car",
+    route,
+  });
+  const directionsUrl =
+    `https://www.openstreetmap.org/directions?${parameters.toString()}`;
+  const routeWindow = window.open(directionsUrl, "_blank");
+
+  if (routeWindow) {
+    routeWindow.opener = null;
+  } else {
+    onError("Your browser blocked the directions tab.");
+  }
 }
 
 function MessageContent({ content }: { content: string }) {
@@ -602,6 +618,7 @@ function ChatApp({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [conversationTab, setConversationTab] =
     useState<ConversationTab>("chat");
+  const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>([]);
   const [messagesByConversation, setMessagesByConversation] = useState<
     Record<string, Message[]>
   >({});
@@ -744,6 +761,12 @@ function ChatApp({
       }),
     [activeMessages, user.id],
   );
+  const selectedLocationItems = selectedLocationIds.flatMap((messageId) => {
+    const item = activeLocationItems.find(
+      (candidate) => candidate.messageId === messageId,
+    );
+    return item ? [item] : [];
+  });
   const activeMembers = activeId ? (membersByConversation[activeId] ?? []) : [];
   const directParticipant =
     activeConversation?.type === "direct"
@@ -1420,7 +1443,16 @@ function ChatApp({
     setAttachmentFiles([]);
     setReplyingToMessageId(null);
     setConversationTab("chat");
+    setSelectedLocationIds([]);
   }, [activeId]);
+
+  useEffect(() => {
+    setSelectedLocationIds((current) =>
+      current.filter((messageId) =>
+        activeLocationItems.some((item) => item.messageId === messageId),
+      ),
+    );
+  }, [activeLocationItems]);
 
   useEffect(() => {
     if (!activeId) return;
@@ -3033,10 +3065,30 @@ function ChatApp({
                 <p className="eyebrow">Shared places</p>
                 <h2>Locations in this conversation</h2>
               </div>
-              <span>
-                {activeLocationItems.length}{" "}
-                {activeLocationItems.length === 1 ? "location" : "locations"}
-              </span>
+              <div className="conversation-location-heading-actions">
+                <span>
+                  {activeLocationItems.length}{" "}
+                  {activeLocationItems.length === 1 ? "location" : "locations"}
+                </span>
+                <button
+                  type="button"
+                  disabled={selectedLocationItems.length !== 2}
+                  onClick={() => {
+                    const [origin, destination] = selectedLocationItems;
+                    if (!origin || !destination) return;
+                    openOpenStreetMapRoute(
+                      origin.location.latitude,
+                      origin.location.longitude,
+                      destination.location.latitude,
+                      destination.location.longitude,
+                      setError,
+                    );
+                  }}
+                >
+                  <Navigation size={15} />
+                  Directions ({selectedLocationItems.length}/2)
+                </button>
+              </div>
             </div>
             {isLoadingMessages ? (
               <div className="center-state">
@@ -3054,11 +3106,35 @@ function ChatApp({
             ) : (
               <div className="conversation-location-grid">
                 {activeLocationItems.map(
-                  ({ location, messageId, senderName, createdAt }) => (
+                  ({ location, messageId, senderName, createdAt }) => {
+                    const isSelected =
+                      selectedLocationIds.includes(messageId);
+                    const isSelectionDisabled =
+                      !isSelected && selectedLocationIds.length >= 2;
+                    return (
                     <article
-                      className="conversation-location-card"
+                      className={`conversation-location-card ${
+                        isSelected ? "selected" : ""
+                      }`}
                       key={messageId}
                     >
+                      <label className="location-card-selector">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          disabled={isSelectionDisabled}
+                          aria-label={`Select location at ${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`}
+                          onChange={() =>
+                            setSelectedLocationIds((current) =>
+                              current.includes(messageId)
+                                ? current.filter((id) => id !== messageId)
+                                : current.length < 2
+                                  ? [...current, messageId]
+                                  : current,
+                            )
+                          }
+                        />
+                      </label>
                       <iframe
                         className="conversation-location-map"
                         src={location.previewUrl}
@@ -3100,7 +3176,8 @@ function ChatApp({
                         </a>
                       </div>
                     </article>
-                  ),
+                    );
+                  },
                 )}
               </div>
             )}
