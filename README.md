@@ -10,7 +10,8 @@ A simple real-time chat application built with:
 The app includes persistent message history, pair-unique direct messages,
 multi-person group creation, live group member management, user discovery, online
 presence, typing indicators, unread counts, profile and group avatar uploads,
-camera capture, current-location sharing with confirmation previews, automatic
+camera capture, current-location sharing with confirmation previews, start/stop
+live-location sharing with an updating Leaflet map, automatic
 SignalR reconnection, and responsive desktop/mobile layouts. Browser push
 notifications are delivered through Azure Notification
 Hubs, the Azure browser-push service used alongside Azure Communication Services.
@@ -292,6 +293,7 @@ CREATE TABLE messages (
                 'audio',
                 'video',
                 'location',
+                'live_location',
                 'system'
             )
         ),
@@ -338,6 +340,50 @@ ADD CONSTRAINT fk_conversations_last_message
 FOREIGN KEY (last_message_id)
 REFERENCES messages(id);
 ```
+
+### 5.1 Live location shares
+
+One-time `location` messages keep their coordinates on the message row. A
+`live_location` message instead has one mutable location row so marker updates do
+not rewrite or duplicate chat messages. Map URLs are constructed only by the UI.
+
+```sql
+CREATE TABLE live_location_shares (
+    message_id       UUID PRIMARY KEY
+                     REFERENCES messages(id)
+                     ON DELETE CASCADE,
+
+    conversation_id  UUID NOT NULL
+                     REFERENCES conversations(id),
+
+    user_id          UUID NOT NULL
+                     REFERENCES users(id),
+
+    latitude         NUMERIC(9, 6) NOT NULL,
+    longitude        NUMERIC(9, 6) NOT NULL,
+    accuracy_meters  NUMERIC(9, 2),
+
+    started_at       TIMESTAMPTZ NOT NULL,
+    updated_at       TIMESTAMPTZ NOT NULL,
+    expires_at       TIMESTAMPTZ NOT NULL,
+    stopped_at       TIMESTAMPTZ,
+    is_active        BOOLEAN NOT NULL DEFAULT TRUE,
+
+    CONSTRAINT ck_live_location_coordinates
+        CHECK (
+            latitude BETWEEN -90 AND 90
+            AND longitude BETWEEN -180 AND 180
+            AND (accuracy_meters IS NULL OR accuracy_meters >= 0)
+        )
+);
+
+CREATE UNIQUE INDEX uq_live_location_active_user_conversation
+ON live_location_shares (conversation_id, user_id)
+WHERE is_active = TRUE;
+```
+
+The server broadcasts `LiveLocationUpdated` after coordinate changes and
+`LiveLocationStopped` when the sender stops sharing or the share expires.
 
 ## 6. Attachments
 

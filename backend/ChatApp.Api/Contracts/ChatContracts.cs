@@ -103,7 +103,21 @@ public sealed record MessageDto(
     IReadOnlyList<MessageAttachmentDto>? Attachments = null,
     IReadOnlyList<MessageReactionDto>? Reactions = null,
     decimal? LocationLatitude = null,
-    decimal? LocationLongitude = null);
+    decimal? LocationLongitude = null,
+    LiveLocationDto? LiveLocation = null);
+
+public sealed record LiveLocationDto(
+    Guid MessageId,
+    Guid ConversationId,
+    Guid UserId,
+    decimal Latitude,
+    decimal Longitude,
+    decimal? AccuracyMeters,
+    DateTimeOffset StartedAt,
+    DateTimeOffset UpdatedAt,
+    DateTimeOffset ExpiresAt,
+    DateTimeOffset? StoppedAt,
+    bool IsActive);
 
 public sealed record UpdateMessageRequest(string Content);
 
@@ -133,5 +147,25 @@ public sealed record SendMessageRequest(
     string MessageType = "text",
     decimal? LocationLatitude = null,
     decimal? LocationLongitude = null);
+
+public sealed record StartLiveLocationRequest(
+    Guid ConversationId,
+    string ClientMessageId,
+    decimal Latitude,
+    decimal Longitude,
+    decimal? AccuracyMeters,
+    int DurationMinutes = 60,
+    Guid? ReplyToMessageId = null);
+
+public sealed record UpdateLiveLocationRequest(
+    Guid MessageId,
+    decimal Latitude,
+    decimal Longitude,
+    decimal? AccuracyMeters);
+
+public sealed record LiveLocationStoppedDto(
+    Guid MessageId,
+    Guid ConversationId,
+    DateTimeOffset StoppedAt);
 
 public sealed record TypingDto(Guid ConversationId, string Username, bool IsTyping);

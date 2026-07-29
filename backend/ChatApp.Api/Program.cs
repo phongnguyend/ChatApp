@@ -57,6 +57,7 @@ else
 builder.Services.AddScoped<IAvatarStorage, AvatarStorage>();
 builder.Services.AddScoped<IMessageAttachmentStorage, MessageAttachmentStorage>();
 builder.Services.AddScoped<AzurePushNotificationService>();
+builder.Services.AddHostedService<LiveLocationExpiryService>();
 
 var allowedOrigins = builder.Configuration
     .GetSection("AllowedOrigins")

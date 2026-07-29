@@ -229,6 +229,243 @@ public sealed class ChatHub(
             Context.ConnectionAborted);
     }
 
+    public async Task<MessageDto> StartLiveLocation(
+        StartLiveLocationRequest request)
+    {
+        var session = GetSession();
+        var clientMessageId = request.ClientMessageId?.Trim() ?? "";
+        if (clientMessageId.Length is < 1 or > 100 ||
+            !IsValidLocation(
+                request.Latitude,
+                request.Longitude,
+                request.AccuracyMeters) ||
+            request.DurationMinutes is not (15 or 60 or 480))
+        {
+            throw new HubException("Choose a valid live location and duration.");
+        }
+
+        await EnsureMembership(session.UserId, request.ConversationId);
+        if (await DirectMessagingPolicy.IsBlockedAsync(
+                db,
+                session.UserId,
+                request.ConversationId,
+                Context.ConnectionAborted))
+        {
+            throw new HubException(
+                "Locations cannot be shared while either user has blocked the other.");
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync(
+            IsolationLevel.Serializable,
+            Context.ConnectionAborted);
+        var now = DateTimeOffset.UtcNow;
+        var expiredShares = await db.LiveLocationShares
+            .Where(x =>
+                x.ConversationId == request.ConversationId &&
+                x.UserId == session.UserId &&
+                x.IsActive &&
+                x.ExpiresAt <= now)
+            .ToListAsync(Context.ConnectionAborted);
+        foreach (var expiredShare in expiredShares)
+        {
+            expiredShare.IsActive = false;
+            expiredShare.StoppedAt = expiredShare.ExpiresAt;
+        }
+
+        if (await db.LiveLocationShares.AnyAsync(
+                x =>
+                    x.ConversationId == request.ConversationId &&
+                    x.UserId == session.UserId &&
+                    x.IsActive &&
+                    x.ExpiresAt > now,
+                Context.ConnectionAborted))
+        {
+            throw new HubException(
+                "Stop your current live location before starting another.");
+        }
+
+        var conversation = await db.Conversations.SingleAsync(
+            x => x.Id == request.ConversationId,
+            Context.ConnectionAborted);
+        var nextSequence = await db.Messages
+            .Where(x => x.ConversationId == request.ConversationId)
+            .Select(x => (long?)x.SequenceNumber)
+            .MaxAsync(Context.ConnectionAborted) ?? 0;
+        if (request.ReplyToMessageId is not null &&
+            !await db.Messages.AnyAsync(
+                x =>
+                    x.Id == request.ReplyToMessageId &&
+                    x.ConversationId == request.ConversationId,
+                Context.ConnectionAborted))
+        {
+            throw new HubException(
+                "The message being replied to no longer exists.");
+        }
+
+        var message = new ChatMessage
+        {
+            ConversationId = request.ConversationId,
+            Conversation = conversation,
+            SenderUserId = session.UserId,
+            MessageType = "live_location",
+            Content = null,
+            ClientMessageId = clientMessageId,
+            SequenceNumber = nextSequence + 1,
+            ReplyToMessageId = request.ReplyToMessageId,
+            CreatedAt = now
+        };
+        var share = new LiveLocationShare
+        {
+            MessageId = message.Id,
+            Message = message,
+            ConversationId = conversation.Id,
+            Conversation = conversation,
+            UserId = session.UserId,
+            User = await db.Users.SingleAsync(
+                x => x.Id == session.UserId,
+                Context.ConnectionAborted),
+            Latitude = request.Latitude,
+            Longitude = request.Longitude,
+            AccuracyMeters = request.AccuracyMeters,
+            StartedAt = now,
+            UpdatedAt = now,
+            ExpiresAt = now.AddMinutes(request.DurationMinutes)
+        };
+
+        db.Messages.Add(message);
+        db.LiveLocationShares.Add(share);
+        conversation.LastMessage = message;
+        conversation.LastMessageId = message.Id;
+        conversation.LastMessageAt = now;
+        conversation.UpdatedAt = now;
+        await db.ConversationMembers
+            .Where(x =>
+                x.ConversationId == request.ConversationId &&
+                x.UserId != session.UserId &&
+                x.LeftAt == null)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(
+                    x => x.UnreadCount,
+                    x => x.UnreadCount + 1),
+                Context.ConnectionAborted);
+        await db.SaveChangesAsync(Context.ConnectionAborted);
+        await transaction.CommitAsync(Context.ConnectionAborted);
+
+        var liveLocation = ToDto(share);
+        var result = new MessageDto(
+            message.Id,
+            message.ConversationId,
+            session.UserId,
+            session.Username,
+            session.AvatarUrl,
+            null,
+            message.MessageType,
+            message.ClientMessageId,
+            message.SequenceNumber,
+            message.ReplyToMessageId,
+            message.CreatedAt,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            liveLocation);
+        await Clients.Group(ConversationGroup(request.ConversationId))
+            .SendAsync(
+                "MessageReceived",
+                result,
+                Context.ConnectionAborted);
+        await pushNotifications.NotifyMessageAsync(
+            request.ConversationId,
+            session.UserId,
+            session.DisplayName,
+            "Started sharing a live location",
+            Context.ConnectionAborted);
+        return result;
+    }
+
+    public async Task UpdateLiveLocation(UpdateLiveLocationRequest request)
+    {
+        var session = GetSession();
+        if (!IsValidLocation(
+                request.Latitude,
+                request.Longitude,
+                request.AccuracyMeters))
+        {
+            throw new HubException("Choose a valid live location.");
+        }
+
+        var share = await db.LiveLocationShares
+            .Include(x => x.Message)
+            .SingleOrDefaultAsync(
+                x => x.MessageId == request.MessageId,
+                Context.ConnectionAborted)
+            ?? throw new HubException("Live location was not found.");
+        if (share.UserId != session.UserId)
+        {
+            throw new HubException("You cannot update this live location.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (!share.IsActive || share.ExpiresAt <= now)
+        {
+            if (share.IsActive)
+            {
+                share.IsActive = false;
+                share.StoppedAt = share.ExpiresAt;
+                await db.SaveChangesAsync(Context.ConnectionAborted);
+                await Clients.Group(ConversationGroup(share.ConversationId))
+                    .SendAsync(
+                        "LiveLocationStopped",
+                        new LiveLocationStoppedDto(
+                            share.MessageId,
+                            share.ConversationId,
+                            share.StoppedAt.Value),
+                        Context.ConnectionAborted);
+            }
+            throw new HubException("Live location sharing has ended.");
+        }
+
+        share.Latitude = request.Latitude;
+        share.Longitude = request.Longitude;
+        share.AccuracyMeters = request.AccuracyMeters;
+        share.UpdatedAt = now;
+        await db.SaveChangesAsync(Context.ConnectionAborted);
+        await Clients.Group(ConversationGroup(share.ConversationId))
+            .SendAsync(
+                "LiveLocationUpdated",
+                ToDto(share),
+                Context.ConnectionAborted);
+    }
+
+    public async Task StopLiveLocation(Guid messageId)
+    {
+        var session = GetSession();
+        var share = await db.LiveLocationShares
+            .SingleOrDefaultAsync(
+                x => x.MessageId == messageId,
+                Context.ConnectionAborted)
+            ?? throw new HubException("Live location was not found.");
+        if (share.UserId != session.UserId)
+        {
+            throw new HubException("You cannot stop this live location.");
+        }
+        if (!share.IsActive) return;
+
+        share.IsActive = false;
+        share.StoppedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(Context.ConnectionAborted);
+        await Clients.Group(ConversationGroup(share.ConversationId))
+            .SendAsync(
+                "LiveLocationStopped",
+                new LiveLocationStoppedDto(
+                    share.MessageId,
+                    share.ConversationId,
+                    share.StoppedAt.Value),
+                Context.ConnectionAborted);
+    }
+
     public async Task SetTyping(Guid conversationId, bool isTyping)
     {
         var session = GetSession();
@@ -299,4 +536,25 @@ public sealed class ChatHub(
     public static string ConversationGroup(Guid conversationId) =>
         $"conversation:{conversationId:N}";
 
+    private static bool IsValidLocation(
+        decimal latitude,
+        decimal longitude,
+        decimal? accuracyMeters) =>
+        latitude is >= -90 and <= 90 &&
+        longitude is >= -180 and <= 180 &&
+        (accuracyMeters is null or >= 0 and <= 10000);
+
+    internal static LiveLocationDto ToDto(LiveLocationShare share) =>
+        new(
+            share.MessageId,
+            share.ConversationId,
+            share.UserId,
+            share.Latitude,
+            share.Longitude,
+            share.AccuracyMeters,
+            share.StartedAt,
+            share.UpdatedAt,
+            share.ExpiresAt,
+            share.StoppedAt,
+            share.IsActive);
 }

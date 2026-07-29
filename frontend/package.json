@@ -8,15 +8,18 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
+    "test:live-location": "node scripts/live-location-test.mjs",
     "test:smoke": "node scripts/smoke-test.mjs"
   },
   "dependencies": {
     "@microsoft/signalr": "^10.0.0",
+    "leaflet": "^1.9.4",
     "lucide-react": "^1.26.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
+    "@types/leaflet": "^1.9.21",
     "@types/node": "^24.13.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",

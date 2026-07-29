@@ -17,6 +17,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
     public DbSet<ConversationInvitation> ConversationInvitations => Set<ConversationInvitation>();
     public DbSet<MessageVersion> MessageVersions => Set<MessageVersion>();
     public DbSet<UserBlock> UserBlocks => Set<UserBlock>();
+    public DbSet<LiveLocationShare> LiveLocationShares => Set<LiveLocationShare>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -31,6 +32,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         ConfigureInvitations(modelBuilder);
         ConfigureMessageVersions(modelBuilder);
         ConfigureUserBlocks(modelBuilder);
+        ConfigureLiveLocationShares(modelBuilder);
     }
 
     private static void ConfigureUsers(ModelBuilder modelBuilder)
@@ -115,7 +117,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         {
             table.HasCheckConstraint(
                 "CK_Messages_Type",
-                "[MessageType] IN ('text', 'image', 'file', 'audio', 'video', 'location', 'system')");
+                "[MessageType] IN ('text', 'image', 'file', 'audio', 'video', 'location', 'live_location', 'system')");
             table.HasCheckConstraint(
                 "CK_Messages_Location",
                 "([MessageType] = 'location' AND [Content] IS NULL AND [LocationLatitude] BETWEEN -90 AND 90 AND [LocationLongitude] BETWEEN -180 AND 180) OR ([MessageType] <> 'location' AND [LocationLatitude] IS NULL AND [LocationLongitude] IS NULL)");
@@ -292,6 +294,38 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         entity.HasOne(x => x.BlockedUser)
             .WithMany()
             .HasForeignKey(x => x.BlockedUserId)
+            .OnDelete(DeleteBehavior.NoAction);
+    }
+
+    private static void ConfigureLiveLocationShares(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<LiveLocationShare>();
+        entity.ToTable("LiveLocationShares", table =>
+            table.HasCheckConstraint(
+                "CK_LiveLocationShares_Coordinates",
+                "[Latitude] BETWEEN -90 AND 90 AND [Longitude] BETWEEN -180 AND 180 AND ([AccuracyMeters] IS NULL OR [AccuracyMeters] BETWEEN 0 AND 10000)"));
+        entity.HasKey(x => x.MessageId);
+        entity.Property(x => x.Latitude).HasPrecision(9, 6);
+        entity.Property(x => x.Longitude).HasPrecision(9, 6);
+        entity.Property(x => x.AccuracyMeters).HasPrecision(9, 2);
+        entity.Property(x => x.StartedAt).HasPrecision(3);
+        entity.Property(x => x.UpdatedAt).HasPrecision(3);
+        entity.Property(x => x.ExpiresAt).HasPrecision(3);
+        entity.Property(x => x.StoppedAt).HasPrecision(3);
+        entity.HasIndex(x => new { x.ConversationId, x.UserId })
+            .IsUnique()
+            .HasFilter("[IsActive] = 1");
+        entity.HasOne(x => x.Message)
+            .WithOne(x => x.LiveLocationShare)
+            .HasForeignKey<LiveLocationShare>(x => x.MessageId)
+            .OnDelete(DeleteBehavior.Cascade);
+        entity.HasOne(x => x.Conversation)
+            .WithMany()
+            .HasForeignKey(x => x.ConversationId)
+            .OnDelete(DeleteBehavior.NoAction);
+        entity.HasOne(x => x.User)
+            .WithMany()
+            .HasForeignKey(x => x.UserId)
             .OnDelete(DeleteBehavior.NoAction);
     }
 }

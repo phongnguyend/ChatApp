@@ -21,4 +21,5 @@ public sealed class ChatMessage
     public ICollection<MessageAttachment> Attachments { get; set; } = [];
     public ICollection<MessageReaction> Reactions { get; set; } = [];
     public ICollection<MessageReceipt> Receipts { get; set; } = [];
+    public LiveLocationShare? LiveLocationShare { get; set; }
 }

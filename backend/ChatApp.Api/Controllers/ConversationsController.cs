@@ -70,6 +70,8 @@ public sealed class ConversationsController(
                     ? null
                     : x.Conversation.LastMessage.MessageType == "location"
                         ? "Shared a location"
+                    : x.Conversation.LastMessage.MessageType == "live_location"
+                        ? "Shared a live location"
                         : x.Conversation.LastMessage.Content ??
                           (x.Conversation.LastMessage.MessageType == "image"
                               ? "Sent an image"
@@ -718,6 +720,7 @@ public sealed class ConversationsController(
             .Include(x => x.Attachments)
             .Include(x => x.Reactions)
                 .ThenInclude(reaction => reaction.User)
+            .Include(x => x.LiveLocationShare)
             .Where(x => x.ConversationId == id)
             .OrderByDescending(x => x.SequenceNumber)
             .Take(limit)
@@ -768,7 +771,21 @@ public sealed class ConversationsController(
                         .ToList()
                     : new List<MessageReactionDto>(),
                 x.LocationLatitude,
-                x.LocationLongitude))
+                x.LocationLongitude,
+                x.DeletedAt == null && x.LiveLocationShare != null
+                    ? new LiveLocationDto(
+                        x.LiveLocationShare.MessageId,
+                        x.LiveLocationShare.ConversationId,
+                        x.LiveLocationShare.UserId,
+                        x.LiveLocationShare.Latitude,
+                        x.LiveLocationShare.Longitude,
+                        x.LiveLocationShare.AccuracyMeters,
+                        x.LiveLocationShare.StartedAt,
+                        x.LiveLocationShare.UpdatedAt,
+                        x.LiveLocationShare.ExpiresAt,
+                        x.LiveLocationShare.StoppedAt,
+                        x.LiveLocationShare.IsActive)
+                    : null))
             .ToList();
 
         messages.Reverse();

@@ -17,8 +17,10 @@ import {
   LoaderCircle,
   LogOut,
   MapPinned,
+  Maximize2,
   Menu,
   MessageCircleMore,
+  Minimize2,
   Navigation,
   Pencil,
   Plus,
@@ -32,12 +34,15 @@ import {
 import {
   type FormEvent,
   type KeyboardEvent,
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import "./App.css";
 import { AvatarPicker } from "./components/AvatarPicker";
 import {
@@ -52,6 +57,7 @@ import {
   LocationShareButton,
   type SharedLocation,
 } from "./components/LocationShareButton";
+import { LiveLocationShareButton } from "./components/LiveLocationShareButton";
 import { ConversationActions } from "./components/ConversationActions";
 import { OnlineUserActions } from "./components/OnlineUserActions";
 import { PushNotificationButton } from "./components/PushNotificationButton";
@@ -59,6 +65,10 @@ import { PushNotificationButton } from "./components/PushNotificationButton";
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5045";
 const LIVE_CHAT_OFFLINE_ERROR =
   "Live chat is offline. Check that the server is running.";
+const LiveLocationMap = lazy(async () => {
+  const module = await import("./components/LiveLocationMap");
+  return { default: module.LiveLocationMap };
+});
 
 type User = {
   id: string;
@@ -151,6 +161,27 @@ type Message = {
   deletedAt: string | null;
   attachments?: ChatAttachment[] | null;
   reactions?: ChatReaction[] | null;
+  liveLocation?: LiveLocation | null;
+};
+
+type LiveLocation = {
+  messageId: string;
+  conversationId: string;
+  userId: string;
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number | null;
+  startedAt: string;
+  updatedAt: string;
+  expiresAt: string;
+  stoppedAt: string | null;
+  isActive: boolean;
+};
+
+type LiveLocationStoppedEvent = {
+  messageId: string;
+  conversationId: string;
+  stoppedAt: string;
 };
 
 type MessageChangedEvent = {
@@ -301,6 +332,21 @@ function openOpenStreetMapRoute(
   }
 }
 
+function getCurrentPosition() {
+  if (!navigator.geolocation) {
+    return Promise.reject(
+      new Error("Location services are not supported by this browser."),
+    );
+  }
+  return new Promise<GeolocationPosition>((resolve, reject) =>
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      timeout: 15_000,
+      maximumAge: 30_000,
+    }),
+  );
+}
+
 function MessageContent({ content }: { content: string }) {
   return (
     <p>
@@ -377,8 +423,134 @@ function LocationMessageMap({
   );
 }
 
+function LiveLocationMessageMap({
+  location,
+  isOwn,
+  isStopping,
+  onStop,
+  onError,
+}: {
+  location: LiveLocation;
+  isOwn: boolean;
+  isStopping: boolean;
+  onStop: () => void;
+  onError: (message: string) => void;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  const [maximizedIn, setMaximizedIn] = useState<HTMLElement | null>(null);
+  const isActive =
+    location.isActive && new Date(location.expiresAt).getTime() > now;
+  const mapLocation = sharedLocation(location.latitude, location.longitude);
+
+  useEffect(() => {
+    if (!isActive) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, [isActive]);
+
+  useEffect(() => {
+    if (!maximizedIn) return;
+    const collapseOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setMaximizedIn(null);
+    };
+    window.addEventListener("keydown", collapseOnEscape);
+    return () => window.removeEventListener("keydown", collapseOnEscape);
+  }, [maximizedIn]);
+
+  const remainingMinutes = Math.max(
+    0,
+    Math.ceil((new Date(location.expiresAt).getTime() - now) / 60_000),
+  );
+
+  const card = (
+    <div
+      className={`live-location-message-card ${
+        maximizedIn ? "maximized" : ""
+      }`.trim()}
+    >
+      <Suspense
+        fallback={<div className="live-location-message-map map-loading" />}
+      >
+        <LiveLocationMap
+          latitude={location.latitude}
+          longitude={location.longitude}
+          accuracyMeters={location.accuracyMeters}
+          followMarker
+          className="live-location-message-map"
+        />
+      </Suspense>
+      <div className="live-location-message-meta">
+        <span>
+          <strong>{isActive ? "Live location" : "Live location ended"}</strong>
+          <small>
+            {isActive
+              ? `${remainingMinutes} min remaining`
+              : `Last updated ${formatAttachmentDate(location.updatedAt)}`}
+          </small>
+        </span>
+        <button
+          type="button"
+          aria-label={
+            maximizedIn ? "Restore live location map" : "Maximize live location map"
+          }
+          title={maximizedIn ? "Restore map" : "Maximize map"}
+          aria-pressed={Boolean(maximizedIn)}
+          onClick={(event) => {
+            const conversationPanel =
+              event.currentTarget.closest<HTMLElement>(".conversation-panel");
+            setMaximizedIn(maximizedIn ? null : conversationPanel);
+          }}
+        >
+          {maximizedIn ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+        </button>
+        {isActive && mapLocation && (
+          <>
+            <button
+              type="button"
+              aria-label="Get directions to live location"
+              title="Directions"
+              onClick={() =>
+                openOpenStreetMapDirections(
+                  location.latitude,
+                  location.longitude,
+                  onError,
+                )
+              }
+            >
+              <Navigation size={16} />
+            </button>
+            <a
+              href={mapLocation.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Open live location in OpenStreetMap"
+              title="Open location"
+            >
+              <ExternalLink size={16} />
+            </a>
+          </>
+        )}
+        {isOwn && isActive && (
+          <button
+            className="live-location-stop"
+            type="button"
+            disabled={isStopping}
+            onClick={onStop}
+          >
+            {isStopping ? <LoaderCircle className="spin" size={15} /> : "Stop"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  return maximizedIn ? createPortal(card, maximizedIn) : card;
+}
+
 function messagePreview(message: Message) {
   if (message.messageType === "location") return "Shared a location";
+  if (message.messageType === "live_location")
+    return "Shared a live location";
   if (message.content) return message.content;
   const attachments = message.attachments ?? [];
   if (attachments.length === 0) return null;
@@ -668,6 +840,9 @@ function ChatApp({
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [isStartingLiveLocation, setIsStartingLiveLocation] = useState(false);
+  const [stoppingLiveLocationId, setStoppingLiveLocationId] =
+    useState<string | null>(null);
   const [replyingToMessageId, setReplyingToMessageId] = useState<string | null>(
     null,
   );
@@ -691,6 +866,11 @@ function ChatApp({
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const draftInputRef = useRef<HTMLTextAreaElement | null>(null);
   const typingTimerRef = useRef<number | null>(null);
+  const liveLocationWatchRef = useRef<{
+    messageId: string;
+    watchId: number;
+    lastSentAt: number;
+  } | null>(null);
   const linkedConversationIdRef = useRef(
     new URLSearchParams(window.location.search).get("conversation"),
   );
@@ -984,6 +1164,46 @@ function ChatApp({
       }));
       void loadConversations();
     });
+    connection.on("LiveLocationUpdated", (event: LiveLocation) => {
+      setMessagesByConversation((current) => ({
+        ...current,
+        [event.conversationId]: (
+          current[event.conversationId] ?? []
+        ).map((message) =>
+          message.id === event.messageId
+            ? { ...message, liveLocation: event }
+            : message,
+        ),
+      }));
+    });
+    connection.on(
+      "LiveLocationStopped",
+      (event: LiveLocationStoppedEvent) => {
+        setMessagesByConversation((current) => ({
+          ...current,
+          [event.conversationId]: (
+            current[event.conversationId] ?? []
+          ).map((message) =>
+            message.id === event.messageId && message.liveLocation
+              ? {
+                  ...message,
+                  liveLocation: {
+                    ...message.liveLocation,
+                    isActive: false,
+                    stoppedAt: event.stoppedAt,
+                  },
+                }
+              : message,
+          ),
+        }));
+        if (liveLocationWatchRef.current?.messageId === event.messageId) {
+          navigator.geolocation.clearWatch(
+            liveLocationWatchRef.current.watchId,
+          );
+          liveLocationWatchRef.current = null;
+        }
+      },
+    );
     connection.on(
       "MessageReactionChanged",
       (event: MessageReactionChangedEvent) => {
@@ -1351,6 +1571,18 @@ function ChatApp({
     user.username,
   ]);
 
+  useEffect(
+    () => () => {
+      if (liveLocationWatchRef.current) {
+        navigator.geolocation.clearWatch(
+          liveLocationWatchRef.current.watchId,
+        );
+        liveLocationWatchRef.current = null;
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!conversationDialog) return;
 
@@ -1570,6 +1802,106 @@ function ChatApp({
       replyToMessageId: replyingToMessageId,
     });
     setReplyingToMessageId(null);
+  }
+
+  async function startLiveLocation(durationMinutes: number) {
+    const connection = connectionRef.current;
+    if (
+      !activeId ||
+      !connection ||
+      connection.state !== HubConnectionState.Connected
+    ) {
+      throw new Error(LIVE_CHAT_OFFLINE_ERROR);
+    }
+    if (liveLocationWatchRef.current) {
+      throw new Error("Stop your current live location before starting another.");
+    }
+
+    setIsStartingLiveLocation(true);
+    try {
+      const position = await getCurrentPosition();
+      const message = await connection.invoke<Message>("StartLiveLocation", {
+        conversationId: activeId,
+        clientMessageId: crypto.randomUUID(),
+        latitude: Number(position.coords.latitude.toFixed(6)),
+        longitude: Number(position.coords.longitude.toFixed(6)),
+        accuracyMeters: Number(position.coords.accuracy.toFixed(2)),
+        durationMinutes,
+        replyToMessageId: replyingToMessageId,
+      });
+      receiveMessage(message);
+      setReplyingToMessageId(null);
+
+      const watchId = navigator.geolocation.watchPosition(
+        (nextPosition) => {
+          const tracking = liveLocationWatchRef.current;
+          if (!tracking || tracking.messageId !== message.id) return;
+          const now = Date.now();
+          if (now - tracking.lastSentAt < 10_000) return;
+          tracking.lastSentAt = now;
+          const activeConnection = connectionRef.current;
+          if (activeConnection?.state !== HubConnectionState.Connected) return;
+          void activeConnection
+            .invoke("UpdateLiveLocation", {
+              messageId: message.id,
+              latitude: Number(nextPosition.coords.latitude.toFixed(6)),
+              longitude: Number(nextPosition.coords.longitude.toFixed(6)),
+              accuracyMeters: Number(nextPosition.coords.accuracy.toFixed(2)),
+            })
+            .catch((updateError) =>
+              setError(
+                updateError instanceof Error
+                  ? updateError.message
+                  : "Live location could not be updated.",
+              ),
+            );
+        },
+        (locationError) =>
+          setError(
+            locationError.code === locationError.PERMISSION_DENIED
+              ? "Location permission was denied."
+              : "Live location could not be updated.",
+          ),
+        {
+          enableHighAccuracy: true,
+          timeout: 15_000,
+          maximumAge: 10_000,
+        },
+      );
+      liveLocationWatchRef.current = {
+        messageId: message.id,
+        watchId,
+        lastSentAt: Date.now(),
+      };
+    } finally {
+      setIsStartingLiveLocation(false);
+    }
+  }
+
+  async function stopLiveLocation(messageId: string) {
+    const connection = connectionRef.current;
+    if (!connection || connection.state !== HubConnectionState.Connected) {
+      setError(LIVE_CHAT_OFFLINE_ERROR);
+      return;
+    }
+    setStoppingLiveLocationId(messageId);
+    try {
+      await connection.invoke("StopLiveLocation", messageId);
+      if (liveLocationWatchRef.current?.messageId === messageId) {
+        navigator.geolocation.clearWatch(
+          liveLocationWatchRef.current.watchId,
+        );
+        liveLocationWatchRef.current = null;
+      }
+    } catch (stopError) {
+      setError(
+        stopError instanceof Error
+          ? stopError.message
+          : "Live location could not be stopped.",
+      );
+    } finally {
+      setStoppingLiveLocationId(null);
+    }
   }
 
   async function editMessage(
@@ -2848,6 +3180,22 @@ function ChatApp({
                                   </button>
                                 </div>
                               </form>
+                            ) : message.messageType === "live_location" ? (
+                              message.liveLocation ? (
+                                <LiveLocationMessageMap
+                                  location={message.liveLocation}
+                                  isOwn={isOwnMessage}
+                                  isStopping={
+                                    stoppingLiveLocationId === message.id
+                                  }
+                                  onStop={() =>
+                                    void stopLiveLocation(message.id)
+                                  }
+                                  onError={setError}
+                                />
+                              ) : (
+                                <p>Live location unavailable.</p>
+                              )
                             ) : message.messageType === "location" ? (
                               <LocationMessageMap
                                 latitude={message.locationLatitude}
@@ -3293,6 +3641,17 @@ function ChatApp({
               isActiveDirectMessagingBlocked
             }
             onShare={shareCurrentLocation}
+            onError={setError}
+          />
+          <LiveLocationShareButton
+            disabled={
+              !activeConversation ||
+              !isOnline ||
+              isSendingMessage ||
+              isActiveDirectMessagingBlocked
+            }
+            isStarting={isStartingLiveLocation}
+            onStart={startLiveLocation}
             onError={setError}
           />
           <button

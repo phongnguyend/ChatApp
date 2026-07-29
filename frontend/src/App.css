@@ -616,6 +616,7 @@
 }
 
 .conversation-panel {
+  position: relative;
   min-width: 0;
   min-height: 0;
   display: grid;
@@ -1736,6 +1737,106 @@
   outline-offset: 2px;
 }
 
+.live-location-message-card {
+  width: min(420px, 100%);
+  overflow: hidden;
+  border: 1px solid #dedad1;
+  border-radius: 14px;
+  background: white;
+  box-shadow: 0 6px 18px rgba(43, 49, 45, 0.06);
+}
+
+.live-location-message-card.maximized {
+  position: relative;
+  z-index: 11;
+  grid-area: messages;
+  min-width: 0;
+  min-height: 0;
+  width: auto;
+  align-self: stretch;
+  justify-self: stretch;
+  border: 0;
+  border-radius: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  box-shadow: none;
+}
+
+.live-location-message-map {
+  min-height: 220px;
+  border-radius: 0;
+}
+
+.live-location-message-card.maximized .live-location-message-map {
+  height: 100%;
+  min-height: 0;
+  aspect-ratio: auto;
+}
+
+.live-location-message-meta {
+  min-width: 0;
+  padding: 9px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.live-location-message-card.maximized .live-location-message-meta {
+  padding: 12px 18px;
+  border-top: 1px solid #dedad1;
+}
+
+.live-location-message-meta > span {
+  min-width: 0;
+  flex: 1;
+}
+
+.live-location-message-meta strong,
+.live-location-message-meta small {
+  display: block;
+}
+
+.live-location-message-meta strong {
+  color: #505652;
+  font-size: 11px;
+}
+
+.live-location-message-meta small {
+  margin-top: 2px;
+  color: #969992;
+  font-size: 9px;
+}
+
+.live-location-message-meta > a,
+.live-location-message-meta > button {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: #727772;
+  background: #f1efe9;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.live-location-message-meta > a:hover,
+.live-location-message-meta > button:hover:not(:disabled) {
+  color: var(--coral);
+  background: #f9e9e4;
+}
+
+.live-location-message-meta > button.live-location-stop {
+  color: white;
+  background: var(--coral);
+}
+
+.live-location-message-meta > button:disabled {
+  opacity: 0.5;
+}
+
 .message-body p.deleted-message {
   color: #a5a5a0;
   font-style: italic;
@@ -2017,7 +2118,7 @@
   grid-area: composer;
   position: relative;
   margin: 0 28px 22px;
-  padding: 10px 94px 24px 254px;
+  padding: 10px 94px 24px 294px;
   border: 1px solid #dedbd3;
   border-radius: 14px;
   background: white;
@@ -2294,6 +2395,69 @@
 .location-button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+.live-location-button {
+  position: absolute;
+  left: 250px;
+  bottom: 20px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: #777b76;
+  background: #f1efe9;
+}
+
+.live-location-button:hover:not(:disabled),
+.live-location-button[aria-expanded='true'] {
+  color: var(--coral);
+  background: #f9e9e4;
+}
+
+.live-location-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.live-location-duration-menu {
+  position: absolute;
+  z-index: 12;
+  bottom: 62px;
+  left: 210px;
+  width: 170px;
+  padding: 8px;
+  border: 1px solid #dedad1;
+  border-radius: 12px;
+  display: grid;
+  gap: 3px;
+  background: white;
+  box-shadow: 0 12px 30px rgba(28, 37, 34, 0.16);
+}
+
+.live-location-duration-menu strong {
+  padding: 5px 7px;
+  color: #777b76;
+  font-size: 9px;
+}
+
+.live-location-duration-menu button {
+  min-height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  color: #505652;
+  background: transparent;
+  font-size: 11px;
+  text-align: left;
+}
+
+.live-location-duration-menu button:hover:not(:disabled) {
+  color: var(--coral);
+  background: #f9e9e4;
 }
 
 .location-preview-backdrop {
@@ -3545,6 +3709,7 @@ input.visually-hidden {
   .attachment-screen-button,
   .attachment-audio-button,
   .location-button,
+  .live-location-button,
   .emoji-picker-button,
   .send-button {
     bottom: 10px;
@@ -3576,6 +3741,18 @@ input.visually-hidden {
   .location-button {
     right: 10px;
     bottom: 50px;
+    left: auto;
+  }
+
+  .live-location-button {
+    right: 50px;
+    bottom: 50px;
+    left: auto;
+  }
+
+  .live-location-duration-menu {
+    right: 10px;
+    bottom: 90px;
     left: auto;
   }
 }

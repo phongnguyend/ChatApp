@@ -58,6 +58,7 @@ public sealed class MessagesController(
                     x.SenderUserId == user.Id &&
                     x.MessageType != "system" &&
                     x.MessageType != "location" &&
+                    x.MessageType != "live_location" &&
                     x.DeletedAt == null,
                 cancellationToken);
         if (message is null)
@@ -106,6 +107,7 @@ public sealed class MessagesController(
 
         var message = await db.Messages
             .Include(x => x.Conversation)
+            .Include(x => x.LiveLocationShare)
             .SingleOrDefaultAsync(
                 x =>
                     x.Id == id &&
@@ -119,9 +121,26 @@ public sealed class MessagesController(
         }
 
         message.DeletedAt = DateTimeOffset.UtcNow;
+        if (message.LiveLocationShare?.IsActive == true)
+        {
+            message.LiveLocationShare.IsActive = false;
+            message.LiveLocationShare.StoppedAt = message.DeletedAt;
+        }
         message.Conversation.UpdatedAt = message.DeletedAt.Value;
         await db.SaveChangesAsync(cancellationToken);
 
+        if (message.LiveLocationShare?.StoppedAt is not null)
+        {
+            await hubContext.Clients
+                .Group(ChatHub.ConversationGroup(message.ConversationId))
+                .SendAsync(
+                    "LiveLocationStopped",
+                    new LiveLocationStoppedDto(
+                        message.Id,
+                        message.ConversationId,
+                        message.LiveLocationShare.StoppedAt.Value),
+                    cancellationToken);
+        }
         var changed = ToChangedDto(message);
         await hubContext.Clients.Group(ChatHub.ConversationGroup(message.ConversationId))
             .SendAsync("MessageChanged", changed, cancellationToken);
