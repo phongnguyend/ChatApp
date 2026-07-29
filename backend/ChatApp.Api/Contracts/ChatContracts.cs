@@ -19,7 +19,9 @@ public sealed record ConversationDto(
     DateTimeOffset? LastMessageAt,
     int UnreadCount,
     int MemberCount,
-    bool IsMuted = false);
+    bool IsMuted = false,
+    Guid? DirectUserId = null,
+    string? DirectUsername = null);
 
 public sealed record CreateConversationRequest(
     string Title,

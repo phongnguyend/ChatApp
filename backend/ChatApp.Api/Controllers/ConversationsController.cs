@@ -56,10 +56,15 @@ public sealed class ConversationsController(
                         .FirstOrDefault() ?? x.User.DisplayName
                     : x.Conversation.Title,
                 x.Conversation.Type == "direct"
-                    ? x.Conversation.Members
-                        .Where(member => member.UserId != userId && member.LeftAt == null)
-                        .Select(member => member.User.AvatarUrl)
-                        .FirstOrDefault() ?? x.User.AvatarUrl
+                    ? x.Conversation.Members.Any(
+                        member => member.UserId != userId && member.LeftAt == null)
+                        ? x.Conversation.Members
+                            .Where(member =>
+                                member.UserId != userId &&
+                                member.LeftAt == null)
+                            .Select(member => member.User.AvatarUrl)
+                            .FirstOrDefault()
+                        : x.User.AvatarUrl
                     : x.Conversation.AvatarUrl,
                 x.Conversation.LastMessage == null || x.Conversation.LastMessage.DeletedAt != null
                     ? null
@@ -86,7 +91,23 @@ public sealed class ConversationsController(
                 x.Conversation.LastMessageAt,
                 x.UnreadCount,
                 x.Conversation.Members.Count(member => member.LeftAt == null),
-                x.MutedUntil != null && x.MutedUntil > now))
+                x.MutedUntil != null && x.MutedUntil > now,
+                x.Conversation.Type == "direct"
+                    ? x.Conversation.Members
+                        .Where(member =>
+                            member.UserId != userId &&
+                            member.LeftAt == null)
+                        .Select(member => (Guid?)member.UserId)
+                        .FirstOrDefault() ?? x.UserId
+                    : null,
+                x.Conversation.Type == "direct"
+                    ? x.Conversation.Members
+                        .Where(member =>
+                            member.UserId != userId &&
+                            member.LeftAt == null)
+                        .Select(member => member.User.Username)
+                        .FirstOrDefault() ?? x.User.Username
+                    : null))
             .ToListAsync(cancellationToken);
 
         return Ok(conversations);
@@ -297,11 +318,16 @@ public sealed class ConversationsController(
 
             var result = ToDirectDto(
                 existing.Conversation,
+                targetUser.Id,
+                targetUser.Username,
                 targetUser.DisplayName,
                 targetUser.AvatarUrl,
                 existing.Conversation.Members
                     .Single(x => x.UserId == currentUser.Id)
-                    .UnreadCount);
+                    .UnreadCount,
+                existing.Conversation.Members
+                    .Single(x => x.UserId == currentUser.Id)
+                    .MutedUntil is not null);
             await AddConnectedUsersToDirectConversation(
                 existing.ConversationId,
                 currentUser,
@@ -310,6 +336,9 @@ public sealed class ConversationsController(
                 existing.Conversation.Members
                     .Single(x => x.UserId == targetUser.Id)
                     .UnreadCount,
+                existing.Conversation.Members
+                    .Single(x => x.UserId == targetUser.Id)
+                    .MutedUntil is not null,
                 cancellationToken);
             return Ok(result);
         }
@@ -344,6 +373,8 @@ public sealed class ConversationsController(
 
         var created = ToDirectDto(
             conversation,
+            targetUser.Id,
+            targetUser.Username,
             targetUser.DisplayName,
             targetUser.AvatarUrl);
         await AddConnectedUsersToDirectConversation(
@@ -352,6 +383,7 @@ public sealed class ConversationsController(
             targetUser,
             created,
             0,
+            false,
             cancellationToken);
 
         return CreatedAtAction(
@@ -824,6 +856,20 @@ public sealed class ConversationsController(
         if (existing is not null)
         {
             return Ok(existing);
+        }
+        if (await DirectMessagingPolicy.IsBlockedAsync(
+                db,
+                sender.Id,
+                id,
+                cancellationToken))
+        {
+            return StatusCode(
+                StatusCodes.Status403Forbidden,
+                new
+                {
+                    message =
+                        "Messages cannot be sent while either user has blocked the other."
+                });
         }
 
         var messageId = Guid.NewGuid();
@@ -1451,6 +1497,7 @@ public sealed class ConversationsController(
         ChatUser targetUser,
         ConversationDto currentUserConversation,
         int targetUnreadCount,
+        bool targetIsMuted,
         CancellationToken cancellationToken)
     {
         var groupName = ChatHub.ConversationGroup(conversationId);
@@ -1480,7 +1527,10 @@ public sealed class ConversationsController(
             {
                 Title = currentUser.DisplayName,
                 AvatarUrl = currentUser.AvatarUrl,
-                UnreadCount = targetUnreadCount
+                UnreadCount = targetUnreadCount,
+                IsMuted = targetIsMuted,
+                DirectUserId = currentUser.Id,
+                DirectUsername = currentUser.Username
             };
             await hubContext.Clients.Clients(targetConnections)
                 .SendAsync(
@@ -1524,9 +1574,12 @@ public sealed class ConversationsController(
 
     private static ConversationDto ToDirectDto(
         Conversation conversation,
+        Guid otherUserId,
+        string otherUsername,
         string otherUserDisplayName,
         string? otherUserAvatarUrl,
-        int unreadCount = 0) =>
+        int unreadCount = 0,
+        bool isMuted = false) =>
         new(
             conversation.Id,
             conversation.Type,
@@ -1543,7 +1596,10 @@ public sealed class ConversationsController(
                 : null,
             conversation.LastMessageAt,
             unreadCount,
-            2);
+            2,
+            isMuted,
+            otherUserId,
+            otherUsername);
 
     private async Task<bool> IsActiveMember(
         Guid conversationId,

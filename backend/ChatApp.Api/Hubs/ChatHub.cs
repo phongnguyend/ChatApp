@@ -120,6 +120,15 @@ public sealed class ChatHub(
             await Clients.Caller.SendAsync("MessageReceived", existing);
             return;
         }
+        if (await DirectMessagingPolicy.IsBlockedAsync(
+                db,
+                session.UserId,
+                request.ConversationId,
+                Context.ConnectionAborted))
+        {
+            throw new HubException(
+                "Messages cannot be sent while either user has blocked the other.");
+        }
 
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable);
 
@@ -203,6 +212,14 @@ public sealed class ChatHub(
     {
         var session = GetSession();
         await EnsureMembership(session.UserId, conversationId);
+        if (await DirectMessagingPolicy.IsBlockedAsync(
+                db,
+                session.UserId,
+                conversationId,
+                Context.ConnectionAborted))
+        {
+            return;
+        }
         await Clients.OthersInGroup(ConversationGroup(conversationId))
             .SendAsync(
                 "UserTyping",

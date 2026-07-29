@@ -1,21 +1,34 @@
-import { Bell, BellOff, EllipsisVertical, LogOut } from 'lucide-react'
+import {
+  Ban,
+  Bell,
+  BellOff,
+  Check,
+  EllipsisVertical,
+  LogOut,
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 type ConversationActionsProps = {
   title: string
   isMuted: boolean
+  canToggleBlock: boolean
+  isBlocked: boolean
   canLeave: boolean
   disabled?: boolean
   onToggleMute: () => void
+  onToggleBlock: () => void
   onLeave: () => void
 }
 
 export function ConversationActions({
   title,
   isMuted,
+  canToggleBlock,
+  isBlocked,
   canLeave,
   disabled = false,
   onToggleMute,
+  onToggleBlock,
   onLeave,
 }: ConversationActionsProps) {
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -94,6 +107,20 @@ export function ConversationActions({
             {isMuted ? <Bell size={15} /> : <BellOff size={15} />}
             {isMuted ? 'Unmute' : 'Mute'}
           </button>
+          {canToggleBlock && (
+            <button
+              className={isBlocked ? '' : 'conversation-block-menu-action'}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setIsOpen(false)
+                onToggleBlock()
+              }}
+            >
+              {isBlocked ? <Check size={15} /> : <Ban size={15} />}
+              {isBlocked ? 'Unblock user' : 'Block user'}
+            </button>
+          )}
           {canLeave && (
             <button
               className="conversation-leave-action"

@@ -5,6 +5,8 @@ import {
   type HubConnection,
 } from "@microsoft/signalr";
 import {
+  Ban,
+  Bell,
   Check,
   BellOff,
   Download,
@@ -74,6 +76,8 @@ type Conversation = {
   unreadCount: number;
   memberCount: number;
   isMuted: boolean;
+  directUserId: string | null;
+  directUsername: string | null;
 };
 
 type SearchUser = User;
@@ -574,6 +578,28 @@ function ChatApp({
     [activeAttachmentItems],
   );
   const activeMembers = activeId ? (membersByConversation[activeId] ?? []) : [];
+  const directParticipant =
+    activeConversation?.type === "direct"
+      ? (activeMembers.find((member) => member.id !== user.id) ??
+        activeMembers.find((member) => member.id === user.id))
+      : undefined;
+  const directParticipantProfile: ViewedProfile | null = directParticipant
+    ? {
+        ...directParticipant,
+        isOnline:
+          directParticipant.id === user.id ||
+          onlineUsers.some(
+            (onlineUser) => onlineUser.id === directParticipant.id,
+          ),
+      }
+    : null;
+  const directParticipantNormalizedUsername =
+    directParticipantProfile?.username.toLocaleLowerCase() ?? null;
+  const isDirectParticipantBlocked = directParticipantNormalizedUsername
+    ? blockedUsernames.has(directParticipantNormalizedUsername)
+    : false;
+  const isActiveDirectMessagingBlocked =
+    activeConversation?.type === "direct" && isDirectParticipantBlocked;
   const canManageGroupMembers = activeMembers.some(
     (member) => member.id === user.id && member.role === "owner",
   );
@@ -1230,15 +1256,15 @@ function ChatApp({
   }, [activeId]);
 
   useEffect(() => {
-    if (!activeId || activeConversation?.type !== "group") return;
+    if (!activeId) return;
     loadMembers(activeId).catch((requestError) => {
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "Could not load group members.",
+          : "Could not load conversation members.",
       );
     });
-  }, [activeConversation?.type, activeId, loadMembers]);
+  }, [activeId, loadMembers]);
 
   useEffect(() => {
     if (conversationTab === "chat") {
@@ -1272,6 +1298,7 @@ function ChatApp({
       !activeId ||
       !connection ||
       connection.state !== HubConnectionState.Connected ||
+      isActiveDirectMessagingBlocked ||
       isSendingMessage
     ) {
       return;
@@ -2067,12 +2094,35 @@ function ChatApp({
                 <ConversationActions
                   title={conversationDisplayTitle(conversation)}
                   isMuted={conversation.isMuted}
+                  canToggleBlock={
+                    conversation.type === "direct" &&
+                    Boolean(conversation.directUsername) &&
+                    conversation.directUserId !== user.id
+                  }
+                  isBlocked={Boolean(
+                    conversation.directUsername &&
+                      blockedUsernames.has(
+                        conversation.directUsername.toLocaleLowerCase(),
+                      ),
+                  )}
                   canLeave={
                     conversation.type === "group" &&
                     conversation.title !== "General"
                   }
-                  disabled={conversationActionId === conversation.id}
+                  disabled={
+                    conversationActionId === conversation.id ||
+                    Boolean(
+                      conversation.directUsername &&
+                        userBlockActionName ===
+                          conversation.directUsername.toLocaleLowerCase(),
+                    )
+                  }
                   onToggleMute={() => void toggleConversationMute(conversation)}
+                  onToggleBlock={() => {
+                    if (conversation.directUsername) {
+                      void toggleUserBlock(conversation.directUsername);
+                    }
+                  }}
                   onLeave={() => {
                     setLeaveError("");
                     setConversationToLeave(conversation);
@@ -2154,32 +2204,50 @@ function ChatApp({
                   <Hash size={19} />
                 )}
               </button>
-            ) : (
-              <span
-                className={`header-channel-icon ${
-                  activeConversation?.type === "direct" ? "direct-icon" : ""
-                }`}
+            ) : activeConversation?.type === "direct" ? (
+              <button
+                className="header-channel-icon direct-icon direct-profile-trigger"
+                type="button"
+                disabled={!directParticipantProfile}
+                aria-label={`View ${conversationDisplayTitle(
+                  activeConversation,
+                )}'s profile`}
+                title="View profile"
                 style={
-                  activeConversation?.type === "direct" &&
-                  !activeConversation.avatarUrl
+                  !directParticipantProfile?.avatarUrl
                     ? {
                         backgroundColor: avatarColor(
-                          activeConversation.title ?? "",
+                          directParticipantProfile?.username ??
+                            activeConversation.title ??
+                            "",
                         ),
                       }
                     : undefined
                 }
+                onClick={() => {
+                  if (directParticipantProfile) {
+                    setViewedProfile(directParticipantProfile);
+                  }
+                }}
               >
-                {activeConversation?.avatarUrl ? (
+                {directParticipantProfile?.avatarUrl ? (
                   <AvatarContent
-                    avatarUrl={activeConversation.avatarUrl}
-                    name={activeConversation.title ?? "Conversation"}
+                    avatarUrl={directParticipantProfile.avatarUrl}
+                    name={directParticipantProfile.displayName}
                   />
-                ) : activeConversation?.type === "direct" ? (
-                  initials(activeConversation.title ?? "Direct")
                 ) : (
-                  <Hash size={19} />
+                  initials(
+                    directParticipantProfile?.displayName ??
+                      activeConversation.title ??
+                      "Direct",
+                  )
                 )}
+              </button>
+            ) : (
+              <span
+                className="header-channel-icon"
+              >
+                <Hash size={19} />
               </span>
             )}
             <div>
@@ -2197,6 +2265,32 @@ function ChatApp({
           </div>
           {activeConversation?.type === "group" && (
             <div className="header-group-actions">
+              <button
+                className={`icon-button header-group-action mute-conversation-action ${
+                  activeConversation.isMuted ? "active" : ""
+                }`}
+                type="button"
+                disabled={conversationActionId !== null}
+                aria-label={
+                  activeConversation.isMuted
+                    ? "Unmute this group"
+                    : "Mute this group"
+                }
+                title={
+                  activeConversation.isMuted ? "Unmute group" : "Mute group"
+                }
+                onClick={() =>
+                  void toggleConversationMute(activeConversation)
+                }
+              >
+                {conversationActionId === activeConversation.id ? (
+                  <LoaderCircle className="spin" size={16} />
+                ) : activeConversation.isMuted ? (
+                  <Bell size={16} />
+                ) : (
+                  <BellOff size={16} />
+                )}
+              </button>
               {activeConversation.title !== "General" && (
                 <button
                   className="icon-button header-group-action"
@@ -2228,6 +2322,70 @@ function ChatApp({
                   <LogOut size={16} />
                 </button>
               )}
+            </div>
+          )}
+          {activeConversation?.type === "direct" && (
+            <div className="header-group-actions">
+              <button
+                className={`icon-button header-group-action mute-conversation-action ${
+                  activeConversation.isMuted ? "active" : ""
+                }`}
+                type="button"
+                disabled={conversationActionId !== null}
+                aria-label={
+                  activeConversation.isMuted
+                    ? "Unmute this conversation"
+                    : "Mute this conversation"
+                }
+                title={
+                  activeConversation.isMuted
+                    ? "Unmute conversation"
+                    : "Mute conversation"
+                }
+                onClick={() =>
+                  void toggleConversationMute(activeConversation)
+                }
+              >
+                {conversationActionId === activeConversation.id ? (
+                  <LoaderCircle className="spin" size={16} />
+                ) : activeConversation.isMuted ? (
+                  <Bell size={16} />
+                ) : (
+                  <BellOff size={16} />
+                )}
+              </button>
+              {directParticipantProfile &&
+                directParticipantProfile.id !== user.id && (
+                <button
+                  className={`icon-button header-group-action ${
+                    isDirectParticipantBlocked
+                      ? "unblock-user-action"
+                      : "block-user-action"
+                  }`}
+                  type="button"
+                  disabled={userBlockActionName !== null}
+                  aria-label={
+                    isDirectParticipantBlocked
+                      ? `Unblock ${directParticipantProfile.displayName}`
+                      : `Block ${directParticipantProfile.displayName}`
+                  }
+                  title={
+                    isDirectParticipantBlocked ? "Unblock user" : "Block user"
+                  }
+                  onClick={() =>
+                    void toggleUserBlock(directParticipantProfile.username)
+                  }
+                >
+                  {userBlockActionName ===
+                  directParticipantNormalizedUsername ? (
+                    <LoaderCircle className="spin" size={16} />
+                  ) : isDirectParticipantBlocked ? (
+                    <Check size={16} />
+                  ) : (
+                    <Ban size={16} />
+                  )}
+                </button>
+                )}
             </div>
           )}
           <div className={`connection-pill ${status}`}>
@@ -2728,7 +2886,12 @@ function ChatApp({
           )}
           <MessageAttachmentPicker
             files={attachmentFiles}
-            disabled={!activeConversation || !isOnline || isSendingMessage}
+            disabled={
+              !activeConversation ||
+              !isOnline ||
+              isSendingMessage ||
+              isActiveDirectMessagingBlocked
+            }
             onChange={setAttachmentFiles}
             onError={setError}
           />
@@ -2738,10 +2901,19 @@ function ChatApp({
               activeConversation,
               "conversation",
             )}`}
-            disabled={!activeConversation || !isOnline || isSendingMessage}
+            disabled={
+              !activeConversation ||
+              !isOnline ||
+              isSendingMessage ||
+              isActiveDirectMessagingBlocked
+            }
             maxLength={2000}
             placeholder={
-              isOnline
+              isActiveDirectMessagingBlocked
+                ? `Unblock ${
+                    directParticipantProfile?.displayName ?? "this user"
+                  } to send messages`
+                : isOnline
                 ? `Message ${
                     activeConversation?.type === "direct" ? "" : "#"
                   }${conversationDisplayTitle(activeConversation, "conversation")}`
@@ -2753,7 +2925,12 @@ function ChatApp({
             onKeyDown={handleComposerKeyDown}
           />
           <EmojiPicker
-            disabled={!activeConversation || !isOnline || isSendingMessage}
+            disabled={
+              !activeConversation ||
+              !isOnline ||
+              isSendingMessage ||
+              isActiveDirectMessagingBlocked
+            }
             onSelect={insertEmoji}
           />
           <LocationShareButton
@@ -2761,7 +2938,8 @@ function ChatApp({
             disabled={
               !activeConversation ||
               !isOnline ||
-              isSendingMessage
+              isSendingMessage ||
+              isActiveDirectMessagingBlocked
             }
             onShare={shareCurrentLocation}
             onError={setError}
@@ -2772,7 +2950,8 @@ function ChatApp({
             disabled={
               (!draft.trim() && attachmentFiles.length === 0) ||
               !isOnline ||
-              isSendingMessage
+              isSendingMessage ||
+              isActiveDirectMessagingBlocked
             }
             aria-label="Send message"
           >
