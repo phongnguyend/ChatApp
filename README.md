@@ -273,6 +273,8 @@ CREATE TABLE messages (
 
     message_type        VARCHAR(20) NOT NULL DEFAULT 'text',
     content             TEXT,
+    location_latitude   NUMERIC(9, 6),
+    location_longitude  NUMERIC(9, 6),
 
     client_message_id   VARCHAR(100),
     sequence_number     BIGINT,
@@ -291,6 +293,22 @@ CREATE TABLE messages (
                 'video',
                 'location',
                 'system'
+            )
+        ),
+
+    CONSTRAINT ck_messages_location
+        CHECK (
+            (
+                message_type = 'location'
+                AND content IS NULL
+                AND location_latitude BETWEEN -90 AND 90
+                AND location_longitude BETWEEN -180 AND 180
+            )
+            OR
+            (
+                message_type <> 'location'
+                AND location_latitude IS NULL
+                AND location_longitude IS NULL
             )
         ),
 

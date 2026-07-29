@@ -101,7 +101,9 @@ public sealed record MessageDto(
     DateTimeOffset? EditedAt,
     DateTimeOffset? DeletedAt,
     IReadOnlyList<MessageAttachmentDto>? Attachments = null,
-    IReadOnlyList<MessageReactionDto>? Reactions = null);
+    IReadOnlyList<MessageReactionDto>? Reactions = null,
+    decimal? LocationLatitude = null,
+    decimal? LocationLongitude = null);
 
 public sealed record UpdateMessageRequest(string Content);
 
@@ -125,9 +127,11 @@ public sealed record MessageReactionChangedDto(
 
 public sealed record SendMessageRequest(
     Guid ConversationId,
-    string Content,
+    string? Content,
     string ClientMessageId,
     Guid? ReplyToMessageId = null,
-    string MessageType = "text");
+    string MessageType = "text",
+    decimal? LocationLatitude = null,
+    decimal? LocationLongitude = null);
 
 public sealed record TypingDto(Guid ConversationId, string Username, bool IsTyping);

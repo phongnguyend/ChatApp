@@ -112,12 +112,19 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
     {
         var entity = modelBuilder.Entity<ChatMessage>();
         entity.ToTable("Messages", table =>
+        {
             table.HasCheckConstraint(
                 "CK_Messages_Type",
-                "[MessageType] IN ('text', 'image', 'file', 'audio', 'video', 'location', 'system')"));
+                "[MessageType] IN ('text', 'image', 'file', 'audio', 'video', 'location', 'system')");
+            table.HasCheckConstraint(
+                "CK_Messages_Location",
+                "([MessageType] = 'location' AND [Content] IS NULL AND [LocationLatitude] BETWEEN -90 AND 90 AND [LocationLongitude] BETWEEN -180 AND 180) OR ([MessageType] <> 'location' AND [LocationLatitude] IS NULL AND [LocationLongitude] IS NULL)");
+        });
         entity.HasKey(x => x.Id);
         entity.Property(x => x.MessageType).HasMaxLength(20).HasDefaultValue("text");
         entity.Property(x => x.Content).HasColumnType("nvarchar(max)");
+        entity.Property(x => x.LocationLatitude).HasPrecision(9, 6);
+        entity.Property(x => x.LocationLongitude).HasPrecision(9, 6);
         entity.Property(x => x.ClientMessageId).HasMaxLength(100);
         entity.Property(x => x.CreatedAt).HasPrecision(3);
         entity.Property(x => x.EditedAt).HasPrecision(3);

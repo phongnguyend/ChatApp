@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from 'react'
 export type SharedLocation = {
   latitude: number
   longitude: number
-  url: string
 }
 
 type LocationShareButtonProps = {
@@ -68,14 +67,9 @@ export function LocationShareButton({
 
       const latitude = position.coords.latitude
       const longitude = position.coords.longitude
-      const formattedLatitude = latitude.toFixed(6)
-      const formattedLongitude = longitude.toFixed(6)
       setLocation({
         latitude,
         longitude,
-        url:
-          `https://www.openstreetmap.org/?mlat=${formattedLatitude}` +
-          `&mlon=${formattedLongitude}#map=16/${formattedLatitude}/${formattedLongitude}`,
       })
     } catch (requestError) {
       if (requestId !== requestIdRef.current) return

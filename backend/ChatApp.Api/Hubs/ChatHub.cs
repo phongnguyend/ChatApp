@@ -82,7 +82,8 @@ public sealed class ChatHub(
         var clientMessageId = request.ClientMessageId?.Trim() ?? "";
         var messageType = request.MessageType?.Trim().ToLowerInvariant() ?? "text";
 
-        if (content.Length is < 1 or > 2000 || clientMessageId.Length is < 1 or > 100)
+        if ((messageType == "text" && content.Length is < 1 or > 2000) ||
+            clientMessageId.Length is < 1 or > 100)
         {
             throw new HubException("Messages must contain 1–2,000 characters.");
         }
@@ -90,6 +91,14 @@ public sealed class ChatHub(
         if (messageType is not ("text" or "location"))
         {
             throw new HubException("Choose a supported message type.");
+        }
+
+        var hasValidLocation =
+            request.LocationLatitude is >= -90 and <= 90 &&
+            request.LocationLongitude is >= -180 and <= 180;
+        if (messageType == "location" && !hasValidLocation)
+        {
+            throw new HubException("Choose a valid location.");
         }
 
         await EnsureMembership(session.UserId, request.ConversationId);
@@ -112,7 +121,11 @@ public sealed class ChatHub(
                 x.ReplyToMessageId,
                 x.CreatedAt,
                 x.EditedAt,
-                x.DeletedAt))
+                x.DeletedAt,
+                null,
+                null,
+                x.LocationLatitude,
+                x.LocationLongitude))
             .SingleOrDefaultAsync();
 
         if (existing is not null)
@@ -156,7 +169,11 @@ public sealed class ChatHub(
             Conversation = conversation,
             SenderUserId = session.UserId,
             MessageType = messageType,
-            Content = content,
+            Content = messageType == "location" ? null : content,
+            LocationLatitude =
+                messageType == "location" ? request.LocationLatitude : null,
+            LocationLongitude =
+                messageType == "location" ? request.LocationLongitude : null,
             ClientMessageId = clientMessageId,
             SequenceNumber = nextSequence + 1,
             ReplyToMessageId = request.ReplyToMessageId
@@ -192,7 +209,11 @@ public sealed class ChatHub(
             message.ReplyToMessageId,
             message.CreatedAt,
             null,
-            null);
+            null,
+            null,
+            null,
+            message.LocationLatitude,
+            message.LocationLongitude);
 
         await Clients.Group(ConversationGroup(request.ConversationId))
             .SendAsync("MessageReceived", result);

@@ -766,7 +766,9 @@ public sealed class ConversationsController(
                                     reaction.User.AvatarUrl))
                                 .ToList()))
                         .ToList()
-                    : new List<MessageReactionDto>()))
+                    : new List<MessageReactionDto>(),
+                x.LocationLatitude,
+                x.LocationLongitude))
             .ToList();
 
         messages.Reverse();

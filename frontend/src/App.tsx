@@ -10,11 +10,13 @@ import {
   Check,
   BellOff,
   Download,
+  ExternalLink,
   FileText,
   Hash,
   Images,
   LoaderCircle,
   LogOut,
+  MapPinned,
   Menu,
   MessageCircleMore,
   Pencil,
@@ -138,6 +140,8 @@ type Message = {
   senderAvatarUrl: string | null;
   content: string | null;
   messageType: string;
+  locationLatitude: number | null;
+  locationLongitude: number | null;
   clientMessageId: string | null;
   sequenceNumber: number;
   replyToMessageId: string | null;
@@ -173,7 +177,7 @@ type TypingEvent = {
 };
 
 type ConnectionStatus = "connecting" | "connected" | "reconnecting" | "offline";
-type ConversationTab = "chat" | "files" | "photos";
+type ConversationTab = "chat" | "files" | "photos" | "locations";
 const EMPTY_MESSAGES: Message[] = [];
 
 function conversationDisplayTitle(
@@ -197,6 +201,44 @@ function initials(name: string) {
 
 const MESSAGE_URL_PATTERN = /(https?:\/\/[^\s]+)/g;
 
+function sharedLocation(
+  latitude: number | null,
+  longitude: number | null,
+) {
+  if (
+    latitude === null ||
+    longitude === null ||
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    Math.abs(latitude) > 90 ||
+    Math.abs(longitude) > 180
+  ) {
+    return null;
+  }
+
+  const formattedLatitude = latitude.toFixed(6);
+  const formattedLongitude = longitude.toFixed(6);
+  const offset = 0.008;
+  const bounds = [
+    longitude - offset,
+    latitude - offset,
+    longitude + offset,
+    latitude + offset,
+  ].join(",");
+  const marker = `${latitude},${longitude}`;
+
+  return {
+    latitude,
+    longitude,
+    url:
+      `https://www.openstreetmap.org/?mlat=${formattedLatitude}` +
+      `&mlon=${formattedLongitude}#map=16/${formattedLatitude}/${formattedLongitude}`,
+    previewUrl:
+      `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bounds)}` +
+      `&layer=mapnik&marker=${encodeURIComponent(marker)}`,
+  };
+}
+
 function MessageContent({ content }: { content: string }) {
   return (
     <p>
@@ -215,6 +257,45 @@ function MessageContent({ content }: { content: string }) {
         ),
       )}
     </p>
+  );
+}
+
+function LocationMessageMap({
+  latitude,
+  longitude,
+}: {
+  latitude: number | null;
+  longitude: number | null;
+}) {
+  const location = sharedLocation(latitude, longitude);
+  if (!location) return <p>Location unavailable.</p>;
+
+  return (
+    <div className="location-message-card">
+      <iframe
+        className="location-message-map"
+        src={location.previewUrl}
+        title="Shared location"
+        loading="lazy"
+      />
+      <div className="location-message-meta">
+        <span>
+          <MapPinned size={15} />
+          <strong>
+            {location.latitude.toFixed(5)}, {location.longitude.toFixed(5)}
+          </strong>
+        </span>
+        <a
+          href={location.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Open location in OpenStreetMap"
+          title="Open location"
+        >
+          <ExternalLink size={16} />
+        </a>
+      </div>
+    </div>
   );
 }
 
@@ -576,6 +657,30 @@ function ChatApp({
           !attachment.contentType.startsWith("video/"),
       ),
     [activeAttachmentItems],
+  );
+  const activeLocationItems = useMemo(
+    () =>
+      activeMessages.flatMap((message) => {
+        if (message.deletedAt || message.messageType !== "location") return [];
+        const location = sharedLocation(
+          message.locationLatitude,
+          message.locationLongitude,
+        );
+        return location
+          ? [
+              {
+                location,
+                messageId: message.id,
+                senderName:
+                  message.senderUserId === user.id
+                    ? "You"
+                    : (message.username ?? "Unknown user"),
+                createdAt: message.createdAt,
+              },
+            ]
+          : [];
+      }),
+    [activeMessages, user.id],
   );
   const activeMembers = activeId ? (membersByConversation[activeId] ?? []) : [];
   const directParticipant =
@@ -1364,9 +1469,10 @@ function ChatApp({
 
     await connection.invoke("SendMessage", {
       conversationId: activeId,
-      content: `My current location: ${location.url}`,
       clientMessageId: crypto.randomUUID(),
       messageType: "location",
+      locationLatitude: Number(location.latitude.toFixed(6)),
+      locationLongitude: Number(location.longitude.toFixed(6)),
       replyToMessageId: replyingToMessageId,
     });
     setReplyingToMessageId(null);
@@ -2451,6 +2557,20 @@ function ChatApp({
               <span>{activePhotoItems.length}</span>
             )}
           </button>
+          <button
+            id="conversation-tab-locations"
+            type="button"
+            role="tab"
+            aria-selected={conversationTab === "locations"}
+            aria-controls="conversation-locations-panel"
+            onClick={() => setConversationTab("locations")}
+          >
+            <MapPinned size={16} />
+            Locations
+            {activeLocationItems.length > 0 && (
+              <span>{activeLocationItems.length}</span>
+            )}
+          </button>
         </nav>
 
         <div
@@ -2634,6 +2754,11 @@ function ChatApp({
                                   </button>
                                 </div>
                               </form>
+                            ) : message.messageType === "location" ? (
+                              <LocationMessageMap
+                                latitude={message.locationLatitude}
+                                longitude={message.locationLongitude}
+                              />
                             ) : (
                               message.content && (
                                 <MessageContent content={message.content} />
@@ -2823,6 +2948,78 @@ function ChatApp({
                           title="Download"
                         >
                           <Download size={16} />
+                        </a>
+                      </div>
+                    </article>
+                  ),
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {conversationTab === "locations" && (
+          <div
+            className="conversation-assets"
+            id="conversation-locations-panel"
+            role="tabpanel"
+            aria-labelledby="conversation-tab-locations"
+          >
+            <div className="conversation-assets-heading">
+              <div>
+                <p className="eyebrow">Shared places</p>
+                <h2>Locations in this conversation</h2>
+              </div>
+              <span>
+                {activeLocationItems.length}{" "}
+                {activeLocationItems.length === 1 ? "location" : "locations"}
+              </span>
+            </div>
+            {isLoadingMessages ? (
+              <div className="center-state">
+                <LoaderCircle className="spin" size={24} />
+                <p>Loading shared locations...</p>
+              </div>
+            ) : activeLocationItems.length === 0 ? (
+              <div className="empty-assets">
+                <span>
+                  <MapPinned size={25} />
+                </span>
+                <h3>No locations shared yet</h3>
+                <p>Locations shared in the chat will appear here.</p>
+              </div>
+            ) : (
+              <div className="conversation-location-grid">
+                {activeLocationItems.map(
+                  ({ location, messageId, senderName, createdAt }) => (
+                    <article
+                      className="conversation-location-card"
+                      key={messageId}
+                    >
+                      <iframe
+                        className="conversation-location-map"
+                        src={location.previewUrl}
+                        title={`Location shared by ${senderName}`}
+                        loading="lazy"
+                      />
+                      <div className="conversation-location-meta">
+                        <span>
+                          <strong>
+                            {location.latitude.toFixed(5)},{" "}
+                            {location.longitude.toFixed(5)}
+                          </strong>
+                          <small>
+                            {senderName} / {formatAttachmentDate(createdAt)}
+                          </small>
+                        </span>
+                        <a
+                          href={location.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Open location in OpenStreetMap"
+                          title="Open location"
+                        >
+                          <ExternalLink size={16} />
                         </a>
                       </div>
                     </article>

@@ -11,6 +11,8 @@ public sealed class ChatMessage
     public ChatMessage? ReplyToMessage { get; set; }
     public string MessageType { get; set; } = "text";
     public string? Content { get; set; }
+    public decimal? LocationLatitude { get; set; }
+    public decimal? LocationLongitude { get; set; }
     public string? ClientMessageId { get; set; }
     public long SequenceNumber { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
