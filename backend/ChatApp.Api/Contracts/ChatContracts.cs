@@ -239,3 +239,15 @@ public sealed record CallScreenShareTakenOverDto(
     Guid CallId,
     Guid ConversationId,
     Guid NewOwnerUserId);
+
+public sealed record CallMicrophoneStateRequest(
+    Guid CallId,
+    Guid ConversationId,
+    Guid TargetUserId,
+    bool IsMuted);
+
+public sealed record CallMicrophoneStateDto(
+    Guid CallId,
+    Guid ConversationId,
+    Guid UserId,
+    bool IsMuted);

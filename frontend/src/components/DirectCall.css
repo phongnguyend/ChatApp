@@ -140,6 +140,33 @@
   backdrop-filter: blur(5px);
 }
 
+.participant-microphone-status {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  min-height: 28px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #dff9ed;
+  background: rgba(26, 105, 75, 0.78);
+  font-weight: 700;
+  backdrop-filter: blur(5px);
+}
+
+.participant-microphone-status.is-muted {
+  color: #ffd6ce;
+  background: rgba(158, 57, 52, 0.82);
+}
+
+.participant-microphone-status small {
+  font-size: 10px;
+  line-height: 1;
+}
+
 .direct-call-media.is-sharing {
   grid-template-rows: 120px minmax(0, 1fr);
   gap: 14px;

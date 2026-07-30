@@ -91,6 +91,13 @@ type CallScreenShareTakenOverEvent = {
   newOwnerUserId: string;
 };
 
+type CallMicrophoneStateEvent = {
+  callId: string;
+  conversationId: string;
+  userId: string;
+  isMuted: boolean;
+};
+
 type UseDirectCallOptions = {
   connection: HubConnection | null;
   localUserId: string;
@@ -112,6 +119,7 @@ export function useDirectCall({
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [hasRemoteVideo, setHasRemoteVideo] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [isPeerMuted, setIsPeerMuted] = useState(false);
   const [isCameraEnabled, setIsCameraEnabled] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isPeerScreenSharing, setIsPeerScreenSharing] = useState(false);
@@ -147,6 +155,7 @@ export function useDirectCall({
     setRemoteStream(null);
     setHasRemoteVideo(false);
     setIsMuted(false);
+    setIsPeerMuted(false);
     setIsCameraEnabled(false);
     setIsScreenSharing(false);
     setIsPeerScreenSharing(false);
@@ -394,16 +403,24 @@ export function useDirectCall({
   }, [cleanupCall, connection]);
 
   const toggleMute = useCallback(() => {
-    if (callRef.current?.status === "incoming") {
-      setIsMuted((current) => !current);
-      return;
-    }
-    const audioTracks = localStreamRef.current?.getAudioTracks() ?? [];
-    if (audioTracks.length === 0) return;
+    const activeCall = callRef.current;
+    if (!activeCall) return;
     const nextMuted = !isMuted;
-    for (const track of audioTracks) track.enabled = !nextMuted;
+    if (activeCall.status !== "incoming") {
+      const audioTracks = localStreamRef.current?.getAudioTracks() ?? [];
+      if (audioTracks.length === 0) return;
+      for (const track of audioTracks) track.enabled = !nextMuted;
+    }
     setIsMuted(nextMuted);
-  }, [isMuted]);
+    if (connection?.state === HubConnectionState.Connected) {
+      void connection.invoke("SetCallMicrophoneState", {
+        callId: activeCall.callId,
+        conversationId: activeCall.conversationId,
+        targetUserId: activeCall.peer.id,
+        isMuted: nextMuted,
+      });
+    }
+  }, [connection, isMuted]);
 
   const renegotiate = useCallback(async () => {
     const activeCall = callRef.current;
@@ -809,6 +826,20 @@ export function useDirectCall({
       void stopScreenShare(false);
     };
 
+    const onMicrophoneStateChanged = (
+      event: CallMicrophoneStateEvent,
+    ) => {
+      const activeCall = callRef.current;
+      if (
+        !activeCall ||
+        activeCall.callId !== event.callId ||
+        activeCall.peer.id !== event.userId
+      ) {
+        return;
+      }
+      setIsPeerMuted(event.isMuted);
+    };
+
     connection.on("CallIncoming", onIncoming);
     connection.on("CallAccepted", onAccepted);
     connection.on("CallDeclined", onDeclined);
@@ -816,6 +847,10 @@ export function useDirectCall({
     connection.on("CallEnded", onEnded);
     connection.on("CallScreenShareChanged", onScreenShareChanged);
     connection.on("CallScreenShareTakenOver", onScreenShareTakenOver);
+    connection.on(
+      "CallMicrophoneStateChanged",
+      onMicrophoneStateChanged,
+    );
     return () => {
       connection.off("CallIncoming", onIncoming);
       connection.off("CallAccepted", onAccepted);
@@ -824,6 +859,10 @@ export function useDirectCall({
       connection.off("CallEnded", onEnded);
       connection.off("CallScreenShareChanged", onScreenShareChanged);
       connection.off("CallScreenShareTakenOver", onScreenShareTakenOver);
+      connection.off(
+        "CallMicrophoneStateChanged",
+        onMicrophoneStateChanged,
+      );
     };
   }, [
     cleanupCall,
@@ -859,6 +898,7 @@ export function useDirectCall({
     remoteStream,
     hasRemoteVideo,
     isMuted,
+    isPeerMuted,
     isCameraEnabled,
     isScreenSharing,
     isPeerScreenSharing,
@@ -882,6 +922,7 @@ export function DirectCallOverlay({
   screenStream,
   remoteStream,
   isMuted,
+  isPeerMuted,
   isCameraEnabled,
   isScreenSharing,
   isPeerScreenSharing,
@@ -1055,6 +1096,13 @@ export function DirectCallOverlay({
           >
             <div className="direct-call-participants">
               <div className="call-participant-tile">
+                <div
+                  className={`participant-microphone-status ${isMuted ? "is-muted" : ""}`}
+                  title={isMuted ? "Microphone off" : "Microphone on"}
+                >
+                  {isMuted ? <MicOff size={14} /> : <Mic size={14} />}
+                  <small>{isMuted ? "Mic off" : "Mic on"}</small>
+                </div>
                 {localHasVideo ? (
                   <video
                     className="local-participant-video"
@@ -1072,6 +1120,15 @@ export function DirectCallOverlay({
               </div>
 
               <div className="call-participant-tile">
+                <div
+                  className={`participant-microphone-status ${isPeerMuted ? "is-muted" : ""}`}
+                  title={
+                    isPeerMuted ? "Microphone off" : "Microphone on"
+                  }
+                >
+                  {isPeerMuted ? <MicOff size={14} /> : <Mic size={14} />}
+                  <small>{isPeerMuted ? "Mic off" : "Mic on"}</small>
+                </div>
                 {remoteCameraStream ? (
                   <video
                     ref={remoteVideoRef}

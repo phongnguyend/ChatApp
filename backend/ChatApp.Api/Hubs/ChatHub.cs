@@ -670,6 +670,25 @@ public sealed class ChatHub(
             Context.ConnectionAborted);
     }
 
+    public async Task SetCallMicrophoneState(
+        CallMicrophoneStateRequest request)
+    {
+        var session = GetSession();
+        var target = await EnsureDirectPeer(
+            session.UserId,
+            request.ConversationId,
+            request.TargetUserId);
+
+        await Clients.Clients(presence.ConnectionIdsForUser(target.Id)).SendAsync(
+            "CallMicrophoneStateChanged",
+            new CallMicrophoneStateDto(
+                request.CallId,
+                request.ConversationId,
+                session.UserId,
+                request.IsMuted),
+            Context.ConnectionAborted);
+    }
+
     public async Task MarkRead(Guid conversationId, long sequenceNumber)
     {
         var session = GetSession();
