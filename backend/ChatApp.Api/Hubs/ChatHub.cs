@@ -12,6 +12,7 @@ public sealed class ChatHub(
     ChatDbContext db,
     PresenceTracker presence,
     CallStateTracker calls,
+    GroupMeetingStateTracker meetings,
     AzurePushNotificationService pushNotifications,
     ILogger<ChatHub> logger) : Hub
 {
@@ -55,6 +56,20 @@ public sealed class ChatHub(
         var session = presence.Disconnect(Context.ConnectionId);
         if (session is not null)
         {
+            if (presence.ConnectionIdsForUser(session.UserId).Count == 0)
+            {
+                foreach (var change in meetings.Disconnect(session.UserId))
+                {
+                    await Clients.Group(ConversationGroup(change.ConversationId))
+                        .SendAsync(
+                            "GroupMeetingChanged",
+                            new GroupMeetingChangedDto(
+                                change.ConversationId,
+                                change.Meeting is null
+                                    ? null
+                                    : ToDto(change.Meeting)));
+                }
+            }
             var endedShares = calls.EndCallsForUser(session.UserId);
             foreach (var share in endedShares)
             {
@@ -689,6 +704,194 @@ public sealed class ChatHub(
             Context.ConnectionAborted);
     }
 
+    public async Task<GroupMeetingDto?> GetGroupMeeting(Guid conversationId)
+    {
+        var session = GetSession();
+        await EnsureGroupMembership(session.UserId, conversationId);
+        var meeting = meetings.Get(conversationId);
+        return meeting is null ? null : ToDto(meeting);
+    }
+
+    public async Task<GroupMeetingDto> StartGroupMeeting(Guid conversationId)
+    {
+        var session = GetSession();
+        await EnsureGroupMembership(session.UserId, conversationId);
+        var meeting = meetings.Start(
+            conversationId,
+            session.UserId,
+            session.DisplayName,
+            session.AvatarUrl);
+        var dto = ToDto(meeting);
+        await BroadcastMeeting(conversationId, dto);
+        return dto;
+    }
+
+    public async Task<GroupMeetingDto> JoinGroupMeeting(Guid conversationId)
+    {
+        var session = GetSession();
+        await EnsureGroupMembership(session.UserId, conversationId);
+        GroupMeetingStateTracker.MeetingSnapshot meeting;
+        try
+        {
+            meeting = meetings.Join(
+                conversationId,
+                session.UserId,
+                session.DisplayName,
+                session.AvatarUrl);
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new HubException(exception.Message);
+        }
+
+        var dto = ToDto(meeting);
+        await BroadcastMeeting(conversationId, dto);
+        return dto;
+    }
+
+    public async Task<GroupMeetingDto?> LeaveGroupMeeting(Guid conversationId)
+    {
+        var session = GetSession();
+        await EnsureGroupMembership(session.UserId, conversationId);
+        var meeting = meetings.Leave(conversationId, session.UserId);
+        var dto = meeting is null ? null : ToDto(meeting);
+        await BroadcastMeeting(conversationId, dto);
+        return dto;
+    }
+
+    public async Task StopGroupMeeting(Guid conversationId)
+    {
+        var session = GetSession();
+        await EnsureGroupMembership(session.UserId, conversationId);
+        try
+        {
+            meetings.Stop(conversationId, session.UserId);
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new HubException(exception.Message);
+        }
+
+        await BroadcastMeeting(conversationId, null);
+    }
+
+    public async Task SendGroupMeetingSignal(
+        SendGroupMeetingSignalRequest request)
+    {
+        var session = GetSession();
+        var signalType = request.SignalType.Trim().ToLowerInvariant();
+        if (signalType is not ("offer" or "answer" or "ice") ||
+            string.IsNullOrWhiteSpace(request.Payload) ||
+            request.Payload.Length > 24_000)
+        {
+            throw new HubException("Choose a valid meeting signal.");
+        }
+
+        await EnsureGroupMembership(session.UserId, request.ConversationId);
+        if (!meetings.HasParticipant(
+                request.ConversationId,
+                request.MeetingId,
+                session.UserId) ||
+            !meetings.HasParticipant(
+                request.ConversationId,
+                request.MeetingId,
+                request.TargetUserId))
+        {
+            throw new HubException(
+                "Meeting signals can only be sent between participants.");
+        }
+
+        await Clients.Clients(
+                presence.ConnectionIdsForUser(request.TargetUserId))
+            .SendAsync(
+                "GroupMeetingSignal",
+                new GroupMeetingSignalDto(
+                    request.MeetingId,
+                    request.ConversationId,
+                    session.UserId,
+                    signalType,
+                    request.Payload),
+                Context.ConnectionAborted);
+    }
+
+    public async Task SetGroupMeetingMicrophoneState(
+        GroupMeetingMicrophoneStateRequest request)
+    {
+        var session = GetSession();
+        await EnsureGroupMembership(session.UserId, request.ConversationId);
+        GroupMeetingStateTracker.MeetingSnapshot meeting;
+        try
+        {
+            meeting = meetings.SetMicrophoneState(
+                request.ConversationId,
+                request.MeetingId,
+                session.UserId,
+                request.IsMuted);
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new HubException(exception.Message);
+        }
+
+        await BroadcastMeeting(request.ConversationId, ToDto(meeting));
+    }
+
+    public async Task StartGroupMeetingScreenShare(
+        GroupMeetingScreenShareRequest request)
+    {
+        var session = GetSession();
+        await EnsureGroupMembership(session.UserId, request.ConversationId);
+        GroupMeetingStateTracker.ScreenShareChange change;
+        try
+        {
+            change = meetings.StartScreenShare(
+                request.ConversationId,
+                request.MeetingId,
+                session.UserId);
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new HubException(exception.Message);
+        }
+
+        if (change.PreviousOwnerUserId is Guid previousOwnerUserId)
+        {
+            await Clients.Clients(
+                    presence.ConnectionIdsForUser(previousOwnerUserId))
+                .SendAsync(
+                    "GroupMeetingScreenShareTakenOver",
+                    new GroupMeetingScreenShareTakenOverDto(
+                        request.MeetingId,
+                        request.ConversationId,
+                        session.UserId),
+                    Context.ConnectionAborted);
+        }
+        await BroadcastMeeting(
+            request.ConversationId,
+            ToDto(change.Meeting));
+    }
+
+    public async Task StopGroupMeetingScreenShare(
+        GroupMeetingScreenShareRequest request)
+    {
+        var session = GetSession();
+        await EnsureGroupMembership(session.UserId, request.ConversationId);
+        GroupMeetingStateTracker.MeetingSnapshot meeting;
+        try
+        {
+            meeting = meetings.StopScreenShare(
+                request.ConversationId,
+                request.MeetingId,
+                session.UserId);
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new HubException(exception.Message);
+        }
+
+        await BroadcastMeeting(request.ConversationId, ToDto(meeting));
+    }
+
     public async Task MarkRead(Guid conversationId, long sequenceNumber)
     {
         var session = GetSession();
@@ -725,6 +928,28 @@ public sealed class ChatHub(
             throw new HubException("You are not a member of this conversation.");
         }
     }
+
+    private async Task EnsureGroupMembership(Guid userId, Guid conversationId)
+    {
+        var isMember = await db.ConversationMembers.AnyAsync(x =>
+            x.ConversationId == conversationId &&
+            x.UserId == userId &&
+            x.LeftAt == null &&
+            x.Conversation.Type == "group");
+        if (!isMember)
+        {
+            throw new HubException(
+                "Meetings are only available in group conversations.");
+        }
+    }
+
+    private Task BroadcastMeeting(
+        Guid conversationId,
+        GroupMeetingDto? meeting) =>
+        Clients.Group(ConversationGroup(conversationId)).SendAsync(
+            "GroupMeetingChanged",
+            new GroupMeetingChangedDto(conversationId, meeting),
+            Context.ConnectionAborted);
 
     private async Task<ChatUser> EnsureDirectPeer(
         Guid userId,
@@ -778,6 +1003,24 @@ public sealed class ChatHub(
         latitude is >= -90 and <= 90 &&
         longitude is >= -180 and <= 180 &&
         (accuracyMeters is null or >= 0 and <= 10000);
+
+    private static GroupMeetingDto ToDto(
+        GroupMeetingStateTracker.MeetingSnapshot meeting) =>
+        new(
+            meeting.MeetingId,
+            meeting.ConversationId,
+            meeting.StartedByUserId,
+            meeting.StartedByDisplayName,
+            meeting.StartedAt,
+            meeting.ScreenSharingUserId,
+            meeting.Participants
+                .Select(participant => new GroupMeetingParticipantDto(
+                    participant.UserId,
+                    participant.DisplayName,
+                    participant.AvatarUrl,
+                    participant.JoinedAt,
+                    participant.IsMuted))
+                .ToArray());
 
     internal static LiveLocationDto ToDto(LiveLocationShare share) =>
         new(

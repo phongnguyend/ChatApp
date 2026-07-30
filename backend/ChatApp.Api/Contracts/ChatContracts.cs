@@ -251,3 +251,51 @@ public sealed record CallMicrophoneStateDto(
     Guid ConversationId,
     Guid UserId,
     bool IsMuted);
+
+public sealed record GroupMeetingParticipantDto(
+    Guid UserId,
+    string DisplayName,
+    string? AvatarUrl,
+    DateTimeOffset JoinedAt,
+    bool IsMuted);
+
+public sealed record GroupMeetingDto(
+    Guid MeetingId,
+    Guid ConversationId,
+    Guid StartedByUserId,
+    string StartedByDisplayName,
+    DateTimeOffset StartedAt,
+    Guid? ScreenSharingUserId,
+    IReadOnlyList<GroupMeetingParticipantDto> Participants);
+
+public sealed record GroupMeetingChangedDto(
+    Guid ConversationId,
+    GroupMeetingDto? Meeting);
+
+public sealed record SendGroupMeetingSignalRequest(
+    Guid MeetingId,
+    Guid ConversationId,
+    Guid TargetUserId,
+    string SignalType,
+    string Payload);
+
+public sealed record GroupMeetingSignalDto(
+    Guid MeetingId,
+    Guid ConversationId,
+    Guid SenderUserId,
+    string SignalType,
+    string Payload);
+
+public sealed record GroupMeetingMicrophoneStateRequest(
+    Guid MeetingId,
+    Guid ConversationId,
+    bool IsMuted);
+
+public sealed record GroupMeetingScreenShareRequest(
+    Guid MeetingId,
+    Guid ConversationId);
+
+public sealed record GroupMeetingScreenShareTakenOverDto(
+    Guid MeetingId,
+    Guid ConversationId,
+    Guid NewOwnerUserId);

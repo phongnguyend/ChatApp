@@ -190,9 +190,9 @@
   position: absolute;
   top: 12px;
   right: 12px;
-  z-index: 2;
-  width: 40px;
-  height: 40px;
+  z-index: 5;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 11px;
@@ -202,6 +202,8 @@
   background: rgba(4, 14, 16, 0.72);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.24);
   backdrop-filter: blur(5px);
+  cursor: pointer;
+  touch-action: manipulation;
 }
 
 .maximize-call-stage:hover,

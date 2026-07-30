@@ -21,17 +21,22 @@ import {
   Maximize2,
   Menu,
   MessageCircleMore,
+  Mic,
+  MicOff,
   Minimize2,
   Navigation,
   Pencil,
   Phone,
+  PhoneOff,
   Plus,
   Route,
   Send,
   Search,
+  Square,
   UserRoundPlus,
   Users,
   Video,
+  VideoOff,
   WifiOff,
   X,
 } from "lucide-react";
@@ -69,6 +74,7 @@ import {
   DirectCallOverlay,
   useDirectCall,
 } from "./components/DirectCall";
+import { GroupMeetingOverlay } from "./components/GroupMeeting";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5045";
 const LIVE_CHAT_OFFLINE_ERROR =
@@ -149,6 +155,29 @@ type UserDisplayNameUpdatedEvent = {
 type ConversationAvatarUpdatedEvent = {
   conversationId: string;
   avatarUrl: string;
+};
+
+type GroupMeetingParticipant = {
+  userId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  joinedAt: string;
+  isMuted: boolean;
+};
+
+type GroupMeeting = {
+  meetingId: string;
+  conversationId: string;
+  startedByUserId: string;
+  startedByDisplayName: string;
+  startedAt: string;
+  screenSharingUserId: string | null;
+  participants: GroupMeetingParticipant[];
+};
+
+type GroupMeetingChangedEvent = {
+  conversationId: string;
+  meeting: GroupMeeting | null;
 };
 
 type Message = {
@@ -970,6 +999,25 @@ function ChatApp({
     () => new Set(),
   );
   const [typingUsers, setTypingUsers] = useState<Record<string, string[]>>({});
+  const [groupMeetings, setGroupMeetings] = useState<
+    Record<string, GroupMeeting | null>
+  >({});
+  const [meetingInvite, setMeetingInvite] = useState<GroupMeeting | null>(
+    null,
+  );
+  const [meetingInviteMicEnabled, setMeetingInviteMicEnabled] =
+    useState(true);
+  const [meetingInviteCameraEnabled, setMeetingInviteCameraEnabled] =
+    useState(false);
+  const [meetingMediaPreferences, setMeetingMediaPreferences] = useState<
+    Record<
+      string,
+      { microphoneEnabled: boolean; cameraEnabled: boolean }
+    >
+  >({});
+  const [meetingAction, setMeetingAction] = useState<
+    "start" | "join" | "leave" | "stop" | null
+  >(null);
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [error, setError] = useState("");
@@ -1036,6 +1084,7 @@ function ChatApp({
   const [memberToRemove, setMemberToRemove] =
     useState<ConversationMember | null>(null);
   const connectionRef = useRef<HubConnection | null>(null);
+  const dismissedMeetingInvitesRef = useRef(new Set<string>());
   const activeIdRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const draftInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1065,6 +1114,36 @@ function ChatApp({
   }, [directCallIsActive, endDirectCall, status]);
 
   const activeConversation = conversations.find((item) => item.id === activeId);
+  const activeGroupMeeting =
+    activeConversation?.type === "group"
+      ? (groupMeetings[activeConversation.id] ?? null)
+      : null;
+  const isInActiveGroupMeeting = Boolean(
+    activeGroupMeeting?.participants.some(
+      (participant) => participant.userId === user.id,
+    ),
+  );
+  const isActiveGroupMeetingStarter =
+    activeGroupMeeting?.startedByUserId === user.id;
+  const joinedGroupMeeting =
+    Object.values(groupMeetings).find((meeting) =>
+      meeting?.participants.some(
+        (participant) => participant.userId === user.id,
+      ),
+    ) ?? null;
+  const joinedGroupConversation = joinedGroupMeeting
+    ? conversations.find(
+        (conversation) =>
+          conversation.id === joinedGroupMeeting.conversationId,
+      )
+    : null;
+  const meetingInviteConversation = meetingInvite
+    ? conversations.find(
+        (conversation) =>
+          conversation.id === meetingInvite.conversationId,
+      )
+    : null;
+  const meetingInviteId = meetingInvite?.meetingId ?? null;
   const activeMessages = activeId
     ? (messagesByConversation[activeId] ?? EMPTY_MESSAGES)
     : EMPTY_MESSAGES;
@@ -1508,6 +1587,38 @@ function ChatApp({
         ...current.filter((item) => item.id !== conversation.id),
       ]);
     });
+    connection.on(
+      "GroupMeetingChanged",
+      (event: GroupMeetingChangedEvent) => {
+        setGroupMeetings((current) => ({
+          ...current,
+          [event.conversationId]: event.meeting,
+        }));
+        if (!event.meeting) {
+          setMeetingInvite((current) =>
+            current?.conversationId === event.conversationId
+              ? null
+              : current,
+          );
+          return;
+        }
+
+        const isParticipant = event.meeting.participants.some(
+          (participant) => participant.userId === user.id,
+        );
+        if (isParticipant) {
+          setMeetingInvite((current) =>
+            current?.meetingId === event.meeting?.meetingId
+              ? null
+              : current,
+          );
+        } else if (
+          !dismissedMeetingInvitesRef.current.has(event.meeting.meetingId)
+        ) {
+          setMeetingInvite(event.meeting);
+        }
+      },
+    );
     connection.on("MembersChanged", (event: MembersChangedEvent) => {
       setConversations((current) =>
         current.map((conversation) =>
@@ -1772,6 +1883,47 @@ function ChatApp({
     user.id,
     user.username,
   ]);
+
+  useEffect(() => {
+    if (
+      status !== "connected" ||
+      hubConnection?.state !== HubConnectionState.Connected ||
+      activeConversation?.type !== "group"
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    void hubConnection
+      .invoke<GroupMeeting | null>(
+        "GetGroupMeeting",
+        activeConversation.id,
+      )
+      .then((meeting) => {
+        if (cancelled) return;
+        setGroupMeetings((current) => ({
+          ...current,
+          [activeConversation.id]: meeting,
+        }));
+      })
+      .catch(() => {
+        // The next real-time meeting event will refresh this state.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeConversation?.id,
+    activeConversation?.type,
+    hubConnection,
+    status,
+  ]);
+
+  useEffect(() => {
+    if (!meetingInviteId) return;
+    setMeetingInviteMicEnabled(true);
+    setMeetingInviteCameraEnabled(false);
+  }, [meetingInviteId]);
 
   useEffect(
     () => () => {
@@ -2455,6 +2607,83 @@ function ChatApp({
     setSelectedUsers([]);
   }
 
+  async function changeGroupMeeting(
+    action: "start" | "join" | "leave" | "stop",
+    conversationId = activeConversation?.id,
+  ) {
+    const conversation = conversations.find(
+      (item) => item.id === conversationId,
+    );
+    if (
+      !conversationId ||
+      !conversation ||
+      conversation.type !== "group" ||
+      meetingAction ||
+      ((action === "start" || action === "join") &&
+        (directCall.call !== null ||
+          (joinedGroupMeeting !== null &&
+            joinedGroupMeeting.conversationId !== conversationId))) ||
+      hubConnection?.state !== HubConnectionState.Connected
+    ) {
+      return;
+    }
+
+    const method = {
+      start: "StartGroupMeeting",
+      join: "JoinGroupMeeting",
+      leave: "LeaveGroupMeeting",
+      stop: "StopGroupMeeting",
+    }[action];
+    setMeetingAction(action);
+    try {
+      if (action === "stop") {
+        await hubConnection.invoke(method, conversationId);
+        setGroupMeetings((current) => ({
+          ...current,
+          [conversationId]: null,
+        }));
+      } else {
+        const meeting = await hubConnection.invoke<GroupMeeting | null>(
+          method,
+          conversationId,
+        );
+        setGroupMeetings((current) => ({
+          ...current,
+          [conversationId]: meeting,
+        }));
+      }
+    } catch (meetingError) {
+      setError(
+        meetingError instanceof Error
+          ? meetingError.message
+          : "The meeting action could not be completed.",
+      );
+    } finally {
+      setMeetingAction(null);
+    }
+  }
+
+  async function joinMeetingInvite() {
+    if (!meetingInvite) return;
+    dismissedMeetingInvitesRef.current.add(meetingInvite.meetingId);
+    setMeetingMediaPreferences((current) => ({
+      ...current,
+      [meetingInvite.meetingId]: {
+        microphoneEnabled: meetingInviteMicEnabled,
+        cameraEnabled: meetingInviteCameraEnabled,
+      },
+    }));
+    const conversationId = meetingInvite.conversationId;
+    setMeetingInvite(null);
+    await changeGroupMeeting("join", conversationId);
+  }
+
+  function dismissMeetingInvite() {
+    if (!meetingInvite) return;
+    dismissedMeetingInvitesRef.current.add(meetingInvite.meetingId);
+    setMeetingInvite(null);
+  }
+
   async function addMembers(event: FormEvent) {
     event.preventDefault();
     if (!activeId || selectedUsers.length === 0) return;
@@ -3031,6 +3260,100 @@ function ChatApp({
           </div>
           {activeConversation?.type === "group" && (
             <div className="header-group-actions">
+              {activeGroupMeeting ? (
+                <>
+                  <span
+                    className="group-meeting-status"
+                    title={`Started by ${activeGroupMeeting.startedByDisplayName}`}
+                  >
+                    <Video size={14} />
+                    {activeGroupMeeting.participants.length} in meeting
+                  </span>
+                  {!isInActiveGroupMeeting && (
+                    <button
+                      className="icon-button header-group-action group-meeting-action"
+                      type="button"
+                      disabled={
+                        status !== "connected" ||
+                        meetingAction !== null ||
+                        directCall.call !== null ||
+                        (joinedGroupMeeting !== null &&
+                          joinedGroupMeeting.meetingId !==
+                            activeGroupMeeting.meetingId)
+                      }
+                      aria-label="Join group meeting"
+                      title="Join meeting"
+                      onClick={() => void changeGroupMeeting("join")}
+                    >
+                      {meetingAction === "join" ? (
+                        <LoaderCircle className="spin" size={15} />
+                      ) : (
+                        <Video size={15} />
+                      )}
+                      <span>Join</span>
+                    </button>
+                  )}
+                  {isInActiveGroupMeeting && (
+                    <button
+                      className="icon-button header-group-action group-meeting-action"
+                      type="button"
+                      disabled={
+                        status !== "connected" || meetingAction !== null
+                      }
+                      aria-label="Leave group meeting"
+                      title="Leave meeting"
+                      onClick={() => void changeGroupMeeting("leave")}
+                    >
+                      {meetingAction === "leave" ? (
+                        <LoaderCircle className="spin" size={15} />
+                      ) : (
+                        <PhoneOff size={15} />
+                      )}
+                      <span>Leave</span>
+                    </button>
+                  )}
+                  {isActiveGroupMeetingStarter && (
+                    <button
+                      className="icon-button header-group-action group-meeting-action stop-meeting-action"
+                      type="button"
+                      disabled={
+                        status !== "connected" || meetingAction !== null
+                      }
+                      aria-label="Stop group meeting"
+                      title="Stop meeting for everyone"
+                      onClick={() => void changeGroupMeeting("stop")}
+                    >
+                      {meetingAction === "stop" ? (
+                        <LoaderCircle className="spin" size={15} />
+                      ) : (
+                        <Square size={14} />
+                      )}
+                      <span>Stop</span>
+                    </button>
+                  )}
+                </>
+              ) : (
+                <button
+                  className="icon-button header-group-action group-meeting-action start-meeting-action"
+                  type="button"
+                  disabled={
+                    status !== "connected" ||
+                    meetingAction !== null ||
+                    directCall.call !== null ||
+                    joinedGroupMeeting !== null
+                  }
+                  aria-label="Start group meeting"
+                  title="Start meeting"
+                  onClick={() => void changeGroupMeeting("start")}
+                >
+                  {meetingAction === "start" ? (
+                    <LoaderCircle className="spin" size={15} />
+                  ) : (
+                    <Video size={15} />
+                  )}
+                  <span>Start meeting</span>
+                </button>
+              )}
               <button
                 className={`icon-button header-group-action mute-conversation-action ${
                   activeConversation.isMuted ? "active" : ""
@@ -3101,7 +3424,8 @@ function ChatApp({
                       disabled={
                         status !== "connected" ||
                         isDirectParticipantBlocked ||
-                        directCall.call !== null
+                        directCall.call !== null ||
+                        joinedGroupMeeting !== null
                       }
                       aria-label={`Start an audio call with ${directParticipantProfile.displayName}`}
                       title="Audio call"
@@ -3121,7 +3445,8 @@ function ChatApp({
                       disabled={
                         status !== "connected" ||
                         isDirectParticipantBlocked ||
-                        directCall.call !== null
+                        directCall.call !== null ||
+                        joinedGroupMeeting !== null
                       }
                       aria-label={`Start a video call with ${directParticipantProfile.displayName}`}
                       title="Video call"
@@ -4931,6 +5256,127 @@ function ChatApp({
           </div>
         </div>
       )}
+      {meetingInvite ? (
+        <aside
+          className="group-meeting-invite"
+          role="dialog"
+          aria-label={`Meeting invitation from ${meetingInvite.startedByDisplayName}`}
+          aria-live="polite"
+        >
+          <div className="group-meeting-invite-heading">
+            <div className="group-meeting-invite-icon">
+              <Video size={18} />
+            </div>
+            <div>
+              <strong>{meetingInvite.startedByDisplayName}</strong>
+              <span>
+                started a meeting in{" "}
+                {meetingInviteConversation?.title ?? "this group"}
+              </span>
+            </div>
+          </div>
+          <p>
+            {meetingInvite.participants.length} member
+            {meetingInvite.participants.length === 1 ? "" : "s"} joined
+          </p>
+          <div className="group-meeting-invite-media">
+            <button
+              type="button"
+              className={meetingInviteMicEnabled ? "" : "inactive"}
+              aria-label={
+                meetingInviteMicEnabled
+                  ? "Join with microphone off"
+                  : "Join with microphone on"
+              }
+              aria-pressed={!meetingInviteMicEnabled}
+              onClick={() =>
+                setMeetingInviteMicEnabled((current) => !current)
+              }
+            >
+              {meetingInviteMicEnabled ? (
+                <Mic size={18} />
+              ) : (
+                <MicOff size={18} />
+              )}
+              <span>
+                Microphone {meetingInviteMicEnabled ? "on" : "off"}
+              </span>
+            </button>
+            <button
+              type="button"
+              className={meetingInviteCameraEnabled ? "" : "inactive"}
+              aria-label={
+                meetingInviteCameraEnabled
+                  ? "Join with camera off"
+                  : "Join with camera on"
+              }
+              aria-pressed={!meetingInviteCameraEnabled}
+              onClick={() =>
+                setMeetingInviteCameraEnabled((current) => !current)
+              }
+            >
+              {meetingInviteCameraEnabled ? (
+                <Video size={18} />
+              ) : (
+                <VideoOff size={18} />
+              )}
+              <span>Camera {meetingInviteCameraEnabled ? "on" : "off"}</span>
+            </button>
+          </div>
+          <div className="group-meeting-invite-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={dismissMeetingInvite}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="meeting-invite-join"
+              disabled={
+                status !== "connected" ||
+                meetingAction !== null ||
+                directCall.call !== null ||
+                joinedGroupMeeting !== null
+              }
+              onClick={() => void joinMeetingInvite()}
+            >
+              {meetingAction === "join" ? "Joining..." : "Join meeting"}
+            </button>
+          </div>
+        </aside>
+      ) : null}
+      {joinedGroupMeeting ? (
+        <GroupMeetingOverlay
+          connection={hubConnection}
+          currentUser={user}
+          groupTitle={joinedGroupConversation?.title ?? "Group meeting"}
+          meeting={joinedGroupMeeting}
+          onLeave={() =>
+            void changeGroupMeeting(
+              "leave",
+              joinedGroupMeeting.conversationId,
+            )
+          }
+          onStop={() =>
+            void changeGroupMeeting(
+              "stop",
+              joinedGroupMeeting.conversationId,
+            )
+          }
+          onError={setError}
+          resolveAvatarUrl={avatarSource}
+          initialMicrophoneEnabled={
+            meetingMediaPreferences[joinedGroupMeeting.meetingId]
+              ?.microphoneEnabled ?? true
+          }
+          initialCameraEnabled={
+            meetingMediaPreferences[joinedGroupMeeting.meetingId]
+              ?.cameraEnabled ?? false
+          }
+        />
+      ) : null}
       <DirectCallOverlay {...directCall} />
     </main>
   );

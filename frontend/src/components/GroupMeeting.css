@@ -1,0 +1,295 @@
+.group-meeting-backdrop {
+  position: fixed;
+  z-index: 68;
+  inset: 0;
+  padding: 24px;
+  display: grid;
+  place-items: center;
+  background: rgba(7, 17, 19, 0.76);
+  backdrop-filter: blur(8px);
+}
+
+.group-meeting-stage {
+  position: relative;
+  width: min(1120px, 100%);
+  height: min(780px, calc(100vh - 48px));
+  min-height: min(620px, calc(100vh - 48px));
+  padding: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 18px;
+  color: white;
+  background:
+    radial-gradient(circle at top right, rgba(218, 116, 96, 0.28), transparent 40%),
+    #102a2f;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.38);
+}
+
+.group-meeting-stage > header {
+  text-align: center;
+}
+
+.group-meeting-stage > header div {
+  display: grid;
+  gap: 4px;
+}
+
+.group-meeting-stage > header strong {
+  font-size: 18px;
+}
+
+.group-meeting-stage > header span {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 11px;
+}
+
+.group-meeting-media {
+  min-height: 0;
+  display: grid;
+}
+
+.group-meeting-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-auto-rows: minmax(180px, 1fr);
+  gap: 12px;
+  overflow-y: auto;
+}
+
+.group-meeting-media.is-sharing {
+  grid-template-rows: 118px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.group-meeting-media.is-sharing .group-meeting-grid {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 220px));
+  grid-auto-rows: 118px;
+  justify-content: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.group-meeting-participant {
+  position: relative;
+  min-height: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 17px;
+  overflow: hidden;
+  background: #071719;
+}
+
+.group-meeting-participant video,
+.group-meeting-placeholder {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.group-meeting-participant video.local-meeting-video {
+  transform: scaleX(-1);
+}
+
+.group-meeting-placeholder {
+  display: grid;
+  place-items: center;
+  color: white;
+  background:
+    radial-gradient(circle at top right, rgba(218, 116, 96, 0.3), transparent 48%),
+    #19383d;
+  font-size: 32px;
+  font-weight: 800;
+}
+
+.group-meeting-placeholder img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.group-meeting-participant > span {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  max-width: calc(100% - 20px);
+  padding: 5px 9px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(4, 14, 16, 0.74);
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  backdrop-filter: blur(5px);
+}
+
+.meeting-microphone-status {
+  position: absolute;
+  z-index: 2;
+  top: 10px;
+  left: 10px;
+  min-height: 27px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #dff9ed;
+  background: rgba(26, 105, 75, 0.8);
+  font-weight: 700;
+  backdrop-filter: blur(5px);
+}
+
+.meeting-microphone-status.is-muted {
+  color: #ffd6ce;
+  background: rgba(158, 57, 52, 0.84);
+}
+
+.meeting-microphone-status small {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.group-meeting-shared-screen {
+  position: relative;
+  min-height: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 17px;
+  overflow: hidden;
+  background: #020708;
+}
+
+.group-meeting-shared-screen video,
+.group-meeting-screen-placeholder {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  object-fit: contain;
+}
+
+.group-meeting-screen-placeholder {
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 12px;
+}
+
+.group-meeting-shared-screen > span {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(4, 14, 16, 0.76);
+  font-size: 11px;
+  font-weight: 700;
+  backdrop-filter: blur(5px);
+}
+
+.maximize-meeting-stage,
+.maximize-meeting-screen {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  right: 12px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  color: white;
+  background: rgba(4, 14, 16, 0.72);
+  backdrop-filter: blur(5px);
+}
+
+.maximize-meeting-stage:hover,
+.maximize-meeting-screen:hover {
+  background: rgba(4, 14, 16, 0.9);
+}
+
+.group-meeting-stage:fullscreen {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  border: 0;
+  border-radius: 0;
+}
+
+.group-meeting-shared-screen:fullscreen {
+  border: 0;
+  border-radius: 0;
+}
+
+.group-meeting-controls {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
+.group-meeting-controls button {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  color: white;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+}
+
+.group-meeting-controls button:hover {
+  background: rgba(255, 255, 255, 0.24);
+  transform: translateY(-1px);
+}
+
+.group-meeting-controls button.inactive {
+  color: #ffd6ce;
+  background: rgba(218, 116, 96, 0.3);
+}
+
+.group-meeting-controls button.sharing-screen {
+  color: #dff9ed;
+  background: rgba(61, 155, 114, 0.52);
+}
+
+.group-meeting-controls button.leave-meeting,
+.group-meeting-controls button.stop-meeting {
+  background: #d85f57;
+}
+
+@media (max-width: 640px) {
+  .group-meeting-backdrop {
+    padding: 0;
+  }
+
+  .group-meeting-stage {
+    width: 100%;
+    height: 100dvh;
+    min-height: 100dvh;
+    padding: 18px;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .group-meeting-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: minmax(140px, 1fr);
+    gap: 8px;
+  }
+
+  .group-meeting-media.is-sharing {
+    grid-template-rows: 88px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .group-meeting-media.is-sharing .group-meeting-grid {
+    grid-template-columns: repeat(auto-fit, minmax(110px, 150px));
+    grid-auto-rows: 88px;
+  }
+}

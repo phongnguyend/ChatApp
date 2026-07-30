@@ -760,6 +760,155 @@
   opacity: 0.55;
 }
 
+.group-meeting-status {
+  min-height: 30px;
+  padding: 0 9px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #23725f;
+  background: #e4f2ec;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.header-group-action.group-meeting-action {
+  width: auto;
+  min-width: 34px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #276f60;
+  background: #e6f2ed;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.header-group-action.stop-meeting-action {
+  color: #a04438;
+  background: #f9e7e3;
+}
+
+.header-group-action.start-meeting-action {
+  color: white;
+  background: var(--coral);
+}
+
+.group-meeting-invite {
+  position: fixed;
+  z-index: 60;
+  right: 24px;
+  bottom: 24px;
+  width: min(360px, calc(100vw - 32px));
+  padding: 18px;
+  border: 1px solid #e4ddd3;
+  border-radius: 18px;
+  color: #253332;
+  background: rgba(255, 253, 248, 0.98);
+  box-shadow: 0 20px 55px rgba(20, 42, 43, 0.24);
+  backdrop-filter: blur(10px);
+}
+
+.group-meeting-invite-heading {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.group-meeting-invite-heading > div:last-child {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.group-meeting-invite-heading strong,
+.group-meeting-invite-heading span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-meeting-invite-heading strong {
+  font-size: 13px;
+}
+
+.group-meeting-invite-heading span,
+.group-meeting-invite > p {
+  color: #7f8580;
+  font-size: 11px;
+}
+
+.group-meeting-invite-icon {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  color: white;
+  background: var(--coral);
+}
+
+.group-meeting-invite > p {
+  margin: 13px 0 10px;
+}
+
+.group-meeting-invite-media {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.group-meeting-invite-media button {
+  min-height: 42px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: #276f60;
+  background: #e5f2ed;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.group-meeting-invite-media button.inactive {
+  color: #a04438;
+  background: #f9e7e3;
+}
+
+.group-meeting-invite-actions {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr 1.35fr;
+  gap: 8px;
+}
+
+.group-meeting-invite-actions button {
+  min-height: 40px;
+  margin: 0;
+  border-radius: 11px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.meeting-invite-join {
+  border: 0;
+  color: white;
+  background: var(--coral);
+}
+
+.meeting-invite-join:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .push-notification-button {
   flex: 0 0 auto;
   color: #676c67;
