@@ -1237,6 +1237,54 @@
   background: #e9e7e1;
 }
 
+.live-directions-state {
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: #727772;
+  font-size: 11px;
+  text-align: center;
+}
+
+.live-directions-map-shell {
+  position: relative;
+  padding: 0;
+  overflow: hidden;
+}
+
+.live-directions-map-shell .live-directions-map {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  aspect-ratio: auto;
+  border-radius: 0;
+}
+
+.live-directions-route-state {
+  position: absolute;
+  z-index: 2;
+  bottom: 10px;
+  left: 50%;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  padding: 6px 9px;
+  border-radius: 999px;
+  color: #505652;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 4px 14px rgba(28, 37, 34, 0.18);
+  font-size: 9px;
+  font-weight: 700;
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+.live-directions-route-state.error {
+  color: #93473b;
+  background: rgba(255, 243, 240, 0.96);
+}
+
 .conversation-location-meta {
   min-width: 0;
   padding: 11px;
@@ -1287,7 +1335,8 @@
 }
 
 .conversation-location-meta > a:hover,
-.conversation-location-meta > button:hover {
+.conversation-location-meta > button:hover,
+.conversation-location-meta > button[aria-pressed='true'] {
   color: var(--coral);
   background: #f9e9e4;
 }

@@ -15,6 +15,7 @@ import {
   Hash,
   Images,
   LoaderCircle,
+  LocateFixed,
   LogOut,
   MapPinned,
   Maximize2,
@@ -24,6 +25,7 @@ import {
   Navigation,
   Pencil,
   Plus,
+  Route,
   Send,
   Search,
   UserRoundPlus,
@@ -423,6 +425,193 @@ function LocationMessageMap({
   );
 }
 
+function LiveDirectionsMap({
+  destinationLatitude,
+  destinationLongitude,
+  onError,
+}: {
+  destinationLatitude: number;
+  destinationLongitude: number;
+  onError: (message: string) => void;
+}) {
+  const [currentPosition, setCurrentPosition] = useState<{
+    latitude: number;
+    longitude: number;
+    accuracyMeters: number | null;
+  } | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [routeCoordinates, setRouteCoordinates] = useState<
+    { latitude: number; longitude: number }[]
+  >([]);
+  const [routeStatus, setRouteStatus] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
+  const lastPositionUpdateAtRef = useRef(0);
+
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      const message = "Location services are not supported by this browser.";
+      setLocationError(message);
+      onError(message);
+      return;
+    }
+
+    const watchId = navigator.geolocation.watchPosition(
+      ({ coords }) => {
+        const now = Date.now();
+        if (now - lastPositionUpdateAtRef.current < 5_000) return;
+        lastPositionUpdateAtRef.current = now;
+        setLocationError(null);
+        setCurrentPosition({
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          accuracyMeters: Number.isFinite(coords.accuracy)
+            ? coords.accuracy
+            : null,
+        });
+      },
+      (error) => {
+        const message =
+          error.code === error.PERMISSION_DENIED
+            ? "Location permission was denied."
+            : "Your current location could not be determined.";
+        setLocationError(message);
+        onError(message);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15_000,
+        maximumAge: 10_000,
+      },
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [onError]);
+
+  useEffect(() => {
+    if (!currentPosition) return;
+
+    const controller = new AbortController();
+    const routeTimer = window.setTimeout(async () => {
+      setRouteStatus("loading");
+      const coordinates =
+        `${currentPosition.longitude.toFixed(6)},${currentPosition.latitude.toFixed(6)};` +
+        `${destinationLongitude.toFixed(6)},${destinationLatitude.toFixed(6)}`;
+      const parameters = new URLSearchParams({
+        geometries: "geojson",
+        overview: "full",
+        steps: "false",
+      });
+
+      try {
+        const response = await fetch(
+          `https://router.project-osrm.org/route/v1/driving/${coordinates}?${parameters.toString()}`,
+          { signal: controller.signal },
+        );
+        if (!response.ok) throw new Error("The routing service is unavailable.");
+
+        const result = (await response.json()) as {
+          code?: string;
+          message?: string;
+          routes?: {
+            geometry?: {
+              type?: string;
+              coordinates?: [number, number][];
+            };
+          }[];
+        };
+        const geometry = result.routes?.[0]?.geometry;
+        if (
+          result.code !== "Ok" ||
+          geometry?.type !== "LineString" ||
+          !geometry.coordinates ||
+          geometry.coordinates.length < 2
+        ) {
+          throw new Error(result.message ?? "No driving route was found.");
+        }
+
+        setRouteCoordinates(
+          geometry.coordinates.map(([longitude, latitude]) => ({
+            latitude,
+            longitude,
+          })),
+        );
+        setRouteStatus("ready");
+      } catch (requestError) {
+        if (
+          requestError instanceof DOMException &&
+          requestError.name === "AbortError"
+        ) {
+          return;
+        }
+        setRouteCoordinates([]);
+        setRouteStatus("error");
+        onError(
+          requestError instanceof Error
+            ? requestError.message
+            : "The driving route could not be calculated.",
+        );
+      }
+    }, 350);
+
+    return () => {
+      window.clearTimeout(routeTimer);
+      controller.abort();
+    };
+  }, [
+    currentPosition,
+    destinationLatitude,
+    destinationLongitude,
+    onError,
+  ]);
+
+  if (!currentPosition) {
+    return (
+      <div
+        className="conversation-location-map live-directions-state"
+        role="status"
+      >
+        {locationError ? (
+          <span>{locationError}</span>
+        ) : (
+          <>
+            <LoaderCircle className="spin" size={22} />
+            <span>Finding your current location...</span>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="conversation-location-map live-directions-map-shell">
+      <Suspense
+        fallback={<div className="live-directions-map map-loading" role="status" />}
+      >
+        <LiveLocationMap
+          latitude={currentPosition.latitude}
+          longitude={currentPosition.longitude}
+          accuracyMeters={currentPosition.accuracyMeters}
+          destination={{
+            latitude: destinationLatitude,
+            longitude: destinationLongitude,
+          }}
+          routeCoordinates={routeCoordinates}
+          followMarker={false}
+          className="live-directions-map"
+        />
+      </Suspense>
+      {routeStatus !== "ready" && (
+        <span className={`live-directions-route-state ${routeStatus}`}>
+          {routeStatus === "loading"
+            ? "Calculating driving route..."
+            : "Driving route unavailable"}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function LiveLocationMessageMap({
   location,
   isOwn,
@@ -764,6 +953,9 @@ function ChatApp({
     messageId: string;
     host: HTMLElement;
   } | null>(null);
+  const [liveDirectionsMessageId, setLiveDirectionsMessageId] = useState<
+    string | null
+  >(null);
   const [messagesByConversation, setMessagesByConversation] = useState<
     Record<string, Message[]>
   >({});
@@ -1661,6 +1853,7 @@ function ChatApp({
     setConversationTab("chat");
     setSelectedLocationIds([]);
     setMaximizedLocation(null);
+    setLiveDirectionsMessageId(null);
   }, [activeId]);
 
   useEffect(() => {
@@ -1673,7 +1866,10 @@ function ChatApp({
   }, [maximizedLocation]);
 
   useEffect(() => {
-    if (conversationTab !== "locations") setMaximizedLocation(null);
+    if (conversationTab !== "locations") {
+      setMaximizedLocation(null);
+      setLiveDirectionsMessageId(null);
+    }
   }, [conversationTab]);
 
   useEffect(() => {
@@ -1685,6 +1881,14 @@ function ChatApp({
     setMaximizedLocation((current) =>
       current &&
       activeLocationItems.some((item) => item.messageId === current.messageId)
+        ? current
+        : null,
+    );
+    setLiveDirectionsMessageId((current) =>
+      current &&
+      activeLocationItems.some(
+        (item) => item.messageId === current && !item.liveLocation,
+      )
         ? current
         : null,
     );
@@ -3471,6 +3675,9 @@ function ChatApp({
                       !isSelected && selectedLocationIds.length >= 2;
                     const isMaximized =
                       maximizedLocation?.messageId === messageId;
+                    const isShowingLiveDirections =
+                      !liveLocation &&
+                      liveDirectionsMessageId === messageId;
                     const card = (
                       <article
                         className={`conversation-location-card ${
@@ -3509,6 +3716,12 @@ function ChatApp({
                               className="conversation-location-map"
                             />
                           </Suspense>
+                        ) : isShowingLiveDirections ? (
+                          <LiveDirectionsMap
+                            destinationLatitude={location.latitude}
+                            destinationLongitude={location.longitude}
+                            onError={setError}
+                          />
                         ) : (
                           <iframe
                             className="conversation-location-map"
@@ -3564,20 +3777,60 @@ function ChatApp({
                               <Maximize2 size={16} />
                             )}
                           </button>
-                          <button
-                            type="button"
-                            aria-label="Get directions from your current location"
-                            title="Directions"
-                            onClick={() =>
-                              openOpenStreetMapDirections(
-                                location.latitude,
-                                location.longitude,
-                                setError,
-                              )
-                            }
-                          >
-                            <Navigation size={16} />
-                          </button>
+                          {liveLocation ? (
+                            <button
+                              type="button"
+                              aria-label="Get directions to live location"
+                              title="Directions"
+                              onClick={() =>
+                                openOpenStreetMapDirections(
+                                  location.latitude,
+                                  location.longitude,
+                                  setError,
+                                )
+                              }
+                            >
+                              <Navigation size={16} />
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                aria-label="View directions from your current location"
+                                title="View directions"
+                                onClick={() =>
+                                  openOpenStreetMapDirections(
+                                    location.latitude,
+                                    location.longitude,
+                                    setError,
+                                  )
+                                }
+                              >
+                                <Route size={16} />
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={
+                                  isShowingLiveDirections
+                                    ? "Stop live directions"
+                                    : "View live directions from your current location"
+                                }
+                                title={
+                                  isShowingLiveDirections
+                                    ? "Stop live directions"
+                                    : "View live directions"
+                                }
+                                aria-pressed={isShowingLiveDirections}
+                                onClick={() =>
+                                  setLiveDirectionsMessageId((current) =>
+                                    current === messageId ? null : messageId,
+                                  )
+                                }
+                              >
+                                <LocateFixed size={16} />
+                              </button>
+                            </>
+                          )}
                           <a
                             href={location.url}
                             target="_blank"
