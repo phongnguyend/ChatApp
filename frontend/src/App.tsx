@@ -1114,6 +1114,11 @@ function ChatApp({
   }, [directCallIsActive, endDirectCall, status]);
 
   const activeConversation = conversations.find((item) => item.id === activeId);
+  const groupConversationIdsKey = conversations
+    .filter((conversation) => conversation.type === "group")
+    .map((conversation) => conversation.id)
+    .sort()
+    .join(",");
   const activeGroupMeeting =
     activeConversation?.type === "group"
       ? (groupMeetings[activeConversation.id] ?? null)
@@ -1883,6 +1888,44 @@ function ChatApp({
     user.id,
     user.username,
   ]);
+
+  useEffect(() => {
+    if (
+      status !== "connected" ||
+      hubConnection?.state !== HubConnectionState.Connected ||
+      !groupConversationIdsKey
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const conversationIds = groupConversationIdsKey.split(",");
+    void Promise.all(
+      conversationIds.map(async (conversationId) => ({
+        conversationId,
+        meeting: await hubConnection.invoke<GroupMeeting | null>(
+          "GetGroupMeeting",
+          conversationId,
+        ),
+      })),
+    )
+      .then((results) => {
+        if (cancelled) return;
+        setGroupMeetings((current) => {
+          const next = { ...current };
+          for (const result of results) {
+            next[result.conversationId] = result.meeting;
+          }
+          return next;
+        });
+      })
+      .catch(() => {
+        // Real-time meeting events will continue keeping known state current.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [groupConversationIdsKey, hubConnection, status]);
 
   useEffect(() => {
     if (
@@ -3072,6 +3115,16 @@ function ChatApp({
                     )}
                   </span>
                   <span className="conversation-indicators">
+                    {conversation.type === "group" &&
+                      groupMeetings[conversation.id] && (
+                      <span
+                        className="active-conversation-call"
+                        aria-label="Active meeting"
+                        title="Active meeting"
+                      >
+                        <Video size={12} />
+                      </span>
+                    )}
                     {conversation.isMuted && (
                       <BellOff
                         className="conversation-muted-icon"

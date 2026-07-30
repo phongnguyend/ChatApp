@@ -442,6 +442,31 @@
   color: #728985;
 }
 
+.active-conversation-call {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  color: #bff1df;
+  background: rgba(61, 155, 114, 0.3);
+  box-shadow: 0 0 0 1px rgba(117, 211, 173, 0.12);
+}
+
+.active-conversation-call::after {
+  content: '';
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  top: -2px;
+  right: -2px;
+  border: 1px solid #173a35;
+  border-radius: 50%;
+  background: #73d5aa;
+}
+
 .conversation-actions {
   position: absolute;
   z-index: 5;

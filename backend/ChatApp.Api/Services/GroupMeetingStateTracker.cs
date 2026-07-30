@@ -5,7 +5,7 @@ public sealed class GroupMeetingStateTracker
     private readonly object _gate = new();
     private readonly Dictionary<Guid, MeetingSession> _meetings = [];
 
-    public MeetingSnapshot Start(
+    public MeetingStartChange Start(
         Guid conversationId,
         Guid userId,
         string displayName,
@@ -15,7 +15,7 @@ public sealed class GroupMeetingStateTracker
         {
             if (_meetings.TryGetValue(conversationId, out var existing))
             {
-                return Snapshot(existing);
+                return new MeetingStartChange(Snapshot(existing), false);
             }
 
             var now = DateTimeOffset.UtcNow;
@@ -28,7 +28,7 @@ public sealed class GroupMeetingStateTracker
             meeting.Participants[userId] =
                 new MeetingParticipant(userId, displayName, avatarUrl, now);
             _meetings[conversationId] = meeting;
-            return Snapshot(meeting);
+            return new MeetingStartChange(Snapshot(meeting), true);
         }
     }
 
@@ -55,7 +55,7 @@ public sealed class GroupMeetingStateTracker
         }
     }
 
-    public MeetingSnapshot Join(
+    public MeetingParticipantChange Join(
         Guid conversationId,
         Guid userId,
         string displayName,
@@ -68,27 +68,37 @@ public sealed class GroupMeetingStateTracker
                 throw new InvalidOperationException("The meeting has ended.");
             }
 
-            meeting.Participants.TryAdd(
+            var changed = meeting.Participants.TryAdd(
                 userId,
                 new MeetingParticipant(
                     userId,
                     displayName,
                     avatarUrl,
                     DateTimeOffset.UtcNow));
-            return Snapshot(meeting);
+            return new MeetingParticipantChange(
+                Snapshot(meeting),
+                changed,
+                false);
         }
     }
 
-    public MeetingSnapshot? Leave(Guid conversationId, Guid userId)
+    public MeetingParticipantChange Leave(Guid conversationId, Guid userId)
     {
         lock (_gate)
         {
             if (!_meetings.TryGetValue(conversationId, out var meeting))
             {
-                return null;
+                return new MeetingParticipantChange(null, false, false);
             }
 
-            meeting.Participants.Remove(userId);
+            var changed = meeting.Participants.Remove(userId);
+            if (!changed)
+            {
+                return new MeetingParticipantChange(
+                    Snapshot(meeting),
+                    false,
+                    false);
+            }
             if (meeting.ScreenSharingUserId == userId)
             {
                 meeting.ScreenSharingUserId = null;
@@ -96,9 +106,12 @@ public sealed class GroupMeetingStateTracker
             if (meeting.Participants.Count == 0)
             {
                 _meetings.Remove(conversationId);
-                return null;
+                return new MeetingParticipantChange(null, true, true);
             }
-            return Snapshot(meeting);
+            return new MeetingParticipantChange(
+                Snapshot(meeting),
+                true,
+                false);
         }
     }
 
@@ -192,13 +205,6 @@ public sealed class GroupMeetingStateTracker
             var changes = new List<MeetingChange>();
             foreach (var meeting in _meetings.Values.ToArray())
             {
-                if (meeting.StartedByUserId == userId)
-                {
-                    _meetings.Remove(meeting.ConversationId);
-                    changes.Add(new MeetingChange(meeting.ConversationId, null));
-                    continue;
-                }
-
                 if (meeting.Participants.Remove(userId))
                 {
                     if (meeting.ScreenSharingUserId == userId)
@@ -209,13 +215,17 @@ public sealed class GroupMeetingStateTracker
                     {
                         _meetings.Remove(meeting.ConversationId);
                         changes.Add(
-                            new MeetingChange(meeting.ConversationId, null));
+                            new MeetingChange(
+                                meeting.ConversationId,
+                                null,
+                                true));
                         continue;
                     }
                     changes.Add(
                         new MeetingChange(
                             meeting.ConversationId,
-                            Snapshot(meeting)));
+                            Snapshot(meeting),
+                            false));
                 }
             }
             return changes;
@@ -270,7 +280,17 @@ public sealed class GroupMeetingStateTracker
         Guid? PreviousOwnerUserId,
         MeetingSnapshot Meeting);
 
+    public sealed record MeetingStartChange(
+        MeetingSnapshot Meeting,
+        bool Created);
+
+    public sealed record MeetingParticipantChange(
+        MeetingSnapshot? Meeting,
+        bool Changed,
+        bool AutoStopped);
+
     public sealed record MeetingChange(
         Guid ConversationId,
-        MeetingSnapshot? Meeting);
+        MeetingSnapshot? Meeting,
+        bool AutoStopped);
 }

@@ -68,6 +68,19 @@ public sealed class ChatHub(
                                 change.Meeting is null
                                     ? null
                                     : ToDto(change.Meeting)));
+                    await SendMeetingSystemMessage(
+                        change.ConversationId,
+                        $"{session.DisplayName} left the meeting.",
+                        session.UserId,
+                        CancellationToken.None);
+                    if (change.AutoStopped)
+                    {
+                        await SendMeetingSystemMessage(
+                            change.ConversationId,
+                            "The meeting stopped automatically because the last participant left.",
+                            session.UserId,
+                            CancellationToken.None);
+                    }
                 }
             }
             var endedShares = calls.EndCallsForUser(session.UserId);
@@ -716,13 +729,20 @@ public sealed class ChatHub(
     {
         var session = GetSession();
         await EnsureGroupMembership(session.UserId, conversationId);
-        var meeting = meetings.Start(
+        var change = meetings.Start(
             conversationId,
             session.UserId,
             session.DisplayName,
             session.AvatarUrl);
-        var dto = ToDto(meeting);
+        var dto = ToDto(change.Meeting);
         await BroadcastMeeting(conversationId, dto);
+        if (change.Created)
+        {
+            await SendMeetingSystemMessage(
+                conversationId,
+                $"{session.DisplayName} started a meeting.",
+                session.UserId);
+        }
         return dto;
     }
 
@@ -730,10 +750,10 @@ public sealed class ChatHub(
     {
         var session = GetSession();
         await EnsureGroupMembership(session.UserId, conversationId);
-        GroupMeetingStateTracker.MeetingSnapshot meeting;
+        GroupMeetingStateTracker.MeetingParticipantChange change;
         try
         {
-            meeting = meetings.Join(
+            change = meetings.Join(
                 conversationId,
                 session.UserId,
                 session.DisplayName,
@@ -744,8 +764,17 @@ public sealed class ChatHub(
             throw new HubException(exception.Message);
         }
 
-        var dto = ToDto(meeting);
+        var dto = ToDto(
+            change.Meeting
+            ?? throw new HubException("The meeting has ended."));
         await BroadcastMeeting(conversationId, dto);
+        if (change.Changed)
+        {
+            await SendMeetingSystemMessage(
+                conversationId,
+                $"{session.DisplayName} joined the meeting.",
+                session.UserId);
+        }
         return dto;
     }
 
@@ -753,9 +782,23 @@ public sealed class ChatHub(
     {
         var session = GetSession();
         await EnsureGroupMembership(session.UserId, conversationId);
-        var meeting = meetings.Leave(conversationId, session.UserId);
-        var dto = meeting is null ? null : ToDto(meeting);
+        var change = meetings.Leave(conversationId, session.UserId);
+        var dto = change.Meeting is null ? null : ToDto(change.Meeting);
         await BroadcastMeeting(conversationId, dto);
+        if (change.Changed)
+        {
+            await SendMeetingSystemMessage(
+                conversationId,
+                $"{session.DisplayName} left the meeting.",
+                session.UserId);
+        }
+        if (change.AutoStopped)
+        {
+            await SendMeetingSystemMessage(
+                conversationId,
+                "The meeting stopped automatically because the last participant left.",
+                session.UserId);
+        }
         return dto;
     }
 
@@ -765,7 +808,10 @@ public sealed class ChatHub(
         await EnsureGroupMembership(session.UserId, conversationId);
         try
         {
-            meetings.Stop(conversationId, session.UserId);
+            if (!meetings.Stop(conversationId, session.UserId))
+            {
+                return;
+            }
         }
         catch (InvalidOperationException exception)
         {
@@ -773,6 +819,10 @@ public sealed class ChatHub(
         }
 
         await BroadcastMeeting(conversationId, null);
+        await SendMeetingSystemMessage(
+            conversationId,
+            $"{session.DisplayName} stopped the meeting.",
+            session.UserId);
     }
 
     public async Task SendGroupMeetingSignal(
@@ -941,6 +991,72 @@ public sealed class ChatHub(
             throw new HubException(
                 "Meetings are only available in group conversations.");
         }
+    }
+
+    private async Task SendMeetingSystemMessage(
+        Guid conversationId,
+        string content,
+        Guid? actorUserId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var transaction =
+            await db.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable,
+                cancellationToken);
+        var conversation = await db.Conversations.SingleAsync(
+            x => x.Id == conversationId,
+            cancellationToken);
+        var nextSequence = await db.Messages
+            .Where(x => x.ConversationId == conversationId)
+            .Select(x => (long?)x.SequenceNumber)
+            .MaxAsync(cancellationToken) ?? 0;
+        var now = DateTimeOffset.UtcNow;
+        var message = new ChatMessage
+        {
+            ConversationId = conversationId,
+            Conversation = conversation,
+            MessageType = "system",
+            Content = content,
+            SequenceNumber = nextSequence + 1,
+            CreatedAt = now
+        };
+
+        db.Messages.Add(message);
+        conversation.LastMessage = message;
+        conversation.LastMessageId = message.Id;
+        conversation.LastMessageAt = now;
+        conversation.UpdatedAt = now;
+
+        await db.ConversationMembers
+            .Where(member =>
+                member.ConversationId == conversationId &&
+                member.LeftAt == null &&
+                (actorUserId == null || member.UserId != actorUserId))
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(
+                    member => member.UnreadCount,
+                    member => member.UnreadCount + 1),
+                cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        await Clients.Group(ConversationGroup(conversationId)).SendAsync(
+            "MessageReceived",
+            new MessageDto(
+                message.Id,
+                conversationId,
+                null,
+                null,
+                null,
+                message.Content,
+                message.MessageType,
+                null,
+                message.SequenceNumber,
+                null,
+                message.CreatedAt,
+                null,
+                null),
+            cancellationToken);
     }
 
     private Task BroadcastMeeting(
