@@ -35,6 +35,7 @@ builder.Services.AddOptions<AzureBlobOptions>()
 builder.Services.Configure<AzureNotificationOptions>(
     builder.Configuration.GetSection(AzureNotificationOptions.SectionName));
 builder.Services.AddSingleton<PresenceTracker>();
+builder.Services.AddSingleton<CallStateTracker>();
 if (uploadStorageProvider.Equals(
     "AzureBlob",
     StringComparison.OrdinalIgnoreCase))

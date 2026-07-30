@@ -24,12 +24,14 @@ import {
   Minimize2,
   Navigation,
   Pencil,
+  Phone,
   Plus,
   Route,
   Send,
   Search,
   UserRoundPlus,
   Users,
+  Video,
   WifiOff,
   X,
 } from "lucide-react";
@@ -63,6 +65,10 @@ import { LiveLocationShareButton } from "./components/LiveLocationShareButton";
 import { ConversationActions } from "./components/ConversationActions";
 import { OnlineUserActions } from "./components/OnlineUserActions";
 import { PushNotificationButton } from "./components/PushNotificationButton";
+import {
+  DirectCallOverlay,
+  useDirectCall,
+} from "./components/DirectCall";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5045";
 const LIVE_CHAT_OFFLINE_ERROR =
@@ -967,6 +973,9 @@ function ChatApp({
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [error, setError] = useState("");
+  const [hubConnection, setHubConnection] = useState<HubConnection | null>(
+    null,
+  );
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [conversationDialog, setConversationDialog] = useState<
@@ -1039,6 +1048,21 @@ function ChatApp({
   const linkedConversationIdRef = useRef(
     new URLSearchParams(window.location.search).get("conversation"),
   );
+  const directCall = useDirectCall({
+    connection: hubConnection,
+    localUserId: user.id,
+    localDisplayName: user.displayName,
+    onError: setError,
+    resolveAvatarUrl: avatarSource,
+  });
+  const directCallIsActive = directCall.call !== null;
+  const endDirectCall = directCall.endCall;
+
+  useEffect(() => {
+    if (status === "offline" && directCallIsActive) {
+      void endDirectCall();
+    }
+  }, [directCallIsActive, endDirectCall, status]);
 
   const activeConversation = conversations.find((item) => item.id === activeId);
   const activeMessages = activeId
@@ -1727,12 +1751,14 @@ function ChatApp({
     });
 
     connectionRef.current = connection;
+    setHubConnection(connection);
     void startConnection();
 
     return () => {
       disposed = true;
       if (retryTimer !== null) window.clearTimeout(retryTimer);
       connectionRef.current = null;
+      setHubConnection(null);
       void connection.stop();
     };
   }, [
@@ -3066,6 +3092,51 @@ function ChatApp({
           )}
           {activeConversation?.type === "direct" && (
             <div className="header-group-actions">
+              {directParticipantProfile &&
+                directParticipantProfile.id !== user.id && (
+                  <>
+                    <button
+                      className="icon-button header-group-action"
+                      type="button"
+                      disabled={
+                        status !== "connected" ||
+                        isDirectParticipantBlocked ||
+                        directCall.call !== null
+                      }
+                      aria-label={`Start an audio call with ${directParticipantProfile.displayName}`}
+                      title="Audio call"
+                      onClick={() =>
+                        void directCall.startCall(
+                          activeConversation.id,
+                          directParticipantProfile,
+                          false,
+                        )
+                      }
+                    >
+                      <Phone size={16} />
+                    </button>
+                    <button
+                      className="icon-button header-group-action"
+                      type="button"
+                      disabled={
+                        status !== "connected" ||
+                        isDirectParticipantBlocked ||
+                        directCall.call !== null
+                      }
+                      aria-label={`Start a video call with ${directParticipantProfile.displayName}`}
+                      title="Video call"
+                      onClick={() =>
+                        void directCall.startCall(
+                          activeConversation.id,
+                          directParticipantProfile,
+                          true,
+                        )
+                      }
+                    >
+                      <Video size={17} />
+                    </button>
+                  </>
+                )}
               <button
                 className={`icon-button header-group-action mute-conversation-action ${
                   activeConversation.isMuted ? "active" : ""
@@ -4860,6 +4931,7 @@ function ChatApp({
           </div>
         </div>
       )}
+      <DirectCallOverlay {...directCall} />
     </main>
   );
 }

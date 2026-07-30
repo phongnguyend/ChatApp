@@ -169,3 +169,73 @@ public sealed record LiveLocationStoppedDto(
     DateTimeOffset StoppedAt);
 
 public sealed record TypingDto(Guid ConversationId, string Username, bool IsTyping);
+
+public sealed record StartCallRequest(
+    Guid CallId,
+    Guid ConversationId,
+    Guid TargetUserId,
+    bool HasVideo);
+
+public sealed record RespondToCallRequest(
+    Guid CallId,
+    Guid ConversationId,
+    Guid InitiatorUserId,
+    bool Accepted);
+
+public sealed record SendCallSignalRequest(
+    Guid CallId,
+    Guid ConversationId,
+    Guid TargetUserId,
+    string SignalType,
+    string Payload);
+
+public sealed record EndCallRequest(
+    Guid CallId,
+    Guid ConversationId,
+    Guid TargetUserId,
+    string Reason);
+
+public sealed record IncomingCallDto(
+    Guid CallId,
+    Guid ConversationId,
+    Guid InitiatorUserId,
+    string InitiatorUsername,
+    string InitiatorDisplayName,
+    string? InitiatorAvatarUrl,
+    bool HasVideo);
+
+public sealed record CallResponseDto(
+    Guid CallId,
+    Guid ConversationId,
+    Guid UserId,
+    string DisplayName,
+    bool Accepted);
+
+public sealed record CallSignalDto(
+    Guid CallId,
+    Guid ConversationId,
+    Guid SenderUserId,
+    string SignalType,
+    string Payload);
+
+public sealed record CallEndedDto(
+    Guid CallId,
+    Guid ConversationId,
+    Guid UserId,
+    string Reason);
+
+public sealed record CallScreenShareRequest(
+    Guid CallId,
+    Guid ConversationId,
+    Guid TargetUserId);
+
+public sealed record CallScreenShareChangedDto(
+    Guid CallId,
+    Guid ConversationId,
+    Guid UserId,
+    bool IsSharing);
+
+public sealed record CallScreenShareTakenOverDto(
+    Guid CallId,
+    Guid ConversationId,
+    Guid NewOwnerUserId);

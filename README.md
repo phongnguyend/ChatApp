@@ -12,7 +12,9 @@ multi-person group creation, live group member management, user discovery, onlin
 presence, typing indicators, unread counts, profile and group avatar uploads,
 camera capture, current-location sharing with confirmation previews, start/stop
 live-location sharing with an updating Leaflet map, automatic
-SignalR reconnection, and responsive desktop/mobile layouts. Browser push
+SignalR reconnection, direct audio/video calls with browser WebRTC media and
+SignalR signaling and in-call screen sharing, and responsive desktop/mobile
+layouts. Browser push
 notifications are delivered through Azure Notification
 Hubs, the Azure browser-push service used alongside Azure Communication Services.
 Uploaded avatars and message attachments use the configured upload storage

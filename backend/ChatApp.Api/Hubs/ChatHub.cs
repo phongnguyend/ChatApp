@@ -11,6 +11,7 @@ namespace ChatApp.Api.Hubs;
 public sealed class ChatHub(
     ChatDbContext db,
     PresenceTracker presence,
+    CallStateTracker calls,
     AzurePushNotificationService pushNotifications,
     ILogger<ChatHub> logger) : Hub
 {
@@ -54,6 +55,23 @@ public sealed class ChatHub(
         var session = presence.Disconnect(Context.ConnectionId);
         if (session is not null)
         {
+            var endedShares = calls.EndCallsForUser(session.UserId);
+            foreach (var share in endedShares)
+            {
+                var remainingUserId =
+                    share.OwnerUserId == session.UserId
+                        ? share.PeerUserId
+                        : share.OwnerUserId;
+                await Clients.Clients(
+                        presence.ConnectionIdsForUser(remainingUserId))
+                    .SendAsync(
+                        "CallScreenShareChanged",
+                        new CallScreenShareChangedDto(
+                            share.CallId,
+                            share.ConversationId,
+                            share.OwnerUserId,
+                            false));
+            }
             var user = await db.Users.FindAsync([session.UserId]);
             if (user is not null)
             {
@@ -484,6 +502,174 @@ public sealed class ChatHub(
                 new TypingDto(conversationId, session.Username, isTyping));
     }
 
+    public async Task StartCall(StartCallRequest request)
+    {
+        var session = GetSession();
+        if (request.CallId == Guid.Empty)
+        {
+            throw new HubException("Choose a valid call.");
+        }
+
+        var target = await EnsureDirectPeer(
+            session.UserId,
+            request.ConversationId,
+            request.TargetUserId);
+        if (await DirectMessagingPolicy.IsBlockedAsync(
+                db,
+                session.UserId,
+                request.ConversationId,
+                Context.ConnectionAborted))
+        {
+            throw new HubException(
+                "Calls cannot be started while either user has blocked the other.");
+        }
+
+        var targetConnections = presence.ConnectionIdsForUser(target.Id);
+        if (targetConnections.Count == 0)
+        {
+            throw new HubException($"{target.DisplayName} is not online.");
+        }
+
+        await Clients.Clients(targetConnections).SendAsync(
+            "CallIncoming",
+            new IncomingCallDto(
+                request.CallId,
+                request.ConversationId,
+                session.UserId,
+                session.Username,
+                session.DisplayName,
+                session.AvatarUrl,
+                request.HasVideo),
+            Context.ConnectionAborted);
+    }
+
+    public async Task RespondToCall(RespondToCallRequest request)
+    {
+        var session = GetSession();
+        var initiator = await EnsureDirectPeer(
+            session.UserId,
+            request.ConversationId,
+            request.InitiatorUserId);
+
+        await Clients.Clients(presence.ConnectionIdsForUser(initiator.Id)).SendAsync(
+            request.Accepted ? "CallAccepted" : "CallDeclined",
+            new CallResponseDto(
+                request.CallId,
+                request.ConversationId,
+                session.UserId,
+                session.DisplayName,
+                request.Accepted),
+            Context.ConnectionAborted);
+    }
+
+    public async Task SendCallSignal(SendCallSignalRequest request)
+    {
+        var session = GetSession();
+        var signalType = request.SignalType.Trim().ToLowerInvariant();
+        if (signalType is not ("offer" or "answer" or "ice") ||
+            string.IsNullOrWhiteSpace(request.Payload) ||
+            request.Payload.Length > 24_000)
+        {
+            throw new HubException("Choose a valid call signal.");
+        }
+
+        var target = await EnsureDirectPeer(
+            session.UserId,
+            request.ConversationId,
+            request.TargetUserId);
+        await Clients.Clients(presence.ConnectionIdsForUser(target.Id)).SendAsync(
+            "CallSignal",
+            new CallSignalDto(
+                request.CallId,
+                request.ConversationId,
+                session.UserId,
+                signalType,
+                request.Payload),
+            Context.ConnectionAborted);
+    }
+
+    public async Task EndCall(EndCallRequest request)
+    {
+        var session = GetSession();
+        var target = await EnsureDirectPeer(
+            session.UserId,
+            request.ConversationId,
+            request.TargetUserId);
+        var reason = request.Reason.Trim().ToLowerInvariant();
+        if (reason is not ("ended" or "cancelled" or "failed"))
+        {
+            reason = "ended";
+        }
+
+        calls.EndCall(request.CallId);
+        await Clients.Clients(presence.ConnectionIdsForUser(target.Id)).SendAsync(
+            "CallEnded",
+            new CallEndedDto(
+                request.CallId,
+                request.ConversationId,
+                session.UserId,
+                reason),
+            Context.ConnectionAborted);
+    }
+
+    public async Task StartScreenShare(CallScreenShareRequest request)
+    {
+        var session = GetSession();
+        var target = await EnsureDirectPeer(
+            session.UserId,
+            request.ConversationId,
+            request.TargetUserId);
+        var previous = calls.StartScreenShare(
+            request.CallId,
+            request.ConversationId,
+            session.UserId,
+            target.Id);
+
+        if (previous is not null)
+        {
+            await Clients.Clients(
+                    presence.ConnectionIdsForUser(previous.OwnerUserId))
+                .SendAsync(
+                    "CallScreenShareTakenOver",
+                    new CallScreenShareTakenOverDto(
+                        request.CallId,
+                        request.ConversationId,
+                        session.UserId),
+                    Context.ConnectionAborted);
+        }
+
+        await Clients.Clients(presence.ConnectionIdsForUser(target.Id)).SendAsync(
+            "CallScreenShareChanged",
+            new CallScreenShareChangedDto(
+                request.CallId,
+                request.ConversationId,
+                session.UserId,
+                true),
+            Context.ConnectionAborted);
+    }
+
+    public async Task StopScreenShare(CallScreenShareRequest request)
+    {
+        var session = GetSession();
+        var target = await EnsureDirectPeer(
+            session.UserId,
+            request.ConversationId,
+            request.TargetUserId);
+        if (!calls.StopScreenShare(request.CallId, session.UserId))
+        {
+            return;
+        }
+
+        await Clients.Clients(presence.ConnectionIdsForUser(target.Id)).SendAsync(
+            "CallScreenShareChanged",
+            new CallScreenShareChangedDto(
+                request.CallId,
+                request.ConversationId,
+                session.UserId,
+                false),
+            Context.ConnectionAborted);
+    }
+
     public async Task MarkRead(Guid conversationId, long sequenceNumber)
     {
         var session = GetSession();
@@ -519,6 +705,36 @@ public sealed class ChatHub(
         {
             throw new HubException("You are not a member of this conversation.");
         }
+    }
+
+    private async Task<ChatUser> EnsureDirectPeer(
+        Guid userId,
+        Guid conversationId,
+        Guid targetUserId)
+    {
+        if (targetUserId == userId)
+        {
+            throw new HubException("Calls require another participant.");
+        }
+
+        var isMember = await db.ConversationMembers.AnyAsync(x =>
+            x.ConversationId == conversationId &&
+            x.UserId == userId &&
+            x.LeftAt == null &&
+            x.Conversation.Type == "direct");
+        if (!isMember)
+        {
+            throw new HubException("Calls are only available in direct conversations.");
+        }
+
+        return await db.ConversationMembers
+            .Where(x =>
+                x.ConversationId == conversationId &&
+                x.UserId == targetUserId &&
+                x.LeftAt == null)
+            .Select(x => x.User)
+            .SingleOrDefaultAsync()
+            ?? throw new HubException("The call participant was not found.");
     }
 
     private async Task<ChatUser?> FindUser(string username)
