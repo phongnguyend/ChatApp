@@ -437,7 +437,6 @@ function LiveLocationMessageMap({
   onError: (message: string) => void;
 }) {
   const [now, setNow] = useState(() => Date.now());
-  const [maximizedIn, setMaximizedIn] = useState<HTMLElement | null>(null);
   const isActive =
     location.isActive && new Date(location.expiresAt).getTime() > now;
   const mapLocation = sharedLocation(location.latitude, location.longitude);
@@ -448,26 +447,13 @@ function LiveLocationMessageMap({
     return () => window.clearInterval(timer);
   }, [isActive]);
 
-  useEffect(() => {
-    if (!maximizedIn) return;
-    const collapseOnEscape = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") setMaximizedIn(null);
-    };
-    window.addEventListener("keydown", collapseOnEscape);
-    return () => window.removeEventListener("keydown", collapseOnEscape);
-  }, [maximizedIn]);
-
   const remainingMinutes = Math.max(
     0,
     Math.ceil((new Date(location.expiresAt).getTime() - now) / 60_000),
   );
 
-  const card = (
-    <div
-      className={`live-location-message-card ${
-        maximizedIn ? "maximized" : ""
-      }`.trim()}
-    >
+  return (
+    <div className="live-location-message-card">
       <Suspense
         fallback={<div className="live-location-message-map map-loading" />}
       >
@@ -488,21 +474,6 @@ function LiveLocationMessageMap({
               : `Last updated ${formatAttachmentDate(location.updatedAt)}`}
           </small>
         </span>
-        <button
-          type="button"
-          aria-label={
-            maximizedIn ? "Restore live location map" : "Maximize live location map"
-          }
-          title={maximizedIn ? "Restore map" : "Maximize map"}
-          aria-pressed={Boolean(maximizedIn)}
-          onClick={(event) => {
-            const conversationPanel =
-              event.currentTarget.closest<HTMLElement>(".conversation-panel");
-            setMaximizedIn(maximizedIn ? null : conversationPanel);
-          }}
-        >
-          {maximizedIn ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-        </button>
         {isActive && mapLocation && (
           <>
             <button
@@ -543,8 +514,6 @@ function LiveLocationMessageMap({
       </div>
     </div>
   );
-
-  return maximizedIn ? createPortal(card, maximizedIn) : card;
 }
 
 function messagePreview(message: Message) {
@@ -791,6 +760,10 @@ function ChatApp({
   const [conversationTab, setConversationTab] =
     useState<ConversationTab>("chat");
   const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>([]);
+  const [maximizedLocation, setMaximizedLocation] = useState<{
+    messageId: string;
+    host: HTMLElement;
+  } | null>(null);
   const [messagesByConversation, setMessagesByConversation] = useState<
     Record<string, Message[]>
   >({});
@@ -920,15 +893,26 @@ function ChatApp({
   const activeLocationItems = useMemo(
     () =>
       activeMessages.flatMap((message) => {
-        if (message.deletedAt || message.messageType !== "location") return [];
+        if (
+          message.deletedAt ||
+          (message.messageType !== "location" &&
+            message.messageType !== "live_location")
+        ) {
+          return [];
+        }
+        const liveLocation =
+          message.messageType === "live_location"
+            ? (message.liveLocation ?? null)
+            : null;
         const location = sharedLocation(
-          message.locationLatitude,
-          message.locationLongitude,
+          liveLocation?.latitude ?? message.locationLatitude,
+          liveLocation?.longitude ?? message.locationLongitude,
         );
         return location
           ? [
               {
                 location,
+                liveLocation,
                 messageId: message.id,
                 senderName:
                   message.senderUserId === user.id
@@ -1676,13 +1660,33 @@ function ChatApp({
     setReplyingToMessageId(null);
     setConversationTab("chat");
     setSelectedLocationIds([]);
+    setMaximizedLocation(null);
   }, [activeId]);
+
+  useEffect(() => {
+    if (!maximizedLocation) return;
+    const restoreOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setMaximizedLocation(null);
+    };
+    window.addEventListener("keydown", restoreOnEscape);
+    return () => window.removeEventListener("keydown", restoreOnEscape);
+  }, [maximizedLocation]);
+
+  useEffect(() => {
+    if (conversationTab !== "locations") setMaximizedLocation(null);
+  }, [conversationTab]);
 
   useEffect(() => {
     setSelectedLocationIds((current) =>
       current.filter((messageId) =>
         activeLocationItems.some((item) => item.messageId === messageId),
       ),
+    );
+    setMaximizedLocation((current) =>
+      current &&
+      activeLocationItems.some((item) => item.messageId === current.messageId)
+        ? current
+        : null,
     );
   }, [activeLocationItems]);
 
@@ -3454,77 +3458,141 @@ function ChatApp({
             ) : (
               <div className="conversation-location-grid">
                 {activeLocationItems.map(
-                  ({ location, messageId, senderName, createdAt }) => {
+                  ({
+                    location,
+                    liveLocation,
+                    messageId,
+                    senderName,
+                    createdAt,
+                  }) => {
                     const isSelected =
                       selectedLocationIds.includes(messageId);
                     const isSelectionDisabled =
                       !isSelected && selectedLocationIds.length >= 2;
-                    return (
-                    <article
-                      className={`conversation-location-card ${
-                        isSelected ? "selected" : ""
-                      }`}
-                      key={messageId}
-                    >
-                      <label className="location-card-selector">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          disabled={isSelectionDisabled}
-                          aria-label={`Select location at ${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`}
-                          onChange={() =>
-                            setSelectedLocationIds((current) =>
-                              current.includes(messageId)
-                                ? current.filter((id) => id !== messageId)
-                                : current.length < 2
-                                  ? [...current, messageId]
-                                  : current,
-                            )
-                          }
-                        />
-                      </label>
-                      <iframe
-                        className="conversation-location-map"
-                        src={location.previewUrl}
-                        title={`Location shared by ${senderName}`}
-                        loading="lazy"
-                      />
-                      <div className="conversation-location-meta">
-                        <span>
-                          <strong>
-                            {location.latitude.toFixed(5)},{" "}
-                            {location.longitude.toFixed(5)}
-                          </strong>
-                          <small>
-                            {senderName} / {formatAttachmentDate(createdAt)}
-                          </small>
-                        </span>
-                        <button
-                          type="button"
-                          aria-label="Get directions from your current location"
-                          title="Directions"
-                          onClick={() =>
-                            openOpenStreetMapDirections(
-                              location.latitude,
-                              location.longitude,
-                              setError,
-                            )
-                          }
-                        >
-                          <Navigation size={16} />
-                        </button>
-                        <a
-                          href={location.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label="Open location in OpenStreetMap"
-                          title="Open location"
-                        >
-                          <ExternalLink size={16} />
-                        </a>
-                      </div>
-                    </article>
+                    const isMaximized =
+                      maximizedLocation?.messageId === messageId;
+                    const card = (
+                      <article
+                        className={`conversation-location-card ${
+                          isSelected ? "selected" : ""
+                        } ${isMaximized ? "maximized" : ""}`.trim()}
+                        key={messageId}
+                      >
+                        <label className="location-card-selector">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            disabled={isSelectionDisabled}
+                            aria-label={`Select location at ${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`}
+                            onChange={() =>
+                              setSelectedLocationIds((current) =>
+                                current.includes(messageId)
+                                  ? current.filter((id) => id !== messageId)
+                                  : current.length < 2
+                                    ? [...current, messageId]
+                                    : current,
+                              )
+                            }
+                          />
+                        </label>
+                        {liveLocation ? (
+                          <Suspense
+                            fallback={
+                              <div className="conversation-location-map map-loading" />
+                            }
+                          >
+                            <LiveLocationMap
+                              latitude={liveLocation.latitude}
+                              longitude={liveLocation.longitude}
+                              accuracyMeters={liveLocation.accuracyMeters}
+                              followMarker
+                              className="conversation-location-map"
+                            />
+                          </Suspense>
+                        ) : (
+                          <iframe
+                            className="conversation-location-map"
+                            src={location.previewUrl}
+                            title={`Location shared by ${senderName}`}
+                            loading="lazy"
+                          />
+                        )}
+                        <div className="conversation-location-meta">
+                          <span>
+                            <strong>
+                              {liveLocation
+                                ? liveLocation.isActive
+                                  ? "Live location"
+                                  : "Live location ended"
+                                : `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`}
+                            </strong>
+                            <small>
+                              {senderName} /{" "}
+                              {formatAttachmentDate(
+                                liveLocation?.updatedAt ?? createdAt,
+                              )}
+                            </small>
+                          </span>
+                          <button
+                            type="button"
+                            aria-label={
+                              isMaximized
+                                ? `Restore ${liveLocation ? "live location" : "location"} map`
+                                : `Maximize ${liveLocation ? "live location" : "location"} map`
+                            }
+                            title={
+                              isMaximized ? "Restore map" : "Maximize map"
+                            }
+                            aria-pressed={isMaximized}
+                            onClick={(event) => {
+                              if (isMaximized) {
+                                setMaximizedLocation(null);
+                                return;
+                              }
+                              const host =
+                                event.currentTarget.closest<HTMLElement>(
+                                  ".conversation-panel",
+                                );
+                              if (host) {
+                                setMaximizedLocation({ messageId, host });
+                              }
+                            }}
+                          >
+                            {isMaximized ? (
+                              <Minimize2 size={16} />
+                            ) : (
+                              <Maximize2 size={16} />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Get directions from your current location"
+                            title="Directions"
+                            onClick={() =>
+                              openOpenStreetMapDirections(
+                                location.latitude,
+                                location.longitude,
+                                setError,
+                              )
+                            }
+                          >
+                            <Navigation size={16} />
+                          </button>
+                          <a
+                            href={location.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label="Open location in OpenStreetMap"
+                            title="Open location"
+                          >
+                            <ExternalLink size={16} />
+                          </a>
+                        </div>
+                      </article>
                     );
+                    return isMaximized && maximizedLocation
+                      ? createPortal(card, maximizedLocation.host, messageId)
+                      : card;
                   },
                 )}
               </div>

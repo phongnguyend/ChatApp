@@ -43,9 +43,11 @@ export function LiveLocationMap({
     if (!container || mapRef.current) return;
 
     const map = L.map(container, {
-      zoomControl: true,
+      zoomControl: false,
       attributionControl: true,
     }).setView(initialPositionRef.current, zoom);
+
+    L.control.zoom({ position: "topright" }).addTo(map);
 
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,

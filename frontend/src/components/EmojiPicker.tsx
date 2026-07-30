@@ -1,5 +1,6 @@
 import { Smile, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import './EmojiPicker.css'
 
 type EmojiPickerProps = {
   disabled?: boolean

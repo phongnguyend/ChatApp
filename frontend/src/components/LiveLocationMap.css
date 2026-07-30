@@ -1,10 +1,17 @@
 .live-location-map {
+  isolation: isolate;
   width: 100%;
   min-height: 240px;
   aspect-ratio: 16 / 9;
   overflow: hidden;
   border-radius: 14px;
   background: #e9e7e1;
+}
+
+.live-location-map.conversation-location-map {
+  min-height: 0;
+  aspect-ratio: 16 / 10;
+  border-radius: 0;
 }
 
 .live-location-marker-host {

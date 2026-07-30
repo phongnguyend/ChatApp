@@ -1178,6 +1178,32 @@
   box-shadow: 0 0 0 2px rgba(218, 116, 96, 0.16);
 }
 
+.conversation-location-card.maximized {
+  position: relative;
+  z-index: 11;
+  grid-area: messages;
+  min-width: 0;
+  min-height: 0;
+  align-self: stretch;
+  justify-self: stretch;
+  border: 0;
+  border-radius: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  box-shadow: none;
+}
+
+.conversation-location-card.maximized .conversation-location-map {
+  height: 100%;
+  min-height: 0;
+  aspect-ratio: auto;
+}
+
+.conversation-location-card.maximized .conversation-location-meta {
+  padding: 12px 18px;
+  border-top: 1px solid #dedad1;
+}
+
 .location-card-selector {
   position: absolute;
   z-index: 2;
@@ -1746,31 +1772,9 @@
   box-shadow: 0 6px 18px rgba(43, 49, 45, 0.06);
 }
 
-.live-location-message-card.maximized {
-  position: relative;
-  z-index: 11;
-  grid-area: messages;
-  min-width: 0;
-  min-height: 0;
-  width: auto;
-  align-self: stretch;
-  justify-self: stretch;
-  border: 0;
-  border-radius: 0;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  box-shadow: none;
-}
-
 .live-location-message-map {
   min-height: 220px;
   border-radius: 0;
-}
-
-.live-location-message-card.maximized .live-location-message-map {
-  height: 100%;
-  min-height: 0;
-  aspect-ratio: auto;
 }
 
 .live-location-message-meta {
@@ -1779,11 +1783,6 @@
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.live-location-message-card.maximized .live-location-message-meta {
-  padding: 12px 18px;
-  border-top: 1px solid #dedad1;
 }
 
 .live-location-message-meta > span {
@@ -2173,129 +2172,6 @@
 .composer-reply-preview > button:hover {
   color: #9f493c;
   background: #f4dfda;
-}
-
-.emoji-picker-control {
-  display: contents;
-}
-
-.emoji-picker-button {
-  position: absolute;
-  right: 50px;
-  bottom: 20px;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border: 0;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  color: #777b76;
-  background: #f1efe9;
-}
-
-.emoji-picker-button:hover:not(:disabled),
-.emoji-picker-button[aria-expanded='true'] {
-  color: var(--coral);
-  background: #f9e9e4;
-}
-
-.emoji-picker-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.emoji-picker-popover {
-  position: absolute;
-  z-index: 8;
-  right: 8px;
-  bottom: 64px;
-  width: min(304px, calc(100vw - 44px));
-  padding: 12px;
-  border: 1px solid #dedad1;
-  border-radius: 16px;
-  color: #454a46;
-  background: white;
-  box-shadow: 0 18px 48px rgba(28, 37, 34, 0.2);
-}
-
-.emoji-picker-heading {
-  margin-bottom: 9px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.emoji-picker-heading strong {
-  font-size: 12px;
-}
-
-.emoji-picker-heading button {
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 0;
-  border-radius: 7px;
-  display: grid;
-  place-items: center;
-  color: #858984;
-  background: transparent;
-}
-
-.emoji-picker-heading button:hover {
-  color: #93473b;
-  background: #f7e7e3;
-}
-
-.emoji-group-tabs {
-  margin-bottom: 8px;
-  padding: 3px;
-  border-radius: 10px;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 3px;
-  background: #f1efe9;
-}
-
-.emoji-group-tabs button {
-  height: 31px;
-  padding: 0;
-  border: 0;
-  border-radius: 7px;
-  display: grid;
-  place-items: center;
-  background: transparent;
-  font-size: 15px;
-}
-
-.emoji-group-tabs button:hover,
-.emoji-group-tabs button.active {
-  background: white;
-  box-shadow: 0 2px 7px rgba(35, 42, 39, 0.08);
-}
-
-.emoji-grid {
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 2px;
-}
-
-.emoji-grid button {
-  aspect-ratio: 1;
-  padding: 0;
-  border: 0;
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  background: transparent;
-  font-size: 19px;
-}
-
-.emoji-grid button:hover,
-.emoji-grid button:focus-visible {
-  outline: none;
-  background: #f8e9e5;
-  transform: scale(1.08);
 }
 
 .attachment-button {
@@ -3710,7 +3586,6 @@ input.visually-hidden {
   .attachment-audio-button,
   .location-button,
   .live-location-button,
-  .emoji-picker-button,
   .send-button {
     bottom: 10px;
   }
@@ -3727,10 +3602,6 @@ input.visually-hidden {
     height: 230px;
   }
 
-  .emoji-picker-popover {
-    right: 0;
-    bottom: 58px;
-  }
 }
 
 @media (max-width: 360px) {
