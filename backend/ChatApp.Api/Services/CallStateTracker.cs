@@ -52,6 +52,15 @@ public sealed class CallStateTracker
         }
     }
 
+    public bool HasActiveCallForUser(Guid userId)
+    {
+        lock (_sync)
+        {
+            return _calls.Values.Any(call =>
+                call.InitiatorUserId == userId || call.PeerUserId == userId);
+        }
+    }
+
     public ScreenShareSession? StartScreenShare(
         Guid callId,
         Guid conversationId,

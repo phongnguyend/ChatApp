@@ -604,6 +604,12 @@ public sealed class ChatHub(
             throw new HubException(
                 "Calls cannot be started while either user has blocked the other.");
         }
+        if (meetings.HasParticipant(session.UserId) ||
+            meetings.HasParticipant(target.Id))
+        {
+            throw new HubException(
+                "A direct call cannot be started while either person is in a meeting.");
+        }
 
         var targetConnections = presence.ConnectionIdsForUser(target.Id);
         if (targetConnections.Count == 0)
@@ -786,7 +792,7 @@ public sealed class ChatHub(
     public async Task<GroupMeetingDto?> GetGroupMeeting(Guid conversationId)
     {
         var session = GetSession();
-        await EnsureGroupMembership(session.UserId, conversationId);
+        await EnsureMembership(session.UserId, conversationId);
         var meeting = meetings.Get(conversationId);
         return meeting is null ? null : ToDto(meeting);
     }
@@ -794,7 +800,8 @@ public sealed class ChatHub(
     public async Task<GroupMeetingDto> StartGroupMeeting(Guid conversationId)
     {
         var session = GetSession();
-        await EnsureGroupMembership(session.UserId, conversationId);
+        await EnsureMembership(session.UserId, conversationId);
+        EnsureUserIsNotInDirectCall(session.UserId);
         var change = meetings.Start(
             conversationId,
             session.UserId,
@@ -815,7 +822,8 @@ public sealed class ChatHub(
     public async Task<GroupMeetingDto> JoinGroupMeeting(Guid conversationId)
     {
         var session = GetSession();
-        await EnsureGroupMembership(session.UserId, conversationId);
+        await EnsureMembership(session.UserId, conversationId);
+        EnsureUserIsNotInDirectCall(session.UserId);
         GroupMeetingStateTracker.MeetingParticipantChange change;
         try
         {
@@ -863,7 +871,7 @@ public sealed class ChatHub(
     public async Task<GroupMeetingDto?> LeaveGroupMeeting(Guid conversationId)
     {
         var session = GetSession();
-        await EnsureGroupMembership(session.UserId, conversationId);
+        await EnsureMembership(session.UserId, conversationId);
         var change = meetings.Leave(conversationId, session.UserId);
         var dto = change.Meeting is null ? null : ToDto(change.Meeting);
         await BroadcastMeeting(conversationId, dto);
@@ -887,7 +895,7 @@ public sealed class ChatHub(
     public async Task StopGroupMeeting(Guid conversationId)
     {
         var session = GetSession();
-        await EnsureGroupMembership(session.UserId, conversationId);
+        await EnsureMembership(session.UserId, conversationId);
         try
         {
             if (!meetings.Stop(conversationId, session.UserId))
@@ -919,7 +927,7 @@ public sealed class ChatHub(
             throw new HubException("Choose a valid meeting signal.");
         }
 
-        await EnsureGroupMembership(session.UserId, request.ConversationId);
+        await EnsureMembership(session.UserId, request.ConversationId);
         if (!meetings.HasParticipant(
                 request.ConversationId,
                 request.MeetingId,
@@ -960,7 +968,7 @@ public sealed class ChatHub(
         GroupMeetingMicrophoneStateRequest request)
     {
         var session = GetSession();
-        await EnsureGroupMembership(session.UserId, request.ConversationId);
+        await EnsureMembership(session.UserId, request.ConversationId);
         GroupMeetingStateTracker.MeetingSnapshot meeting;
         try
         {
@@ -982,7 +990,7 @@ public sealed class ChatHub(
         GroupMeetingScreenShareRequest request)
     {
         var session = GetSession();
-        await EnsureGroupMembership(session.UserId, request.ConversationId);
+        await EnsureMembership(session.UserId, request.ConversationId);
         GroupMeetingStateTracker.ScreenShareChange change;
         try
         {
@@ -1017,7 +1025,7 @@ public sealed class ChatHub(
         GroupMeetingScreenShareRequest request)
     {
         var session = GetSession();
-        await EnsureGroupMembership(session.UserId, request.ConversationId);
+        await EnsureMembership(session.UserId, request.ConversationId);
         GroupMeetingStateTracker.MeetingSnapshot meeting;
         try
         {
@@ -1396,17 +1404,12 @@ public sealed class ChatHub(
         }
     }
 
-    private async Task EnsureGroupMembership(Guid userId, Guid conversationId)
+    private void EnsureUserIsNotInDirectCall(Guid userId)
     {
-        var isMember = await db.ConversationMembers.AnyAsync(x =>
-            x.ConversationId == conversationId &&
-            x.UserId == userId &&
-            x.LeftAt == null &&
-            x.Conversation.Type == "group");
-        if (!isMember)
+        if (calls.HasActiveCallForUser(userId))
         {
             throw new HubException(
-                "Meetings are only available in group conversations.");
+                "Leave or end the direct call before starting or joining a meeting.");
         }
     }
 

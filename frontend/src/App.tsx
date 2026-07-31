@@ -1120,15 +1120,13 @@ function ChatApp({
   }, [directCallIsActive, endDirectCall, status]);
 
   const activeConversation = conversations.find((item) => item.id === activeId);
-  const groupConversationIdsKey = conversations
-    .filter((conversation) => conversation.type === "group")
+  const meetingConversationIdsKey = conversations
     .map((conversation) => conversation.id)
     .sort()
     .join(",");
-  const activeGroupMeeting =
-    activeConversation?.type === "group"
-      ? (groupMeetings[activeConversation.id] ?? null)
-      : null;
+  const activeGroupMeeting = activeConversation
+    ? (groupMeetings[activeConversation.id] ?? null)
+    : null;
   const isInActiveGroupMeeting = Boolean(
     activeGroupMeeting?.participants.some(
       (participant) => participant.userId === user.id,
@@ -1899,13 +1897,13 @@ function ChatApp({
     if (
       status !== "connected" ||
       hubConnection?.state !== HubConnectionState.Connected ||
-      !groupConversationIdsKey
+      !meetingConversationIdsKey
     ) {
       return;
     }
 
     let cancelled = false;
-    const conversationIds = groupConversationIdsKey.split(",");
+    const conversationIds = meetingConversationIdsKey.split(",");
     void Promise.all(
       conversationIds.map(async (conversationId) => ({
         conversationId,
@@ -1931,13 +1929,14 @@ function ChatApp({
     return () => {
       cancelled = true;
     };
-  }, [groupConversationIdsKey, hubConnection, status]);
+  }, [meetingConversationIdsKey, hubConnection, status]);
 
   useEffect(() => {
+    const conversationId = activeConversation?.id;
     if (
       status !== "connected" ||
       hubConnection?.state !== HubConnectionState.Connected ||
-      activeConversation?.type !== "group"
+      !conversationId
     ) {
       return;
     }
@@ -1946,13 +1945,13 @@ function ChatApp({
     void hubConnection
       .invoke<GroupMeeting | null>(
         "GetGroupMeeting",
-        activeConversation.id,
+        conversationId,
       )
       .then((meeting) => {
         if (cancelled) return;
         setGroupMeetings((current) => ({
           ...current,
-          [activeConversation.id]: meeting,
+          [conversationId]: meeting,
         }));
       })
       .catch(() => {
@@ -1963,7 +1962,6 @@ function ChatApp({
     };
   }, [
     activeConversation?.id,
-    activeConversation?.type,
     hubConnection,
     status,
   ]);
@@ -2666,7 +2664,6 @@ function ChatApp({
     if (
       !conversationId ||
       !conversation ||
-      conversation.type !== "group" ||
       meetingAction ||
       ((action === "start" || action === "join") &&
         (directCall.call !== null ||
@@ -2731,6 +2728,104 @@ function ChatApp({
     if (!meetingInvite) return;
     dismissedMeetingInvitesRef.current.add(meetingInvite.meetingId);
     setMeetingInvite(null);
+  }
+
+  function renderMeetingControls() {
+    if (!activeConversation) return null;
+
+    if (!activeGroupMeeting) {
+      return (
+        <button
+          className="icon-button header-group-action group-meeting-action start-meeting-action"
+          type="button"
+          disabled={
+            status !== "connected" ||
+            meetingAction !== null ||
+            directCall.call !== null ||
+            joinedGroupMeeting !== null
+          }
+          aria-label="Start meeting"
+          title="Start meeting"
+          onClick={() => void changeGroupMeeting("start")}
+        >
+          {meetingAction === "start" ? (
+            <LoaderCircle className="spin" size={15} />
+          ) : (
+            <Video size={15} />
+          )}
+          <span>Start meeting</span>
+        </button>
+      );
+    }
+
+    return (
+      <>
+        <span
+          className="group-meeting-status"
+          title={`Started by ${activeGroupMeeting.startedByDisplayName}`}
+        >
+          <Video size={14} />
+          {activeGroupMeeting.participants.length} in meeting
+        </span>
+        {!isInActiveGroupMeeting && (
+          <button
+            className="icon-button header-group-action group-meeting-action"
+            type="button"
+            disabled={
+              status !== "connected" ||
+              meetingAction !== null ||
+              directCall.call !== null ||
+              (joinedGroupMeeting !== null &&
+                joinedGroupMeeting.meetingId !== activeGroupMeeting.meetingId)
+            }
+            aria-label="Join meeting"
+            title="Join meeting"
+            onClick={() => void changeGroupMeeting("join")}
+          >
+            {meetingAction === "join" ? (
+              <LoaderCircle className="spin" size={15} />
+            ) : (
+              <Video size={15} />
+            )}
+            <span>Join</span>
+          </button>
+        )}
+        {isInActiveGroupMeeting && (
+          <button
+            className="icon-button header-group-action group-meeting-action"
+            type="button"
+            disabled={status !== "connected" || meetingAction !== null}
+            aria-label="Leave meeting"
+            title="Leave meeting"
+            onClick={() => void changeGroupMeeting("leave")}
+          >
+            {meetingAction === "leave" ? (
+              <LoaderCircle className="spin" size={15} />
+            ) : (
+              <PhoneOff size={15} />
+            )}
+            <span>Leave</span>
+          </button>
+        )}
+        {isActiveGroupMeetingStarter && (
+          <button
+            className="icon-button header-group-action group-meeting-action stop-meeting-action"
+            type="button"
+            disabled={status !== "connected" || meetingAction !== null}
+            aria-label="Stop meeting"
+            title="Stop meeting for everyone"
+            onClick={() => void changeGroupMeeting("stop")}
+          >
+            {meetingAction === "stop" ? (
+              <LoaderCircle className="spin" size={15} />
+            ) : (
+              <Square size={14} />
+            )}
+            <span>Stop</span>
+          </button>
+        )}
+      </>
+    );
   }
 
   async function addMembers(event: FormEvent) {
@@ -3121,8 +3216,7 @@ function ChatApp({
                     )}
                   </span>
                   <span className="conversation-indicators">
-                    {conversation.type === "group" &&
-                      groupMeetings[conversation.id] && (
+                    {groupMeetings[conversation.id] && (
                       <span
                         className="active-conversation-call"
                         aria-label="Active meeting"
@@ -3319,100 +3413,7 @@ function ChatApp({
           </div>
           {activeConversation?.type === "group" && (
             <div className="header-group-actions">
-              {activeGroupMeeting ? (
-                <>
-                  <span
-                    className="group-meeting-status"
-                    title={`Started by ${activeGroupMeeting.startedByDisplayName}`}
-                  >
-                    <Video size={14} />
-                    {activeGroupMeeting.participants.length} in meeting
-                  </span>
-                  {!isInActiveGroupMeeting && (
-                    <button
-                      className="icon-button header-group-action group-meeting-action"
-                      type="button"
-                      disabled={
-                        status !== "connected" ||
-                        meetingAction !== null ||
-                        directCall.call !== null ||
-                        (joinedGroupMeeting !== null &&
-                          joinedGroupMeeting.meetingId !==
-                            activeGroupMeeting.meetingId)
-                      }
-                      aria-label="Join group meeting"
-                      title="Join meeting"
-                      onClick={() => void changeGroupMeeting("join")}
-                    >
-                      {meetingAction === "join" ? (
-                        <LoaderCircle className="spin" size={15} />
-                      ) : (
-                        <Video size={15} />
-                      )}
-                      <span>Join</span>
-                    </button>
-                  )}
-                  {isInActiveGroupMeeting && (
-                    <button
-                      className="icon-button header-group-action group-meeting-action"
-                      type="button"
-                      disabled={
-                        status !== "connected" || meetingAction !== null
-                      }
-                      aria-label="Leave group meeting"
-                      title="Leave meeting"
-                      onClick={() => void changeGroupMeeting("leave")}
-                    >
-                      {meetingAction === "leave" ? (
-                        <LoaderCircle className="spin" size={15} />
-                      ) : (
-                        <PhoneOff size={15} />
-                      )}
-                      <span>Leave</span>
-                    </button>
-                  )}
-                  {isActiveGroupMeetingStarter && (
-                    <button
-                      className="icon-button header-group-action group-meeting-action stop-meeting-action"
-                      type="button"
-                      disabled={
-                        status !== "connected" || meetingAction !== null
-                      }
-                      aria-label="Stop group meeting"
-                      title="Stop meeting for everyone"
-                      onClick={() => void changeGroupMeeting("stop")}
-                    >
-                      {meetingAction === "stop" ? (
-                        <LoaderCircle className="spin" size={15} />
-                      ) : (
-                        <Square size={14} />
-                      )}
-                      <span>Stop</span>
-                    </button>
-                  )}
-                </>
-              ) : (
-                <button
-                  className="icon-button header-group-action group-meeting-action start-meeting-action"
-                  type="button"
-                  disabled={
-                    status !== "connected" ||
-                    meetingAction !== null ||
-                    directCall.call !== null ||
-                    joinedGroupMeeting !== null
-                  }
-                  aria-label="Start group meeting"
-                  title="Start meeting"
-                  onClick={() => void changeGroupMeeting("start")}
-                >
-                  {meetingAction === "start" ? (
-                    <LoaderCircle className="spin" size={15} />
-                  ) : (
-                    <Video size={15} />
-                  )}
-                  <span>Start meeting</span>
-                </button>
-              )}
+              {renderMeetingControls()}
               <button
                 className={`icon-button header-group-action mute-conversation-action ${
                   activeConversation.isMuted ? "active" : ""
@@ -3474,6 +3475,7 @@ function ChatApp({
           )}
           {activeConversation?.type === "direct" && (
             <div className="header-group-actions">
+              {renderMeetingControls()}
               {directParticipantProfile &&
                 directParticipantProfile.id !== user.id && (
                   <>
@@ -3484,6 +3486,7 @@ function ChatApp({
                         status !== "connected" ||
                         isDirectParticipantBlocked ||
                         directCall.call !== null ||
+                        activeGroupMeeting !== null ||
                         joinedGroupMeeting !== null
                       }
                       aria-label={`Start an audio call with ${directParticipantProfile.displayName}`}
@@ -3505,6 +3508,7 @@ function ChatApp({
                         status !== "connected" ||
                         isDirectParticipantBlocked ||
                         directCall.call !== null ||
+                        activeGroupMeeting !== null ||
                         joinedGroupMeeting !== null
                       }
                       aria-label={`Start a video call with ${directParticipantProfile.displayName}`}
@@ -5365,7 +5369,7 @@ function ChatApp({
               <strong>{meetingInvite.startedByDisplayName}</strong>
               <span>
                 started a meeting in{" "}
-                {meetingInviteConversation?.title ?? "this group"}
+                {meetingInviteConversation?.title ?? "this conversation"}
               </span>
             </div>
           </div>
@@ -5447,7 +5451,7 @@ function ChatApp({
           apiUrl={API_URL}
           username={user.username}
           currentUser={user}
-          groupTitle={joinedGroupConversation?.title ?? "Group meeting"}
+          groupTitle={joinedGroupConversation?.title ?? "Meeting"}
           meeting={joinedGroupMeeting}
           onLeave={() =>
             void changeGroupMeeting(

@@ -55,6 +55,15 @@ public sealed class GroupMeetingStateTracker
         }
     }
 
+    public bool HasParticipant(Guid userId)
+    {
+        lock (_gate)
+        {
+            return _meetings.Values.Any(meeting =>
+                meeting.Participants.ContainsKey(userId));
+        }
+    }
+
     public MeetingParticipantChange Join(
         Guid conversationId,
         Guid userId,
