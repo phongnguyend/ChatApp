@@ -31,6 +31,16 @@ param sqlAdministratorPassword string
 @maxLength(63)
 param uploadsContainerName string = 'chatapp-uploads'
 
+@description('Name of the Service Bus topic used for application messaging.')
+@minLength(1)
+@maxLength(260)
+param serviceBusTopicName string = 'chatapp-messages'
+
+@description('Name of the Service Bus subscription used by the API to receive messages.')
+@minLength(1)
+@maxLength(50)
+param serviceBusSubscriptionName string = 'chatapp-messages-sub'
+
 @secure()
 @description('Contact URI used as the Web Push VAPID subject, such as mailto:admin@example.com.')
 param browserPushSubject string
@@ -54,9 +64,18 @@ var sqlDatabaseName = 'chatapp'
 var notificationHubNamespaceName = take('${resourceNamePrefix}-nh-${uniqueSuffix}', 50)
 var notificationHubName = take('${resourceNamePrefix}-notifications', 265)
 var communicationServiceName = take('${resourceNamePrefix}-acs-${uniqueSuffix}', 63)
+var serviceBusNamespaceName = take('${resourceNamePrefix}-sb-${uniqueSuffix}', 50)
 var blobDataContributorRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+)
+var serviceBusDataSenderRoleDefinitionId = subscriptionResourceId(
+  'Microsoft.Authorization/roleDefinitions',
+  '69a216fc-b8fb-44d8-bc22-1f3c2cd27a39'
+)
+var serviceBusDataReceiverRoleDefinitionId = subscriptionResourceId(
+  'Microsoft.Authorization/roleDefinitions',
+  '4f6d3b9b-027b-4f4c-9142-0e5a2a2247e0'
 )
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
@@ -212,6 +231,29 @@ resource communicationService 'Microsoft.Communication/communicationServices@202
   }
 }
 
+resource serviceBusNamespace 'Microsoft.ServiceBus/namespaces@2024-01-01' = {
+  name: serviceBusNamespaceName
+  location: location
+  sku: {
+    name: 'Standard'
+    tier: 'Standard'
+  }
+  properties: {
+    disableLocalAuth: false
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+resource serviceBusTopic 'Microsoft.ServiceBus/namespaces/topics@2024-01-01' = {
+  parent: serviceBusNamespace
+  name: serviceBusTopicName
+}
+
+resource serviceBusSubscription 'Microsoft.ServiceBus/namespaces/topics/subscriptions@2024-01-01' = {
+  parent: serviceBusTopic
+  name: serviceBusSubscriptionName
+}
+
 resource apiApp 'Microsoft.Web/sites@2023-12-01' = {
   name: apiAppName
   location: location
@@ -283,6 +325,26 @@ resource apiApp 'Microsoft.Web/sites@2023-12-01' = {
           name: 'Calling__AzureCommunicationServices__ConnectionString'
           value: communicationService.listKeys().primaryConnectionString
         }
+        {
+          name: 'Messaging__Provider'
+          value: 'AzureServiceBus'
+        }
+        {
+          name: 'Messaging__AzureServiceBus__UseManagedIdentity'
+          value: 'true'
+        }
+        {
+          name: 'Messaging__AzureServiceBus__FullyQualifiedNamespace'
+          value: '${serviceBusNamespace.name}.servicebus.windows.net'
+        }
+        {
+          name: 'Messaging__AzureServiceBus__TopicName'
+          value: serviceBusTopic.name
+        }
+        {
+          name: 'Messaging__AzureServiceBus__SubscriptionName'
+          value: serviceBusSubscription.name
+        }
       ]
       connectionStrings: [
         {
@@ -312,16 +374,32 @@ resource apiBlobDataContributor 'Microsoft.Authorization/roleAssignments@2022-04
 }
 
 resource communicationServiceBlobDataContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(
-    storageAccount.id,
-    communicationService.id,
-    blobDataContributorRoleDefinitionId
-  )
+  name: guid(storageAccount.id, communicationService.id, blobDataContributorRoleDefinitionId)
   scope: storageAccount
   properties: {
     principalId: communicationService.identity.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: blobDataContributorRoleDefinitionId
+  }
+}
+
+resource apiServiceBusDataSender 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(serviceBusNamespace.id, apiApp.id, serviceBusDataSenderRoleDefinitionId)
+  scope: serviceBusNamespace
+  properties: {
+    principalId: apiApp.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: serviceBusDataSenderRoleDefinitionId
+  }
+}
+
+resource apiServiceBusDataReceiver 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(serviceBusNamespace.id, apiApp.id, serviceBusDataReceiverRoleDefinitionId)
+  scope: serviceBusNamespace
+  properties: {
+    principalId: apiApp.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: serviceBusDataReceiverRoleDefinitionId
   }
 }
 
@@ -335,3 +413,6 @@ output sqlDatabaseName string = sqlDatabase.name
 output notificationHubNamespaceName string = notificationHubNamespace.name
 output notificationHubName string = notificationHub.name
 output communicationServiceName string = communicationService.name
+output serviceBusNamespaceName string = serviceBusNamespace.name
+output serviceBusTopicName string = serviceBusTopic.name
+output serviceBusSubscriptionName string = serviceBusSubscription.name
