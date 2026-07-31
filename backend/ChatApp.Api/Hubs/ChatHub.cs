@@ -130,7 +130,7 @@ public sealed class ChatHub(
                     {
                         await SendMeetingSystemMessage(
                             change.ConversationId,
-                            "The meeting stopped automatically because the last participant left.",
+                            "The meeting has ended.",
                             session.UserId,
                             CancellationToken.None);
                     }
@@ -888,7 +888,7 @@ public sealed class ChatHub(
         {
             await SendMeetingSystemMessage(
                 conversationId,
-                "The meeting stopped automatically because the last participant left.",
+                "The meeting has ended.",
                 session.UserId);
         }
         return dto;
