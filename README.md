@@ -101,10 +101,10 @@ backend, it uses Azure Notification Hubs Browser Push for web notifications.
    matching VAPID public key, and the public frontend URL:
 
 ```powershell
-$env:AzureNotifications__ConnectionString = "<notification-hub-connection-string>"
-$env:AzureNotifications__HubName = "<notification-hub-name>"
-$env:AzureNotifications__VapidPublicKey = "<vapid-public-key>"
-$env:AzureNotifications__FrontendBaseUrl = "https://chat.example.com"
+$env:Notification__AzureNotificationHub__ConnectionString = "<notification-hub-connection-string>"
+$env:Notification__AzureNotificationHub__HubName = "<notification-hub-name>"
+$env:Notification__AzureNotificationHub__VapidPublicKey = "<vapid-public-key>"
+$env:Notification__AzureNotificationHub__FrontendBaseUrl = "https://chat.example.com"
 dotnet run --project backend/ChatApp.Api
 ```
 

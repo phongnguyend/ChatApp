@@ -325,19 +325,23 @@ resource apiApp 'Microsoft.Web/sites@2023-12-01' = {
           value: 'https://${staticWebApp.properties.defaultHostname}'
         }
         {
-          name: 'AzureNotifications__FrontendBaseUrl'
+          name: 'Notification__Provider'
+          value: 'AzureNotificationHub'
+        }
+        {
+          name: 'Notification__AzureNotificationHub__FrontendBaseUrl'
           value: 'https://${staticWebApp.properties.defaultHostname}'
         }
         {
-          name: 'AzureNotifications__ConnectionString'
+          name: 'Notification__AzureNotificationHub__ConnectionString'
           value: notificationHubApiAuthorizationRule.listKeys().primaryConnectionString
         }
         {
-          name: 'AzureNotifications__HubName'
+          name: 'Notification__AzureNotificationHub__HubName'
           value: notificationHub.name
         }
         {
-          name: 'AzureNotifications__VapidPublicKey'
+          name: 'Notification__AzureNotificationHub__VapidPublicKey'
           value: browserPushVapidPublicKey
         }
         {

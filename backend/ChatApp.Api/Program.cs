@@ -35,8 +35,8 @@ builder.Services.AddOptions<AzureBlobOptions>()
             options.IsValid(),
         "Azure Blob storage configuration is incomplete.")
     .ValidateOnStart();
-builder.Services.Configure<AzureNotificationOptions>(
-    builder.Configuration.GetSection(AzureNotificationOptions.SectionName));
+builder.Services.Configure<NotificationOptions>(
+    builder.Configuration.GetSection(NotificationOptions.SectionName));
 builder.Services.AddOptions<CallingOptions>()
     .Bind(callingSection)
     .Validate(

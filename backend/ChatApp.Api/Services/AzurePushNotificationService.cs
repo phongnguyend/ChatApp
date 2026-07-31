@@ -11,11 +11,11 @@ namespace ChatApp.Api.Services;
 public sealed class AzurePushNotificationService(
     ChatDbContext db,
     IHttpClientFactory httpClientFactory,
-    IOptions<AzureNotificationOptions> options,
+    IOptions<NotificationOptions> options,
     ILogger<AzurePushNotificationService> logger)
 {
     private const string ApiVersion = "2020-06";
-    private readonly AzureNotificationOptions _options = options.Value;
+    private readonly AzureNotificationHubOptions _options = options.Value.AzureNotificationHub;
 
     public bool IsConfigured => _options.IsConfigured;
     public string VapidPublicKey => IsConfigured ? _options.VapidPublicKey : "";
@@ -266,7 +266,7 @@ public sealed class AzurePushNotificationService(
             if (!values.ContainsKey(key))
             {
                 throw new InvalidOperationException(
-                    $"AzureNotifications:ConnectionString is missing {key}.");
+                    $"Notification:AzureNotificationHub:ConnectionString is missing {key}.");
             }
         }
         return values;

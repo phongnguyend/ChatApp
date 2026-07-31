@@ -9,6 +9,7 @@ parameters:
     type: string
     default: dev
     values:
+      - local
       - dev
       - test
       - staging
