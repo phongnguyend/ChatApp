@@ -16,4 +16,5 @@ public sealed class Conversation
     public bool IsArchived { get; set; }
     public ICollection<ConversationMember> Members { get; set; } = [];
     public ICollection<ChatMessage> Messages { get; set; } = [];
+    public ICollection<LiveStreamSession> LiveStreamSessions { get; set; } = [];
 }

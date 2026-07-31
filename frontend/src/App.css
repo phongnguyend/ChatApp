@@ -3895,3 +3895,54 @@ input.visually-hidden {
     transition-duration: 0.01ms !important;
   }
 }
+.live-streams-nav-button {
+  width: calc(100% - 24px);
+  margin: 8px 12px 14px;
+  padding: 11px 12px;
+  border: 1px solid rgba(225, 45, 62, 0.25);
+  border-radius: 10px;
+  background: rgba(225, 45, 62, 0.08);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.live-streams-nav-button span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 750;
+}
+
+.live-streams-nav-button small {
+  display: block;
+  margin: 3px 0 0 25px;
+  opacity: 0.7;
+}
+.live-stream-conversation-icon.is-live {
+  color: #fff;
+  background: #dc2638;
+  box-shadow: 0 0 0 0 rgba(220, 38, 56, 0.55);
+  animation: live-stream-avatar-pulse 1.7s ease-out infinite;
+}
+
+.live-stream-conversation-icon.is-live svg {
+  animation: live-stream-icon-breathe 1.2s ease-in-out infinite;
+}
+
+@keyframes live-stream-avatar-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(220, 38, 56, 0.55); }
+  70%, 100% { box-shadow: 0 0 0 9px rgba(220, 38, 56, 0); }
+}
+
+@keyframes live-stream-icon-breathe {
+  0%, 100% { transform: scale(0.9); opacity: 0.82; }
+  50% { transform: scale(1.12); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-stream-conversation-icon.is-live,
+  .live-stream-conversation-icon.is-live svg {
+    animation: none;
+  }
+}

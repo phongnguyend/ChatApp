@@ -16,6 +16,9 @@ param location string = resourceGroup().location
 @description('Azure region for the Static Web App. Static Web Apps are only available in selected regions.')
 param staticWebAppLocation string = 'eastus2'
 
+@description('Geography where Azure Communication Services stores data at rest.')
+param communicationServicesDataLocation string = 'Asia Pacific'
+
 @description('Administrator login for the Azure SQL logical server.')
 param sqlAdministratorLogin string = 'chatappadmin'
 
@@ -50,6 +53,7 @@ var sqlServerName = take('${resourceNamePrefix}-sql-${uniqueSuffix}', 63)
 var sqlDatabaseName = 'chatapp'
 var notificationHubNamespaceName = take('${resourceNamePrefix}-nh-${uniqueSuffix}', 50)
 var notificationHubName = take('${resourceNamePrefix}-notifications', 265)
+var communicationServiceName = take('${resourceNamePrefix}-acs-${uniqueSuffix}', 63)
 var blobDataContributorRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
@@ -195,6 +199,16 @@ resource notificationHubApiAuthorizationRule 'Microsoft.NotificationHubs/namespa
   }
 }
 
+resource communicationService 'Microsoft.Communication/communicationServices@2025-05-01' = {
+  name: communicationServiceName
+  location: 'global'
+  properties: {
+    dataLocation: communicationServicesDataLocation
+    disableLocalAuth: false
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
 resource apiApp 'Microsoft.Web/sites@2023-12-01' = {
   name: apiAppName
   location: location
@@ -258,6 +272,14 @@ resource apiApp 'Microsoft.Web/sites@2023-12-01' = {
           name: 'AzureNotifications__VapidPublicKey'
           value: browserPushVapidPublicKey
         }
+        {
+          name: 'Calling__Provider'
+          value: 'AzureCommunicationServices'
+        }
+        {
+          name: 'Calling__AzureCommunicationServices__ConnectionString'
+          value: communicationService.listKeys().primaryConnectionString
+        }
       ]
       connectionStrings: [
         {
@@ -295,3 +317,4 @@ output sqlServerFullyQualifiedDomainName string = sqlServer.properties.fullyQual
 output sqlDatabaseName string = sqlDatabase.name
 output notificationHubNamespaceName string = notificationHubNamespace.name
 output notificationHubName string = notificationHub.name
+output communicationServiceName string = communicationService.name

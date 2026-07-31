@@ -6,12 +6,16 @@
 - an Azure Static Web App for the Vite frontend;
 - a private Azure Blob Storage container for uploads;
 - an Azure SQL logical server and Basic database;
+- an Azure Communication Services resource for calls and live streams;
 - an Azure Notification Hubs namespace and browser-push notification hub.
 
 The API receives its SQL connection string and application settings from App
 Service. Its system-assigned managed identity is granted `Storage Blob Data
 Contributor` on the storage account, so no storage access key is stored in the
-application configuration.
+application configuration. The Communication Services primary connection string
+is injected into the API App Service settings as
+`Calling__AzureCommunicationServices__ConnectionString`; it is never exposed to
+the frontend.
 
 ## Deploy
 
@@ -54,6 +58,7 @@ try {
     --parameters `
       environmentName=dev `
       location=southeastasia `
+      communicationServicesDataLocation="Asia Pacific" `
       sqlAdministratorPassword=$sqlPassword `
       browserPushSubject=$browserPushSubject `
       browserPushVapidPrivateKey=$browserPushVapidPrivateKey `
@@ -143,6 +148,7 @@ each required environment variable group with these variables:
 | `workloadName`                      | `chatapp`                        | Bicep resource-name prefix                       |
 | `location`                          | `southeastasia`                  | App Service, Storage, and SQL region             |
 | `staticWebAppLocation`              | `eastus2`                        | Supported Static Web Apps region                 |
+| `communicationServicesDataLocation` | `Asia Pacific`                   | ACS data-residency geography                     |
 | `sqlAdministratorLogin`             | `chatappadmin`                   | Azure SQL administrator login                    |
 | `sqlAdministratorPassword`          | `(secret)`                       | Mark this variable as secret                     |
 | `uploadsContainerName`              | `chatapp-uploads`                | Private Blob container name                      |

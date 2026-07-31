@@ -30,6 +30,7 @@ import {
   PhoneOff,
   Plus,
   Route,
+  Radio,
   Send,
   Search,
   Square,
@@ -79,6 +80,11 @@ import {
   useDirectCall,
 } from "./components/DirectCall";
 import { GroupMeetingOverlay } from "./components/GroupMeeting";
+import {
+  type LiveStream,
+  LiveStreamConversationControls,
+  LiveStreams,
+} from "./components/LiveStreams";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5045";
 const LIVE_CHAT_OFFLINE_ERROR =
@@ -97,7 +103,7 @@ type User = {
 
 type Conversation = {
   id: string;
-  type: "direct" | "group";
+  type: "direct" | "group" | "live_stream";
   title: string | null;
   avatarUrl: string | null;
   lastMessage: string | null;
@@ -1030,8 +1036,20 @@ function ChatApp({
   );
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isLiveStreamsOpen, setIsLiveStreamsOpen] = useState(false);
+  const [requestedLiveStream, setRequestedLiveStream] =
+    useState<LiveStream | null>(null);
+  const [activeLiveStreamIds, setActiveLiveStreamIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const handleActiveLiveStreamsChanged = useCallback(
+    (conversationIds: string[]) => {
+      setActiveLiveStreamIds(new Set(conversationIds));
+    },
+    [],
+  );
   const [conversationDialog, setConversationDialog] = useState<
-    "direct" | "group" | "add-members" | null
+    "direct" | "group" | "live-stream" | "add-members" | null
   >(null);
   const [newGroupTitle, setNewGroupTitle] = useState("");
   const [userQuery, setUserQuery] = useState("");
@@ -1992,7 +2010,7 @@ function ChatApp({
   );
 
   useEffect(() => {
-    if (!conversationDialog) return;
+    if (!conversationDialog || conversationDialog === "live-stream") return;
 
     const abortController = new AbortController();
     const timer = window.setTimeout(() => {
@@ -2653,7 +2671,9 @@ function ChatApp({
     setDialogError("");
   }
 
-  function openConversationDialog(mode: "direct" | "group" | "add-members") {
+  function openConversationDialog(
+    mode: "direct" | "group" | "live-stream" | "add-members",
+  ) {
     setConversationDialog(mode);
     setDialogError("");
     setUserQuery("");
@@ -2735,6 +2755,45 @@ function ChatApp({
     if (!meetingInvite) return;
     dismissedMeetingInvitesRef.current.add(meetingInvite.meetingId);
     setMeetingInvite(null);
+  }
+
+  async function createLiveStream(event: FormEvent) {
+    event.preventDefault();
+    const title = newGroupTitle.trim();
+    if (title.length < 2) return;
+
+    setIsSavingMembers(true);
+    setDialogError("");
+    try {
+      const response = await fetch(
+        `${API_URL}/api/live-streams?username=${encodeURIComponent(user.username)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title }),
+        },
+      );
+      if (!response.ok) throw new Error(await readError(response));
+      const created = (await response.json()) as { conversationId: string };
+      await loadConversations();
+      setActiveId(created.conversationId);
+      setConversationTab("chat");
+      setConversationDialog(null);
+      setNewGroupTitle("");
+      setIsSidebarOpen(false);
+      await connectionRef.current?.invoke(
+        "JoinConversation",
+        created.conversationId,
+      );
+    } catch (requestError) {
+      setDialogError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Could not create the live stream.",
+      );
+    } finally {
+      setIsSavingMembers(false);
+    }
   }
 
   function renderMeetingControls() {
@@ -3152,6 +3211,14 @@ function ChatApp({
         </div>
 
         <div className="sidebar-section">
+          <button
+            className="live-streams-nav-button"
+            type="button"
+            onClick={() => setIsLiveStreamsOpen(true)}
+          >
+            <span><Radio size={17} /> Live streams</span>
+            <small>Browse broadcasts</small>
+          </button>
           <div className="sidebar-heading">
             <span>Conversations</span>
             <button
@@ -3180,6 +3247,14 @@ function ChatApp({
                   <span
                     className={`channel-icon ${
                       conversation.type === "direct" ? "direct-icon" : ""
+                    } ${
+                      conversation.type === "live_stream"
+                        ? "live-stream-conversation-icon"
+                        : ""
+                    } ${
+                      activeLiveStreamIds.has(conversation.id)
+                        ? "is-live"
+                        : ""
                     }`}
                     style={
                       conversation.type === "direct" && !conversation.avatarUrl
@@ -3198,6 +3273,8 @@ function ChatApp({
                       />
                     ) : conversation.type === "direct" ? (
                       initials(conversation.title ?? "Direct")
+                    ) : conversation.type === "live_stream" ? (
+                      <Radio size={17} />
                     ) : (
                       <Hash size={17} />
                     )}
@@ -3406,7 +3483,11 @@ function ChatApp({
               <span
                 className="header-channel-icon"
               >
-                <Hash size={19} />
+                {activeConversation?.type === "live_stream" ? (
+                  <Radio size={19} />
+                ) : (
+                  <Hash size={19} />
+                )}
               </span>
             )}
             <div>
@@ -3414,6 +3495,8 @@ function ChatApp({
               <p>
                 {activeConversation?.type === "direct"
                   ? "Direct conversation"
+                  : activeConversation?.type === "live_stream"
+                    ? "Live stream conversation"
                   : `${activeConversation?.memberCount ?? 0} ${
                       activeConversation?.memberCount === 1
                         ? "member"
@@ -3597,6 +3680,16 @@ function ChatApp({
                 </button>
                 )}
             </div>
+          )}
+          {activeConversation?.type === "live_stream" && (
+            <LiveStreamConversationControls
+              apiUrl={API_URL}
+              username={user.username}
+              conversationId={activeConversation.id}
+              connection={hubConnection}
+              onOpenStage={setRequestedLiveStream}
+              onError={setError}
+            />
           )}
           <div className={`connection-pill ${status}`}>
             {status === "offline" ? <WifiOff size={13} /> : <span />}
@@ -4718,6 +4811,8 @@ function ChatApp({
                     ? "Message someone"
                     : conversationDialog === "group"
                       ? "Create a group"
+                      : conversationDialog === "live-stream"
+                        ? "Create a live stream"
                       : "Add people"}
                 </h2>
               </div>
@@ -4759,6 +4854,16 @@ function ChatApp({
                 >
                   <Hash size={16} />
                   Group space
+                </button>
+                <button
+                  className={conversationDialog === "live-stream" ? "active" : ""}
+                  type="button"
+                  role="tab"
+                  aria-selected={conversationDialog === "live-stream"}
+                  onClick={() => openConversationDialog("live-stream")}
+                >
+                  <Radio size={16} />
+                  Live stream
                 </button>
               </div>
             )}
@@ -4825,6 +4930,32 @@ function ChatApp({
                   )}
                 </div>
               </div>
+            ) : conversationDialog === "live-stream" ? (
+              <form className="group-picker" onSubmit={createLiveStream}>
+                <label htmlFor="live-stream-title">Live stream name</label>
+                <input
+                  id="live-stream-title"
+                  autoFocus
+                  maxLength={200}
+                  placeholder="e.g. Weekly product update"
+                  value={newGroupTitle}
+                  onChange={(event) => setNewGroupTitle(event.target.value)}
+                />
+                <p className="picker-state">
+                  Create it now, then start or stop broadcasts from its conversation.
+                </p>
+                <button
+                  className="primary-button"
+                  disabled={isSavingMembers || newGroupTitle.trim().length < 2}
+                  type="submit"
+                >
+                  {isSavingMembers ? (
+                    <LoaderCircle className="spin" size={18} />
+                  ) : (
+                    <><Radio size={17} /> Create live stream</>
+                  )}
+                </button>
+              </form>
             ) : (
               <form
                 className="group-picker"
@@ -5489,6 +5620,24 @@ function ChatApp({
           }
         />
       ) : null}
+      <LiveStreams
+        apiUrl={API_URL}
+        username={user.username}
+        displayName={user.displayName}
+        connection={hubConnection}
+        isOpen={isLiveStreamsOpen}
+        onClose={() => setIsLiveStreamsOpen(false)}
+        onError={setError}
+        requestedStream={requestedLiveStream}
+        onRequestedStreamOpened={() => setRequestedLiveStream(null)}
+        onActiveStreamsChanged={handleActiveLiveStreamsChanged}
+        onConversationSelected={async (conversationId) => {
+          await loadConversations();
+          setActiveId(conversationId);
+          setConversationTab("chat");
+          setIsSidebarOpen(false);
+        }}
+      />
       <DirectCallOverlay {...directCall} />
     </main>
   );

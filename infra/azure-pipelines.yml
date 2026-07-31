@@ -48,6 +48,7 @@ stages:
                   "environmentName=$ENVIRONMENT_NAME"
                   "location=$AZURE_LOCATION"
                   "staticWebAppLocation=$STATIC_WEB_APP_LOCATION"
+                  "communicationServicesDataLocation=$COMMUNICATION_SERVICES_DATA_LOCATION"
                   "sqlAdministratorLogin=$SQL_ADMINISTRATOR_LOGIN"
                   "sqlAdministratorPassword=$SQL_ADMINISTRATOR_PASSWORD"
                   "uploadsContainerName=$UPLOADS_CONTAINER_NAME"
@@ -76,6 +77,7 @@ stages:
               ENVIRONMENT_NAME: ${{ parameters.environment }}
               AZURE_LOCATION: $(location)
               STATIC_WEB_APP_LOCATION: $(staticWebAppLocation)
+              COMMUNICATION_SERVICES_DATA_LOCATION: $(communicationServicesDataLocation)
               SQL_ADMINISTRATOR_LOGIN: $(sqlAdministratorLogin)
               SQL_ADMINISTRATOR_PASSWORD: $(sqlAdministratorPassword)
               UPLOADS_CONTAINER_NAME: $(uploadsContainerName)

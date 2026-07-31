@@ -27,6 +27,26 @@ public sealed record CreateConversationRequest(
     string Title,
     IReadOnlyList<string>? Usernames);
 
+public sealed record CreateLiveStreamRequest(string Title);
+
+public sealed record LiveStreamSessionPresenceRequest(Guid SessionId);
+
+public sealed record LiveStreamDto(
+    Guid ConversationId,
+    string Title,
+    Guid HostUserId,
+    string HostDisplayName,
+    string? HostAvatarUrl,
+    bool IsHost,
+    bool IsJoined,
+    Guid? SessionId,
+    string? ProviderCallId,
+    DateTimeOffset? StartedAt,
+    DateTimeOffset? EndedAt,
+    int MemberCount,
+    bool IsActive,
+    string? HostCommunicationUserId = null);
+
 public sealed record CreateDirectConversationRequest(string Username);
 
 public sealed record AddConversationMembersRequest(IReadOnlyList<string>? Usernames);

@@ -24,6 +24,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         Set<SessionRecordingChunk>();
     public DbSet<CallingProviderIdentity> CallingProviderIdentities =>
         Set<CallingProviderIdentity>();
+    public DbSet<LiveStreamSession> LiveStreamSessions => Set<LiveStreamSession>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -41,6 +42,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         ConfigureLiveLocationShares(modelBuilder);
         ConfigureSessionRecordings(modelBuilder);
         ConfigureCallingProviderIdentities(modelBuilder);
+        ConfigureLiveStreams(modelBuilder);
     }
 
     private static void ConfigureUsers(ModelBuilder modelBuilder)
@@ -68,7 +70,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         entity.ToTable("Conversations", table =>
             table.HasCheckConstraint(
                 "CK_Conversations_Type",
-                "[Type] IN ('direct', 'group')"));
+                "[Type] IN ('direct', 'group', 'live_stream')"));
         entity.HasKey(x => x.Id);
         entity.Property(x => x.Type).HasMaxLength(20).IsRequired();
         entity.Property(x => x.Title).HasMaxLength(200);
@@ -87,6 +89,34 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
             .WithMany()
             .HasForeignKey(x => x.LastMessageId)
             .OnDelete(DeleteBehavior.NoAction);
+    }
+
+    private static void ConfigureLiveStreams(ModelBuilder modelBuilder)
+    {
+        var session = modelBuilder.Entity<LiveStreamSession>();
+        session.ToTable("LiveStreamSessions");
+        session.HasKey(x => x.Id);
+        session.Property(x => x.Provider).HasMaxLength(80).IsRequired();
+        session.Property(x => x.ProviderCallId).HasMaxLength(500).IsRequired();
+        session.Property(x => x.StartedAt).HasPrecision(3);
+        session.Property(x => x.EndedAt).HasPrecision(3);
+        session.HasIndex(x => x.ConversationId)
+            .IsUnique()
+            .HasFilter("[EndedAt] IS NULL")
+            .HasDatabaseName("UX_LiveStreamSessions_ActiveConversation");
+        session.HasIndex(x => x.HostUserId)
+            .IsUnique()
+            .HasFilter("[EndedAt] IS NULL")
+            .HasDatabaseName("UX_LiveStreamSessions_ActiveHost");
+        session.HasOne(x => x.Conversation)
+            .WithMany(x => x.LiveStreamSessions)
+            .HasForeignKey(x => x.ConversationId)
+            .OnDelete(DeleteBehavior.Cascade);
+        session.HasOne(x => x.HostUser)
+            .WithMany()
+            .HasForeignKey(x => x.HostUserId)
+            .OnDelete(DeleteBehavior.NoAction);
+
     }
 
     private static void ConfigureConversationMembers(ModelBuilder modelBuilder)

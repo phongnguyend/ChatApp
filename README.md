@@ -14,7 +14,10 @@ camera capture, current-location sharing with confirmation previews, start/stop
 live-location sharing with an updating Leaflet map, automatic
 SignalR reconnection, direct audio/video calls with browser WebRTC media and
 SignalR signaling and in-call screen sharing, and responsive desktop/mobile
-layouts. Browser push
+layouts. Azure Communication Services-powered live-stream conversations let a
+host start and stop multiple historical sessions while enforcing one active
+live stream per host; viewers join through regular conversation membership and
+only the host can publish camera, microphone, or screen-share media. Browser push
 notifications are delivered through Azure Notification
 Hubs, the Azure browser-push service used alongside Azure Communication Services.
 Uploaded avatars and message attachments use the configured upload storage
@@ -125,6 +128,7 @@ Below is a practical relational schema for a chat application supporting:
 
 - One-to-one conversations
 - Group chats
+- Live-stream conversations and session history
 - Message replies
 - Attachments
 - Reactions
@@ -145,6 +149,7 @@ User
                   │     ├── MessageAttachment
                   │     ├── MessageReaction
                   │     └── MessageReceipt
+                  ├── LiveStreamSession
                   └── ConversationMember
 ```
 
@@ -152,6 +157,7 @@ A conversation represents either:
 
 - A direct chat between two users
 - A group chat
+- A live stream with one host and any number of conversation-member viewers
 - Optionally, a channel or support conversation later
 
 ## 2. Users
@@ -193,9 +199,15 @@ CREATE TABLE conversations (
     is_archived         BOOLEAN NOT NULL DEFAULT FALSE,
 
     CONSTRAINT ck_conversations_type
-        CHECK (type IN ('direct', 'group'))
+        CHECK (type IN ('direct', 'group', 'live_stream'))
 );
 ```
+
+A `live_stream` conversation is the persistent chat and membership container.
+Starting the broadcast creates a `live_stream_sessions` row; stopping it ends
+that row without deleting the conversation or its message history. A user may
+create any number of live-stream conversations and sessions, but may host only
+one active session at a time.
 
 `last_message_id` and `last_message_at` are denormalized fields. They make the conversation-list query much faster.
 
@@ -234,6 +246,10 @@ CREATE TABLE conversation_members (
 
 This table holds both membership and user-specific conversation state.
 
+Live streams reuse this table for both hosts and viewers. There is no separate
+live-stream viewer table: joining adds or reactivates a conversation member, and
+leaving records `left_at` while preserving the conversation and session history.
+
 For example:
 
 - Alice archives a conversation without affecting Bob.
@@ -258,6 +274,42 @@ For a high-traffic application, avoid calculating this count repeatedly. The den
 - A message is sent
 - A user reads the conversation
 - A message is removed
+
+### 4.1 Live-stream sessions
+
+Each start/stop cycle is stored independently so one live-stream conversation
+can retain many past sessions.
+
+```sql
+CREATE TABLE live_stream_sessions (
+    id                  UUID PRIMARY KEY,
+    conversation_id     UUID NOT NULL
+                        REFERENCES conversations(id)
+                        ON DELETE CASCADE,
+
+    host_user_id        UUID NOT NULL
+                        REFERENCES users(id),
+
+    provider            VARCHAR(80) NOT NULL,
+    provider_call_id    VARCHAR(500) NOT NULL,
+    started_at          TIMESTAMPTZ NOT NULL,
+    ended_at            TIMESTAMPTZ
+);
+
+CREATE UNIQUE INDEX uq_live_stream_active_conversation
+ON live_stream_sessions (conversation_id)
+WHERE ended_at IS NULL;
+
+CREATE UNIQUE INDEX uq_live_stream_active_host
+ON live_stream_sessions (host_user_id)
+WHERE ended_at IS NULL;
+```
+
+The first filtered index prevents two active sessions in the same conversation.
+The second enforces the product rule that one user can host only one active live
+stream at a time. Ended rows remain available as session history. Host and viewer
+join/leave activity, along with session start/stop activity, is stored as
+`system` messages in the conversation.
 
 ## 5. Messages
 
