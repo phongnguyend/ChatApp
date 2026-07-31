@@ -11,6 +11,10 @@ import {
   X,
 } from 'lucide-react'
 import { type ChangeEvent, useEffect, useRef, useState } from 'react'
+import {
+  formatMediaDuration,
+  resolveUnknownVideoDuration,
+} from './mediaDuration'
 
 export type ChatAttachment = {
   id: string
@@ -19,6 +23,7 @@ export type ChatAttachment = {
   fileSize: number
   width: number | null
   height: number | null
+  durationMs: number | null
 }
 
 type MessageAttachmentPickerProps = {
@@ -652,16 +657,30 @@ export function MessageAttachmentList({
             loading="lazy"
           />
         ) : attachment.contentType.startsWith('video/') ? (
-          <video
-            className="message-video"
-            key={attachment.id}
-            src={getUrl(attachment.id)}
-            controls
-            playsInline
-            preload="metadata"
-          >
-            <a href={getUrl(attachment.id, true)}>Download {attachment.fileName}</a>
-          </video>
+          <div className="message-video-attachment" key={attachment.id}>
+            <video
+              className="message-video"
+              src={getUrl(attachment.id)}
+              controls
+              playsInline
+              preload="metadata"
+              onLoadedMetadata={(event) =>
+                resolveUnknownVideoDuration(
+                  event.currentTarget,
+                  attachment.durationMs,
+                )
+              }
+            >
+              <a href={getUrl(attachment.id, true)}>
+                Download {attachment.fileName}
+              </a>
+            </video>
+            {attachment.durationMs !== null ? (
+              <small className="message-video-duration">
+                Duration {formatMediaDuration(attachment.durationMs)}
+              </small>
+            ) : null}
+          </div>
         ) : attachment.contentType.startsWith('audio/') ? (
           <div className="message-audio" key={attachment.id}>
             <span>

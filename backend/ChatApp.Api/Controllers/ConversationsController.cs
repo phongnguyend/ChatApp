@@ -750,7 +750,8 @@ public sealed class ConversationsController(
                             attachment.ContentType,
                             attachment.FileSize,
                             attachment.Width,
-                            attachment.Height))
+                            attachment.Height,
+                            attachment.DurationMs))
                         .ToList()
                     : new List<MessageAttachmentDto>(),
                 x.DeletedAt == null
@@ -869,7 +870,8 @@ public sealed class ConversationsController(
                         attachment.ContentType,
                         attachment.FileSize,
                         attachment.Width,
-                        attachment.Height))
+                        attachment.Height,
+                        attachment.DurationMs))
                     .ToList()))
             .SingleOrDefaultAsync(cancellationToken);
         if (existing is not null)
@@ -1004,7 +1006,8 @@ public sealed class ConversationsController(
                     attachment.ContentType,
                     attachment.FileSize,
                     attachment.Width,
-                    attachment.Height))
+                    attachment.Height,
+                    attachment.DurationMs))
                 .ToList();
             var result = new MessageDto(
                 message.Id,

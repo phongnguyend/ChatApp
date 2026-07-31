@@ -73,7 +73,8 @@ public sealed record MessageAttachmentDto(
     string ContentType,
     long FileSize,
     int? Width,
-    int? Height);
+    int? Height,
+    long? DurationMs);
 
 public sealed record MessageReactionDto(
     string Reaction,
@@ -299,3 +300,32 @@ public sealed record GroupMeetingScreenShareTakenOverDto(
     Guid MeetingId,
     Guid ConversationId,
     Guid NewOwnerUserId);
+
+public sealed record CreateRecordingRequest(
+    Guid ConversationId,
+    Guid SessionId,
+    string SessionType,
+    string? ProviderCallId = null);
+
+public sealed record CompleteRecordingRequest(long DurationMilliseconds);
+
+public sealed record RecordingConsentResponseRequest(
+    Guid RecordingId,
+    bool Accepted);
+
+public sealed record RecordingStateDto(
+    Guid RecordingId,
+    Guid ConversationId,
+    Guid SessionId,
+    Guid StartedByUserId,
+    string StartedByDisplayName,
+    DateTimeOffset StartedAt,
+    string Status);
+
+public sealed record RecordingConsentRequestedDto(
+    RecordingStateDto Recording,
+    bool IsNewParticipant);
+
+public sealed record ActiveRecordingDto(
+    RecordingStateDto Recording,
+    bool RequiresConsent);

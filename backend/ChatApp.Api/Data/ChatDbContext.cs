@@ -18,6 +18,12 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
     public DbSet<MessageVersion> MessageVersions => Set<MessageVersion>();
     public DbSet<UserBlock> UserBlocks => Set<UserBlock>();
     public DbSet<LiveLocationShare> LiveLocationShares => Set<LiveLocationShare>();
+    public DbSet<SessionRecording> SessionRecordings =>
+        Set<SessionRecording>();
+    public DbSet<SessionRecordingChunk> SessionRecordingChunks =>
+        Set<SessionRecordingChunk>();
+    public DbSet<CallingProviderIdentity> CallingProviderIdentities =>
+        Set<CallingProviderIdentity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -33,6 +39,8 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         ConfigureMessageVersions(modelBuilder);
         ConfigureUserBlocks(modelBuilder);
         ConfigureLiveLocationShares(modelBuilder);
+        ConfigureSessionRecordings(modelBuilder);
+        ConfigureCallingProviderIdentities(modelBuilder);
     }
 
     private static void ConfigureUsers(ModelBuilder modelBuilder)
@@ -327,5 +335,70 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
             .WithMany()
             .HasForeignKey(x => x.UserId)
             .OnDelete(DeleteBehavior.NoAction);
+    }
+
+    private static void ConfigureSessionRecordings(ModelBuilder modelBuilder)
+    {
+        var recording = modelBuilder.Entity<SessionRecording>();
+        recording.ToTable("SessionRecordings", table =>
+        {
+            table.HasCheckConstraint(
+                "CK_SessionRecordings_SessionType",
+                "[SessionType] IN ('direct', 'meeting')");
+            table.HasCheckConstraint(
+                "CK_SessionRecordings_Status",
+                "[Status] IN ('requesting-consent', 'recording', 'processing', 'completed', 'cancelled', 'failed')");
+        });
+        recording.HasKey(x => x.Id);
+        recording.Property(x => x.SessionType).HasMaxLength(20).IsRequired();
+        recording.Property(x => x.Status).HasMaxLength(30).IsRequired();
+        recording.Property(x => x.Provider).HasMaxLength(80).IsRequired();
+        recording.Property(x => x.ProviderCallLocator).HasMaxLength(500);
+        recording.Property(x => x.ProviderRecordingId).HasMaxLength(500);
+        recording.Property(x => x.ProviderContentLocationsJson)
+            .HasColumnType("nvarchar(max)");
+        recording.HasIndex(x => new { x.Provider, x.ProviderRecordingId });
+        recording.Property(x => x.StorageObjectName).HasColumnType("nvarchar(max)");
+        recording.Property(x => x.StartedAt).HasPrecision(3);
+        recording.Property(x => x.CompletedAt).HasPrecision(3);
+        recording.HasIndex(x => x.SessionId)
+            .IsUnique()
+            .HasFilter("[Status] IN ('requesting-consent', 'recording', 'processing')");
+        recording.HasOne(x => x.Conversation)
+            .WithMany()
+            .HasForeignKey(x => x.ConversationId)
+            .OnDelete(DeleteBehavior.NoAction);
+        recording.HasOne(x => x.StartedByUser)
+            .WithMany()
+            .HasForeignKey(x => x.StartedByUserId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        var chunk = modelBuilder.Entity<SessionRecordingChunk>();
+        chunk.ToTable("SessionRecordingChunks");
+        chunk.HasKey(x => new { x.RecordingId, x.Sequence });
+        chunk.Property(x => x.StorageObjectName)
+            .HasColumnType("nvarchar(max)")
+            .IsRequired();
+        chunk.Property(x => x.UploadedAt).HasPrecision(3);
+        chunk.HasOne(x => x.Recording)
+            .WithMany(x => x.Chunks)
+            .HasForeignKey(x => x.RecordingId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+
+    private static void ConfigureCallingProviderIdentities(
+        ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<CallingProviderIdentity>();
+        entity.ToTable("CallingProviderIdentities");
+        entity.HasKey(x => new { x.UserId, x.Provider });
+        entity.Property(x => x.Provider).HasMaxLength(80);
+        entity.Property(x => x.ExternalIdentity).HasMaxLength(500).IsRequired();
+        entity.Property(x => x.CreatedAt).HasPrecision(3);
+        entity.HasIndex(x => new { x.Provider, x.ExternalIdentity }).IsUnique();
+        entity.HasOne(x => x.User)
+            .WithMany()
+            .HasForeignKey(x => x.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

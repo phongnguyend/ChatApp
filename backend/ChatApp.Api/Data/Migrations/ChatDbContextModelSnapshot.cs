@@ -22,6 +22,131 @@ namespace ChatApp.Api.Data.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("ChatApp.Api.Models.CallingProviderIdentity", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Provider")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasPrecision(3)
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<string>("ExternalIdentity")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.HasKey("UserId", "Provider");
+
+                    b.HasIndex("Provider", "ExternalIdentity")
+                        .IsUnique();
+
+                    b.ToTable("CallingProviderIdentities", (string)null);
+                });
+
+            modelBuilder.Entity("ChatApp.Api.Models.SessionRecording", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasPrecision(3)
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<long?>("DurationMilliseconds")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<string>("ProviderCallLocator")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ProviderContentLocationsJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ProviderRecordingId")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("SessionType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasPrecision(3)
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<Guid>("StartedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("StorageObjectName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConversationId");
+
+                    b.HasIndex("Provider", "ProviderRecordingId");
+
+                    b.HasIndex("SessionId")
+                        .IsUnique()
+                        .HasFilter("[Status] IN ('requesting-consent', 'recording', 'processing')");
+
+                    b.HasIndex("StartedByUserId");
+
+                    b.ToTable("SessionRecordings", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SessionRecordings_SessionType", "[SessionType] IN ('direct', 'meeting')");
+
+                            t.HasCheckConstraint("CK_SessionRecordings_Status", "[Status] IN ('requesting-consent', 'recording', 'processing', 'completed', 'cancelled', 'failed')");
+                        });
+                });
+
+            modelBuilder.Entity("ChatApp.Api.Models.SessionRecordingChunk", b =>
+                {
+                    b.Property<Guid>("RecordingId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("int");
+
+                    b.Property<long>("FileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StorageObjectName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("UploadedAt")
+                        .HasPrecision(3)
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.HasKey("RecordingId", "Sequence");
+
+                    b.ToTable("SessionRecordingChunks", (string)null);
+                });
+
             modelBuilder.Entity("ChatApp.Api.Models.ChatMessage", b =>
                 {
                     b.Property<Guid>("Id")
@@ -541,6 +666,47 @@ namespace ChatApp.Api.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ChatApp.Api.Models.SessionRecording", b =>
+                {
+                    b.HasOne("ChatApp.Api.Models.Conversation", "Conversation")
+                        .WithMany()
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("ChatApp.Api.Models.ChatUser", "StartedByUser")
+                        .WithMany()
+                        .HasForeignKey("StartedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("Conversation");
+
+                    b.Navigation("StartedByUser");
+                });
+
+            modelBuilder.Entity("ChatApp.Api.Models.CallingProviderIdentity", b =>
+                {
+                    b.HasOne("ChatApp.Api.Models.ChatUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ChatApp.Api.Models.SessionRecordingChunk", b =>
+                {
+                    b.HasOne("ChatApp.Api.Models.SessionRecording", "Recording")
+                        .WithMany("Chunks")
+                        .HasForeignKey("RecordingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Recording");
+                });
+
             modelBuilder.Entity("ChatApp.Api.Models.ChatMessage", b =>
                 {
                     b.HasOne("ChatApp.Api.Models.Conversation", "Conversation")
@@ -774,6 +940,11 @@ namespace ChatApp.Api.Data.Migrations
                     b.Navigation("BlockedUser");
 
                     b.Navigation("BlockerUser");
+                });
+
+            modelBuilder.Entity("ChatApp.Api.Models.SessionRecording", b =>
+                {
+                    b.Navigation("Chunks");
                 });
 
             modelBuilder.Entity("ChatApp.Api.Models.ChatMessage", b =>

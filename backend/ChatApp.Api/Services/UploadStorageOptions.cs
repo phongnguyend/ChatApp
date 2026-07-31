@@ -7,4 +7,6 @@ public sealed class UploadStorageOptions
     public string Provider { get; set; } = "Local";
 
     public string Path { get; set; } = "/uploads";
+
+    public string RecordingTempPath { get; set; } = "";
 }

@@ -2203,6 +2203,18 @@
   background: var(--navy);
 }
 
+.message-video-attachment {
+  width: min(100%, 420px);
+}
+
+.message-video-duration {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-align: right;
+}
+
 .message-audio {
   min-width: min(320px, 76vw);
   padding: 10px 12px;
@@ -2302,6 +2314,28 @@
   flex: 0 0 auto;
   color: #b0b1ac;
   font-size: 9px;
+}
+
+.system-message.has-attachments {
+  width: min(460px, calc(100% - 32px));
+  margin-top: 18px;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.system-message.has-attachments .message-attachments {
+  width: 100%;
+  margin: 2px auto;
+  justify-items: center;
+}
+
+.system-message.has-attachments .message-video-attachment,
+.system-message.has-attachments .message-video {
+  width: 100%;
+}
+
+.system-message.has-attachments .message-video-duration {
+  text-align: center;
 }
 
 .typing-line {

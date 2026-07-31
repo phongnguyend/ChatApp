@@ -13,10 +13,14 @@ public sealed class ChatHub(
     PresenceTracker presence,
     CallStateTracker calls,
     GroupMeetingStateTracker meetings,
+    RecordingStateTracker recordingStates,
+    IServiceProvider services,
     AzurePushNotificationService pushNotifications,
     ILogger<ChatHub> logger) : Hub
 {
     private const string UsernameQueryKey = "username";
+    private ICallingProvider? CallingProvider =>
+        services.GetService<ICallingProvider>();
 
     public override async Task OnConnectedAsync()
     {
@@ -58,6 +62,55 @@ public sealed class ChatHub(
         {
             if (presence.ConnectionIdsForUser(session.UserId).Count == 0)
             {
+                foreach (var stopped in recordingStates.Disconnect(session.UserId))
+                {
+                    var callingProvider = CallingProvider;
+                    var recording = await db.SessionRecordings
+                        .Include(item => item.StartedByUser)
+                        .SingleOrDefaultAsync(item =>
+                            item.Id == stopped.RecordingId);
+                    if (recording is null ||
+                        recording.Status is "completed" or "cancelled" or "failed")
+                    {
+                        continue;
+                    }
+                    if (callingProvider?.ManagesRecording == true &&
+                        recording.Provider == callingProvider.Name &&
+                        !string.IsNullOrWhiteSpace(
+                            recording.ProviderRecordingId))
+                    {
+                        await callingProvider.StopRecordingAsync(
+                            recording.ProviderRecordingId,
+                            CancellationToken.None);
+                        recording.Status = "processing";
+                    }
+                    else
+                    {
+                        recording.Status = "failed";
+                        recording.CompletedAt = DateTimeOffset.UtcNow;
+                    }
+                    await db.SaveChangesAsync();
+                    await Clients
+                        .Group(ConversationGroup(recording.ConversationId))
+                        .SendAsync(
+                            recording.Status == "processing"
+                                ? "RecordingStopped"
+                                : "RecordingFailed",
+                            recording.Status == "processing"
+                                ? ToRecordingDto(recording)
+                                : new
+                            {
+                                recording = ToRecordingDto(recording),
+                                message =
+                                    "Recording stopped because the recorder disconnected."
+                            });
+                    await SendMeetingSystemMessage(
+                        recording.ConversationId,
+                        "Recording stopped because the recorder disconnected.",
+                        session.UserId,
+                        CancellationToken.None);
+                }
+
                 foreach (var change in meetings.Disconnect(session.UserId))
                 {
                     await Clients.Group(ConversationGroup(change.ConversationId))
@@ -82,23 +135,23 @@ public sealed class ChatHub(
                             CancellationToken.None);
                     }
                 }
-            }
-            var endedShares = calls.EndCallsForUser(session.UserId);
-            foreach (var share in endedShares)
-            {
-                var remainingUserId =
-                    share.OwnerUserId == session.UserId
-                        ? share.PeerUserId
-                        : share.OwnerUserId;
-                await Clients.Clients(
-                        presence.ConnectionIdsForUser(remainingUserId))
-                    .SendAsync(
-                        "CallScreenShareChanged",
-                        new CallScreenShareChangedDto(
-                            share.CallId,
-                            share.ConversationId,
-                            share.OwnerUserId,
-                            false));
+                var endedCalls = calls.EndCallsForUser(session.UserId);
+                foreach (var call in endedCalls)
+                {
+                    var remainingUserId =
+                        call.InitiatorUserId == session.UserId
+                            ? call.PeerUserId
+                            : call.InitiatorUserId;
+                    await Clients.Clients(
+                            presence.ConnectionIdsForUser(remainingUserId))
+                        .SendAsync(
+                            "CallEnded",
+                            new CallEndedDto(
+                                call.CallId,
+                                call.ConversationId,
+                                session.UserId,
+                                "ended"));
+                }
             }
             var user = await db.Users.FindAsync([session.UserId]);
             if (user is not null)
@@ -558,6 +611,11 @@ public sealed class ChatHub(
             throw new HubException($"{target.DisplayName} is not online.");
         }
 
+        calls.StartCall(
+            request.CallId,
+            request.ConversationId,
+            session.UserId,
+            target.Id);
         await Clients.Clients(targetConnections).SendAsync(
             "CallIncoming",
             new IncomingCallDto(
@@ -578,6 +636,14 @@ public sealed class ChatHub(
             session.UserId,
             request.ConversationId,
             request.InitiatorUserId);
+        try
+        {
+            calls.Respond(request.CallId, session.UserId, request.Accepted);
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new HubException(exception.Message);
+        }
 
         await Clients.Clients(presence.ConnectionIdsForUser(initiator.Id)).SendAsync(
             request.Accepted ? "CallAccepted" : "CallDeclined",
@@ -767,9 +833,25 @@ public sealed class ChatHub(
         var dto = ToDto(
             change.Meeting
             ?? throw new HubException("The meeting has ended."));
+        RecordingStateTracker.RecordingSnapshot? recording = null;
+        if (change.Changed)
+        {
+            recording = recordingStates.AddParticipant(
+                dto.MeetingId,
+                session.UserId);
+        }
         await BroadcastMeeting(conversationId, dto);
         if (change.Changed)
         {
+            if (recording is not null)
+            {
+                await Clients.Caller.SendAsync(
+                    "RequestRecordingConsent",
+                    new RecordingConsentRequestedDto(
+                        ToRecordingDto(recording),
+                        true),
+                    Context.ConnectionAborted);
+            }
             await SendMeetingSystemMessage(
                 conversationId,
                 $"{session.DisplayName} joined the meeting.",
@@ -849,6 +931,16 @@ public sealed class ChatHub(
         {
             throw new HubException(
                 "Meeting signals can only be sent between participants.");
+        }
+        if (!recordingStates.HasConsent(
+                request.MeetingId,
+                session.UserId) ||
+            !recordingStates.HasConsent(
+                request.MeetingId,
+                request.TargetUserId))
+        {
+            throw new HubException(
+                "Recording consent is required before receiving meeting media.");
         }
 
         await Clients.Clients(
@@ -940,6 +1032,331 @@ public sealed class ChatHub(
         }
 
         await BroadcastMeeting(request.ConversationId, ToDto(meeting));
+    }
+
+    public async Task RequestRecordingConsent(Guid recordingId)
+    {
+        var session = GetSession();
+        var recording = await db.SessionRecordings
+            .Include(item => item.StartedByUser)
+            .SingleOrDefaultAsync(
+                item => item.Id == recordingId,
+                Context.ConnectionAborted)
+            ?? throw new HubException("The recording was not found.");
+        if (recording.StartedByUserId != session.UserId ||
+            recording.Status != "requesting-consent")
+        {
+            throw new HubException(
+                "Only the recorder can request consent.");
+        }
+
+        IReadOnlyCollection<Guid> participantIds;
+        if (recording.SessionType == "direct")
+        {
+            var call = calls.Get(recording.SessionId);
+            if (call is null ||
+                call.ConversationId != recording.ConversationId ||
+                (call.InitiatorUserId != session.UserId &&
+                 call.PeerUserId != session.UserId))
+            {
+                throw new HubException("The direct call is no longer active.");
+            }
+            participantIds = [call.InitiatorUserId, call.PeerUserId];
+        }
+        else
+        {
+            var meeting = meetings.Get(recording.ConversationId);
+            if (meeting is null ||
+                meeting.MeetingId != recording.SessionId ||
+                !meeting.Participants.Any(item =>
+                    item.UserId == session.UserId))
+            {
+                throw new HubException("The meeting is no longer active.");
+            }
+            participantIds = meeting.Participants
+                .Select(item => item.UserId)
+                .ToArray();
+        }
+
+        RecordingStateTracker.RecordingSnapshot state;
+        try
+        {
+            state = recordingStates.Begin(
+                recording.Id,
+                recording.ConversationId,
+                recording.SessionId,
+                recording.SessionType,
+                session.UserId,
+                session.DisplayName,
+                participantIds);
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new HubException(exception.Message);
+        }
+
+        var recorderConsent = recordingStates.Respond(
+            recording.Id,
+            session.UserId,
+            true);
+        state = recorderConsent.Recording;
+        if (recorderConsent.Started)
+        {
+            await StartCallingProviderRecording(recording);
+            recording.Status = "recording";
+            recording.StartedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(Context.ConnectionAborted);
+            await Clients
+                .Group(ConversationGroup(recording.ConversationId))
+                .SendAsync(
+                    "RecordingStarted",
+                    ToRecordingDto(recording),
+                    Context.ConnectionAborted);
+            await SendMeetingSystemMessage(
+                recording.ConversationId,
+                $"{recording.StartedByUser.DisplayName} started recording.",
+                recording.StartedByUserId);
+            return;
+        }
+
+        var request = new RecordingConsentRequestedDto(
+            ToRecordingDto(state),
+            false);
+        foreach (var participantId in participantIds.Where(
+                     participantId => participantId != session.UserId))
+        {
+            await Clients
+                .Clients(presence.ConnectionIdsForUser(participantId))
+                .SendAsync(
+                    "RequestRecordingConsent",
+                    request,
+                    Context.ConnectionAborted);
+        }
+        await SendMeetingSystemMessage(
+            recording.ConversationId,
+            $"{session.DisplayName} requested permission to record.",
+            session.UserId);
+    }
+
+    public async Task<ActiveRecordingDto?> GetActiveRecording(Guid sessionId)
+    {
+        var session = GetSession();
+        var recording = recordingStates.GetForSession(sessionId);
+        if (recording is null)
+        {
+            return null;
+        }
+        await EnsureMembership(session.UserId, recording.ConversationId);
+        if (!recording.RequiredConsentUserIds.Contains(session.UserId))
+        {
+            return null;
+        }
+        return new ActiveRecordingDto(
+            ToRecordingDto(recording),
+            !recording.AcceptedUserIds.Contains(session.UserId));
+    }
+
+    public async Task RespondToRecordingConsent(
+        RecordingConsentResponseRequest request)
+    {
+        var session = GetSession();
+        var recording = await db.SessionRecordings
+            .Include(item => item.StartedByUser)
+            .SingleOrDefaultAsync(
+                item => item.Id == request.RecordingId,
+                Context.ConnectionAborted)
+            ?? throw new HubException("The recording was not found.");
+        await EnsureMembership(session.UserId, recording.ConversationId);
+
+        RecordingStateTracker.ConsentChange change;
+        try
+        {
+            change = recordingStates.Respond(
+                recording.Id,
+                session.UserId,
+                request.Accepted);
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new HubException(exception.Message);
+        }
+
+        if (change.ParticipantDeclined)
+        {
+            await Clients.Caller.SendAsync(
+                "RecordingConsentDeclined",
+                ToRecordingDto(change.Recording),
+                Context.ConnectionAborted);
+            return;
+        }
+
+        if (change.Declined)
+        {
+            recording.Status = "cancelled";
+            recording.CompletedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(Context.ConnectionAborted);
+            await Clients
+                .Group(ConversationGroup(recording.ConversationId))
+                .SendAsync(
+                    "RecordingFailed",
+                    new
+                    {
+                        recording = ToRecordingDto(recording),
+                        message =
+                            $"{session.DisplayName} declined recording consent."
+                    },
+                    Context.ConnectionAborted);
+            await SendMeetingSystemMessage(
+                recording.ConversationId,
+                $"{session.DisplayName} declined recording consent.",
+                session.UserId);
+            return;
+        }
+
+        if (change.Started)
+        {
+            await StartCallingProviderRecording(recording);
+            recording.Status = "recording";
+            recording.StartedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(Context.ConnectionAborted);
+            await Clients
+                .Group(ConversationGroup(recording.ConversationId))
+                .SendAsync(
+                    "RecordingStarted",
+                    ToRecordingDto(recording),
+                    Context.ConnectionAborted);
+            await SendMeetingSystemMessage(
+                recording.ConversationId,
+                $"{recording.StartedByUser.DisplayName} started recording.",
+                recording.StartedByUserId);
+        }
+        else if (request.Accepted && recording.Status == "recording")
+        {
+            await Clients.Caller.SendAsync(
+                "RecordingStarted",
+                ToRecordingDto(recording),
+                Context.ConnectionAborted);
+        }
+    }
+
+    public async Task StopRecording(Guid recordingId)
+    {
+        var session = GetSession();
+        var recording = await db.SessionRecordings
+            .Include(item => item.StartedByUser)
+            .SingleOrDefaultAsync(
+                item => item.Id == recordingId,
+                Context.ConnectionAborted)
+            ?? throw new HubException("The recording was not found.");
+        await EnsureMembership(session.UserId, recording.ConversationId);
+        var isOwner = recording.SessionType == "meeting" &&
+            await db.ConversationMembers.AnyAsync(
+                member =>
+                    member.ConversationId == recording.ConversationId &&
+                    member.UserId == session.UserId &&
+                    member.LeftAt == null &&
+                    member.Role == "owner",
+                Context.ConnectionAborted);
+        if (recording.StartedByUserId != session.UserId && !isOwner)
+        {
+            throw new HubException(
+                "Only the recorder or group owner can stop recording.");
+        }
+        if (recording.Status != "recording")
+        {
+            return;
+        }
+
+        var callingProvider = CallingProvider;
+        if (callingProvider?.ManagesRecording == true &&
+            recording.Provider == callingProvider.Name)
+        {
+            if (string.IsNullOrWhiteSpace(recording.ProviderRecordingId))
+            {
+                throw new HubException(
+                    "The provider recording identifier is missing.");
+            }
+            await callingProvider.StopRecordingAsync(
+                recording.ProviderRecordingId,
+                Context.ConnectionAborted);
+            recording.Status = "processing";
+            await db.SaveChangesAsync(Context.ConnectionAborted);
+            recordingStates.Stop(recording.Id);
+            await Clients
+                .Group(ConversationGroup(recording.ConversationId))
+                .SendAsync(
+                    "RecordingStopped",
+                    ToRecordingDto(recording),
+                    Context.ConnectionAborted);
+            await SendMeetingSystemMessage(
+                recording.ConversationId,
+                $"{recording.StartedByUser.DisplayName} stopped the recording. Processing…",
+                session.UserId);
+            return;
+        }
+
+        await Clients
+            .Clients(presence.ConnectionIdsForUser(recording.StartedByUserId))
+            .SendAsync(
+                "RecordingStopRequested",
+                ToRecordingDto(recording),
+                Context.ConnectionAborted);
+    }
+
+    private async Task StartCallingProviderRecording(
+        SessionRecording recording)
+    {
+        var callingProvider = CallingProvider;
+        if (callingProvider is null ||
+            !callingProvider.ManagesRecording ||
+            recording.Provider != callingProvider.Name)
+        {
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(recording.ProviderCallLocator))
+        {
+            throw new HubException(
+                "The provider call is not ready for recording.");
+        }
+        if (!string.IsNullOrWhiteSpace(recording.ProviderRecordingId))
+        {
+            return;
+        }
+        try
+        {
+            recording.ProviderRecordingId =
+                await callingProvider.StartRecordingAsync(
+                    recording.ProviderCallLocator,
+                    Context.ConnectionAborted);
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(
+                exception,
+                "Provider recording could not start for session {SessionId}.",
+                recording.SessionId);
+            recording.Status = "failed";
+            recording.CompletedAt = DateTimeOffset.UtcNow;
+            recordingStates.Stop(recording.Id);
+            await db.SaveChangesAsync(CancellationToken.None);
+            await Clients
+                .Group(ConversationGroup(recording.ConversationId))
+                .SendAsync(
+                    "RecordingFailed",
+                    new
+                    {
+                        recording = ToRecordingDto(recording),
+                        message = "The calling provider could not start recording."
+                    },
+                    CancellationToken.None);
+            await SendMeetingSystemMessage(
+                recording.ConversationId,
+                "The calling provider could not start recording.",
+                recording.StartedByUserId,
+                CancellationToken.None);
+            throw new HubException(
+                "The calling provider could not start recording.");
+        }
     }
 
     public async Task MarkRead(Guid conversationId, long sequenceNumber)
@@ -1137,6 +1554,28 @@ public sealed class ChatHub(
                     participant.JoinedAt,
                     participant.IsMuted))
                 .ToArray());
+
+    private static RecordingStateDto ToRecordingDto(
+        SessionRecording recording) =>
+        new(
+            recording.Id,
+            recording.ConversationId,
+            recording.SessionId,
+            recording.StartedByUserId,
+            recording.StartedByUser.DisplayName,
+            recording.StartedAt,
+            recording.Status);
+
+    private static RecordingStateDto ToRecordingDto(
+        RecordingStateTracker.RecordingSnapshot recording) =>
+        new(
+            recording.RecordingId,
+            recording.ConversationId,
+            recording.SessionId,
+            recording.RecorderUserId,
+            recording.RecorderDisplayName,
+            recording.StartedAt,
+            recording.Status);
 
     internal static LiveLocationDto ToDto(LiveLocationShare share) =>
         new(

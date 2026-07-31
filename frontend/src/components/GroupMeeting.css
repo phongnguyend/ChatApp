@@ -6,7 +6,6 @@
   display: grid;
   place-items: center;
   background: rgba(7, 17, 19, 0.76);
-  backdrop-filter: blur(8px);
 }
 
 .group-meeting-stage {
@@ -123,7 +122,6 @@
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
-  backdrop-filter: blur(5px);
 }
 
 .meeting-microphone-status {
@@ -140,7 +138,6 @@
   color: #dff9ed;
   background: rgba(26, 105, 75, 0.8);
   font-weight: 700;
-  backdrop-filter: blur(5px);
 }
 
 .meeting-microphone-status.is-muted {
@@ -185,7 +182,6 @@
   background: rgba(4, 14, 16, 0.76);
   font-size: 11px;
   font-weight: 700;
-  backdrop-filter: blur(5px);
 }
 
 .maximize-meeting-stage,
@@ -203,7 +199,6 @@
   place-items: center;
   color: white;
   background: rgba(4, 14, 16, 0.72);
-  backdrop-filter: blur(5px);
 }
 
 .maximize-meeting-stage:hover,

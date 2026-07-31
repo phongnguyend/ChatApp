@@ -3,7 +3,54 @@ namespace ChatApp.Api.Services;
 public sealed class CallStateTracker
 {
     private readonly Lock _sync = new();
+    private readonly Dictionary<Guid, CallSession> _calls = [];
     private readonly Dictionary<Guid, ScreenShareSession> _screenShares = [];
+
+    public void StartCall(
+        Guid callId,
+        Guid conversationId,
+        Guid initiatorUserId,
+        Guid peerUserId)
+    {
+        lock (_sync)
+        {
+            _calls[callId] = new CallSession(
+                callId,
+                conversationId,
+                initiatorUserId,
+                peerUserId,
+                false);
+        }
+    }
+
+    public void Respond(Guid callId, Guid userId, bool accepted)
+    {
+        lock (_sync)
+        {
+            if (!_calls.TryGetValue(callId, out var call) ||
+                call.PeerUserId != userId)
+            {
+                throw new InvalidOperationException("The call is no longer active.");
+            }
+            if (!accepted)
+            {
+                _calls.Remove(callId);
+                _screenShares.Remove(callId);
+                return;
+            }
+            _calls[callId] = call with { Accepted = true };
+        }
+    }
+
+    public CallSession? Get(Guid callId)
+    {
+        lock (_sync)
+        {
+            return _calls.TryGetValue(callId, out var call) && call.Accepted
+                ? call
+                : null;
+        }
+    }
 
     public ScreenShareSession? StartScreenShare(
         Guid callId,
@@ -41,25 +88,35 @@ public sealed class CallStateTracker
     {
         lock (_sync)
         {
+            _calls.Remove(callId);
             _screenShares.Remove(callId);
         }
     }
 
-    public IReadOnlyList<ScreenShareSession> EndCallsForUser(Guid userId)
+    public IReadOnlyList<CallSession> EndCallsForUser(Guid userId)
     {
         lock (_sync)
         {
-            var removed = _screenShares.Values
-                .Where(x => x.OwnerUserId == userId || x.PeerUserId == userId)
+            var removed = _calls.Values
+                .Where(x =>
+                    x.InitiatorUserId == userId || x.PeerUserId == userId)
                 .ToArray();
-            foreach (var share in removed)
+            foreach (var call in removed)
             {
-                _screenShares.Remove(share.CallId);
+                _calls.Remove(call.CallId);
+                _screenShares.Remove(call.CallId);
             }
 
             return removed;
         }
     }
+
+    public sealed record CallSession(
+        Guid CallId,
+        Guid ConversationId,
+        Guid InitiatorUserId,
+        Guid PeerUserId,
+        bool Accepted);
 
     public sealed record ScreenShareSession(
         Guid CallId,

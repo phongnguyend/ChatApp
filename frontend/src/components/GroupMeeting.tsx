@@ -21,6 +21,15 @@ import {
   HubConnectionState,
   type HubConnection,
 } from "@microsoft/signalr";
+import {
+  CallRecordingControls,
+  RecordingConsentDialog,
+  useCallRecording,
+} from "./useCallRecording";
+import {
+  acquireScreenShareStream,
+  optimizeScreenShareSender,
+} from "./screenShare";
 import "./GroupMeeting.css";
 
 export type GroupMeetingParticipant = {
@@ -57,6 +66,8 @@ type MeetingScreenShareTakenOverEvent = {
 
 type GroupMeetingOverlayProps = {
   connection: HubConnection | null;
+  apiUrl: string;
+  username: string;
   currentUser: {
     id: string;
     displayName: string;
@@ -74,6 +85,8 @@ type GroupMeetingOverlayProps = {
 
 export function GroupMeetingOverlay({
   connection,
+  apiUrl,
+  username,
   currentUser,
   groupTitle,
   meeting,
@@ -113,6 +126,7 @@ export function GroupMeetingOverlay({
   );
   const meetingRef = useRef(meeting);
   const onLeaveRef = useRef(onLeave);
+  const recordingConsentBlockedRef = useRef(false);
 
   useEffect(() => {
     meetingRef.current = meeting;
@@ -525,10 +539,7 @@ export function GroupMeetingOverlay({
 
     let displayStream: MediaStream | null = null;
     try {
-      displayStream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: false,
-      });
+      displayStream = await acquireScreenShareStream();
       const screenTrack = displayStream.getVideoTracks()[0];
       if (!screenTrack) throw new Error("No screen was selected.");
 
@@ -537,7 +548,8 @@ export function GroupMeetingOverlay({
         conversationId: meeting.conversationId,
       });
       for (const peerConnection of peerConnectionsRef.current.values()) {
-        peerConnection.addTrack(screenTrack, displayStream);
+        const sender = peerConnection.addTrack(screenTrack, displayStream);
+        await optimizeScreenShareSender(sender);
       }
       screenStreamRef.current = displayStream;
       setScreenStream(displayStream);
@@ -633,6 +645,91 @@ export function GroupMeetingOverlay({
     meeting.screenSharingUserId === currentUser.id
       ? screenStream
       : remoteScreenStream;
+  const recordingParticipants = useMemo(
+    () =>
+      meeting.participants.map((participant) => {
+        const isLocal = participant.userId === currentUser.id;
+        const source = isLocal
+          ? localStream
+          : remoteStreams[participant.userId] ?? null;
+        if (
+          !source ||
+          isLocal ||
+          participant.userId !== meeting.screenSharingUserId
+        ) {
+          return {
+            userId: participant.userId,
+            displayName: participant.displayName,
+            stream: source,
+            isMuted: isLocal ? isMuted : participant.isMuted,
+          };
+        }
+        const cameraTracks = source
+          .getVideoTracks()
+          .filter(
+            (track) => track.readyState === "live" && !track.muted,
+          )
+          .slice(0, -1);
+        return {
+          userId: participant.userId,
+          displayName: participant.displayName,
+          stream: new MediaStream([
+            ...source.getAudioTracks(),
+            ...cameraTracks,
+          ]),
+          isMuted: participant.isMuted,
+        };
+      }),
+    [
+      currentUser.id,
+      isMuted,
+      localStream,
+      meeting.participants,
+      meeting.screenSharingUserId,
+      remoteStreams,
+    ],
+  );
+  const recordingController = useCallRecording({
+    connection,
+    apiUrl,
+    username,
+    conversationId: meeting.conversationId,
+    sessionId: meeting.meetingId,
+    sessionType: "meeting",
+    currentUserId: currentUser.id,
+    participants: recordingParticipants,
+    sharedScreenStream: activeScreenStream,
+    canStopRecording: meeting.startedByUserId === currentUser.id,
+    onConsentDeclined: onLeave,
+    onError,
+  });
+
+  useEffect(() => {
+    if (!recordingController.hasLocalConsent) {
+      recordingConsentBlockedRef.current = true;
+      return;
+    }
+    if (!recordingConsentBlockedRef.current) return;
+    recordingConsentBlockedRef.current = false;
+    for (const [participantId, peerConnection] of
+      peerConnectionsRef.current) {
+      void (async () => {
+        try {
+          const offer = await peerConnection.createOffer();
+          await peerConnection.setLocalDescription(offer);
+          await sendSignal(participantId, "offer", JSON.stringify(offer));
+        } catch {
+          onError(
+            "Meeting media could not be connected after recording consent.",
+          );
+        }
+      })();
+    }
+  }, [
+    onError,
+    recordingController.hasLocalConsent,
+    sendSignal,
+  ]);
 
   useEffect(() => {
     if (sharedScreenVideoRef.current) {
@@ -649,6 +746,10 @@ export function GroupMeetingOverlay({
         aria-modal="true"
         aria-label={`Meeting in ${groupTitle}`}
       >
+        <CallRecordingControls
+          controller={recordingController}
+          showWhenIdle={false}
+        />
         <button
           type="button"
           className="maximize-meeting-stage"
@@ -777,6 +878,7 @@ export function GroupMeetingOverlay({
           >
             {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
           </button>
+          <CallRecordingControls controller={recordingController} />
           <button
             type="button"
             className={!isCameraEnabled ? "inactive" : ""}
@@ -842,6 +944,7 @@ export function GroupMeetingOverlay({
           ) : null}
         </div>
       </section>
+      <RecordingConsentDialog controller={recordingController} />
     </div>
   );
 }

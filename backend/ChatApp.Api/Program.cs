@@ -8,6 +8,9 @@ var uploadStorageSection = builder.Configuration.GetSection(
     UploadStorageOptions.SectionName);
 var uploadStorageProvider =
     uploadStorageSection.GetValue<string>("Provider") ?? "Local";
+var callingSection = builder.Configuration.GetSection(
+    CallingOptions.SectionName);
+var callingProvider = callingSection.GetValue<string>("Provider")?.Trim();
 
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
@@ -34,9 +37,44 @@ builder.Services.AddOptions<AzureBlobOptions>()
     .ValidateOnStart();
 builder.Services.Configure<AzureNotificationOptions>(
     builder.Configuration.GetSection(AzureNotificationOptions.SectionName));
+builder.Services.AddOptions<CallingOptions>()
+    .Bind(callingSection)
+    .Validate(
+        options =>
+            !string.Equals(
+                options.Provider,
+                "AzureCommunicationServices",
+                StringComparison.OrdinalIgnoreCase) ||
+            !string.IsNullOrWhiteSpace(
+                options.AzureCommunicationServices.ConnectionString),
+        "The Azure Communication Services connection string is required.")
+    .ValidateOnStart();
+if (!string.IsNullOrWhiteSpace(callingProvider))
+{
+    if (callingProvider.Equals(
+        "AzureCommunicationServices",
+        StringComparison.OrdinalIgnoreCase))
+    {
+        builder.Services.AddScoped<
+            ICallingProvider,
+            AzureCommunicationServicesCallingProvider>();
+        builder.Services.AddSingleton<
+            CallingProviderRecordingFinalizationQueue>();
+        builder.Services.AddHostedService<
+            CallingProviderRecordingFinalizationWorker>();
+    }
+    else
+    {
+        throw new InvalidOperationException(
+            $"Unsupported calling provider \"{callingProvider}\".");
+    }
+}
 builder.Services.AddSingleton<PresenceTracker>();
 builder.Services.AddSingleton<CallStateTracker>();
 builder.Services.AddSingleton<GroupMeetingStateTracker>();
+builder.Services.AddSingleton<RecordingStateTracker>();
+builder.Services.AddSingleton<RecordingFinalizationQueue>();
+builder.Services.AddSingleton<RecordingChunkTempStorage>();
 if (uploadStorageProvider.Equals(
     "AzureBlob",
     StringComparison.OrdinalIgnoreCase))
@@ -60,6 +98,7 @@ builder.Services.AddScoped<IAvatarStorage, AvatarStorage>();
 builder.Services.AddScoped<IMessageAttachmentStorage, MessageAttachmentStorage>();
 builder.Services.AddScoped<AzurePushNotificationService>();
 builder.Services.AddHostedService<LiveLocationExpiryService>();
+builder.Services.AddHostedService<RecordingFinalizationWorker>();
 
 var allowedOrigins = builder.Configuration
     .GetSection("AllowedOrigins")

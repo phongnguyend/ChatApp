@@ -1,0 +1,139 @@
+.recording-status {
+  position: absolute;
+  z-index: 5;
+  top: 18px;
+  left: 18px;
+  min-height: 38px;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 111, 111, 0.4);
+  border-radius: 12px;
+  display: grid;
+  grid-template-columns: auto auto auto;
+  align-items: center;
+  gap: 4px 8px;
+  color: white;
+  background: #2b1114;
+  contain: layout paint;
+}
+
+.recording-status > span:not(.recording-dot) {
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.recording-status small {
+  grid-column: 2;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.7rem;
+}
+
+.recording-status button {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 10px !important;
+  color: white !important;
+  background: #c84545 !important;
+}
+
+.recording-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ff5757;
+  box-shadow: 0 0 0 4px rgba(255, 87, 87, 0.15);
+  animation: recording-pulse 1.6s ease-in-out infinite;
+}
+
+.start-recording {
+  color: #ffb7b7 !important;
+}
+
+.start-recording svg:not(.recording-spinner) {
+  fill: #e94e4e;
+  stroke: #e94e4e;
+}
+
+.recording-spinner {
+  animation: recording-spin 0.8s linear infinite;
+}
+
+.recording-consent-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  padding: 24px;
+  display: grid;
+  place-items: center;
+  background: #071113;
+  contain: strict;
+  isolation: isolate;
+}
+
+.recording-consent-dialog {
+  width: min(440px, 100%);
+  padding: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 22px;
+  color: #edf9f6;
+  background: #102326;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.4);
+  contain: layout paint;
+}
+
+.recording-consent-dialog h2 {
+  margin: 15px 0 8px;
+}
+
+.recording-consent-dialog p {
+  color: rgba(237, 249, 246, 0.72);
+  line-height: 1.55;
+}
+
+.recording-consent-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 15px;
+  display: grid;
+  place-items: center;
+  color: #ff7373;
+  background: rgba(255, 94, 94, 0.14);
+}
+
+.recording-consent-icon svg {
+  fill: currentColor;
+}
+
+.recording-consent-dialog > div {
+  margin-top: 24px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.recording-consent-dialog button {
+  min-width: 100px;
+}
+
+.recording-consent-dialog .decline-recording {
+  color: #e8f3f1;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.recording-consent-dialog .accept-recording {
+  color: white;
+  background: #c84545;
+}
+
+@keyframes recording-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@keyframes recording-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

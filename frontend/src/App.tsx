@@ -59,6 +59,10 @@ import {
   MessageAttachmentList,
   MessageAttachmentPicker,
 } from "./components/MessageAttachments";
+import {
+  formatMediaDuration,
+  resolveUnknownVideoDuration,
+} from "./components/mediaDuration";
 import { type ChatReaction, MessageActions } from "./components/MessageActions";
 import { EmojiPicker } from "./components/EmojiPicker";
 import { GroupMemberActions } from "./components/GroupMemberActions";
@@ -1099,6 +1103,8 @@ function ChatApp({
   );
   const directCall = useDirectCall({
     connection: hubConnection,
+    apiUrl: API_URL,
+    username: user.username,
     localUserId: user.id,
     localDisplayName: user.displayName,
     onError: setError,
@@ -3704,6 +3710,18 @@ function ChatApp({
                     (candidate) => candidate.id === message.replyToMessageId,
                   )
                 : undefined;
+              const isRecordingAttachment =
+                message.senderUserId === null &&
+                message.messageType === "video" &&
+                (message.attachments ?? []).some((attachment) =>
+                  attachment.contentType.startsWith("video/"),
+                );
+              const isSystemMessage =
+                message.messageType === "system" ||
+                isRecordingAttachment;
+              const hasSystemAttachments =
+                isSystemMessage &&
+                (message.attachments?.length ?? 0) > 0;
 
               return (
                 <div key={message.id}>
@@ -3712,9 +3730,20 @@ function ChatApp({
                       <span>{dateLabel(message.createdAt)}</span>
                     </div>
                   )}
-                  {message.messageType === "system" ? (
-                    <article className="system-message">
+                  {isSystemMessage ? (
+                    <article
+                      id={`message-${message.id}`}
+                      className={`system-message ${
+                        hasSystemAttachments ? "has-attachments" : ""
+                      }`}
+                    >
                       <p>{message.content}</p>
+                      {hasSystemAttachments ? (
+                        <MessageAttachmentList
+                          attachments={message.attachments ?? []}
+                          getUrl={attachmentUrl}
+                        />
+                      ) : null}
                       <time dateTime={message.createdAt}>
                         {formatTime(message.createdAt)}
                       </time>
@@ -4031,12 +4060,24 @@ function ChatApp({
                             controls
                             playsInline
                             preload="metadata"
+                            onLoadedMetadata={(event) =>
+                              resolveUnknownVideoDuration(
+                                event.currentTarget,
+                                attachment.durationMs,
+                              )
+                            }
                           />
                         )}
                       </div>
                       <div className="conversation-media-meta">
                         <div>
                           <strong>{attachment.fileName}</strong>
+                          {attachment.durationMs !== null ? (
+                            <small>
+                              Duration{" "}
+                              {formatMediaDuration(attachment.durationMs)}
+                            </small>
+                          ) : null}
                           <small>
                             {senderName} · {formatAttachmentDate(createdAt)}
                           </small>
@@ -5403,6 +5444,8 @@ function ChatApp({
       {joinedGroupMeeting ? (
         <GroupMeetingOverlay
           connection={hubConnection}
+          apiUrl={API_URL}
+          username={user.username}
           currentUser={user}
           groupTitle={joinedGroupConversation?.title ?? "Group meeting"}
           meeting={joinedGroupMeeting}

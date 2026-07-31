@@ -24,6 +24,15 @@ import {
   HubConnectionState,
   type HubConnection,
 } from "@microsoft/signalr";
+import {
+  CallRecordingControls,
+  RecordingConsentDialog,
+  useCallRecording,
+} from "./useCallRecording";
+import {
+  acquireScreenShareStream,
+  optimizeScreenShareSender,
+} from "./screenShare";
 import "./DirectCall.css";
 
 export type CallPeer = {
@@ -100,6 +109,8 @@ type CallMicrophoneStateEvent = {
 
 type UseDirectCallOptions = {
   connection: HubConnection | null;
+  apiUrl: string;
+  username: string;
   localUserId: string;
   localDisplayName: string;
   onError: Dispatch<SetStateAction<string>>;
@@ -108,6 +119,8 @@ type UseDirectCallOptions = {
 
 export function useDirectCall({
   connection,
+  apiUrl,
+  username,
   localUserId,
   localDisplayName,
   onError,
@@ -616,10 +629,7 @@ export function useDirectCall({
     let displayStream: MediaStream | null = null;
     let shareRegistered = false;
     try {
-      displayStream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: false,
-      });
+      displayStream = await acquireScreenShareStream();
       const screenTrack = displayStream.getVideoTracks()[0];
       if (!screenTrack) throw new Error("No screen was selected.");
 
@@ -637,6 +647,7 @@ export function useDirectCall({
         screenTrack,
         displayStream,
       );
+      await optimizeScreenShareSender(screenSenderRef.current);
       await renegotiate();
 
       screenStreamRef.current = displayStream;
@@ -892,6 +903,11 @@ export function useDirectCall({
 
   return {
     call,
+    connection,
+    apiUrl,
+    username,
+    localUserId,
+    onError,
     localDisplayName,
     localStream,
     screenStream,
@@ -917,6 +933,11 @@ type DirectCallOverlayProps = ReturnType<typeof useDirectCall>;
 
 export function DirectCallOverlay({
   call,
+  connection,
+  apiUrl,
+  username,
+  localUserId,
+  onError,
   localDisplayName,
   localStream,
   screenStream,
@@ -975,6 +996,45 @@ export function DirectCallOverlay({
   const screenShareOwner = isScreenSharing
     ? localDisplayName
     : call?.peer.displayName;
+  const remoteRecordingStream = useMemo(
+    () =>
+      remoteStream
+        ? new MediaStream([
+            ...remoteStream.getAudioTracks(),
+            ...(remoteCameraTrack ? [remoteCameraTrack] : []),
+          ])
+        : null,
+    [remoteCameraTrack, remoteStream],
+  );
+  const recordingController = useCallRecording({
+    connection,
+    apiUrl,
+    username,
+    conversationId: call?.conversationId ?? "",
+    sessionId: call?.callId ?? "",
+    sessionType: "direct",
+    currentUserId: localUserId,
+    participants: call
+      ? [
+          {
+            userId: localUserId,
+            displayName: localDisplayName,
+            stream: localStream,
+            isMuted,
+          },
+          {
+            userId: call.peer.id,
+            displayName: call.peer.displayName,
+            stream: remoteRecordingStream,
+            isMuted: isPeerMuted,
+          },
+        ]
+      : [],
+    sharedScreenStream: activeScreenStream,
+    canStopRecording: false,
+    onConsentDeclined: () => undefined,
+    onError,
+  });
 
   useEffect(() => {
     if (localVideoRef.current) localVideoRef.current.srcObject = localStream;
@@ -1052,6 +1112,10 @@ export function DirectCallOverlay({
         aria-modal="true"
         aria-label={`${call.hasVideo ? "Video" : "Audio"} call with ${call.peer.displayName}`}
       >
+        <CallRecordingControls
+          controller={recordingController}
+          showWhenIdle={false}
+        />
         <button
           className="maximize-call-stage"
           type="button"
@@ -1310,6 +1374,9 @@ export function DirectCallOverlay({
                   <ScreenShare size={20} />
                 )}
               </button>
+              {canControlMedia ? (
+                <CallRecordingControls controller={recordingController} />
+              ) : null}
               <button
                 className="end-call"
                 type="button"
@@ -1322,6 +1389,7 @@ export function DirectCallOverlay({
           )}
         </div>
       </section>
+      <RecordingConsentDialog controller={recordingController} />
     </div>
   );
 }
