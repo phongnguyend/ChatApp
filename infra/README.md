@@ -12,8 +12,11 @@
 The API receives its SQL connection string and application settings from App
 Service. Its system-assigned managed identity is granted `Storage Blob Data
 Contributor` on the storage account, so no storage access key is stored in the
-application configuration. The Communication Services primary connection string
-is injected into the API App Service settings as
+application configuration. Azure Communication Services also receives a
+system-assigned managed identity with `Storage Blob Data Contributor` on the
+storage account, allowing Call Recording to export files to a configured blob
+container through Bring Your Own Storage (BYOS). The Communication Services
+primary connection string is injected into the API App Service settings as
 `Calling__AzureCommunicationServices__ConnectionString`; it is never exposed to
 the frontend.
 
@@ -164,7 +167,7 @@ The selected pipeline environment is passed directly to the Bicep
 variable group.
 
 The service principal behind `azureServiceConnection` needs permission to
-create resources in the subscription and create the storage role assignment.
+create resources in the subscription and create both storage role assignments.
 When creating the Azure DevOps pipeline, select
 `infra/azure-pipelines.yml` as its YAML path and authorize both the service
 connection and variable group.

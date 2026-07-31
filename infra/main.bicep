@@ -202,6 +202,9 @@ resource notificationHubApiAuthorizationRule 'Microsoft.NotificationHubs/namespa
 resource communicationService 'Microsoft.Communication/communicationServices@2025-05-01' = {
   name: communicationServiceName
   location: 'global'
+  identity: {
+    type: 'SystemAssigned'
+  }
   properties: {
     dataLocation: communicationServicesDataLocation
     disableLocalAuth: false
@@ -303,6 +306,20 @@ resource apiBlobDataContributor 'Microsoft.Authorization/roleAssignments@2022-04
   scope: storageAccount
   properties: {
     principalId: apiApp.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: blobDataContributorRoleDefinitionId
+  }
+}
+
+resource communicationServiceBlobDataContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(
+    storageAccount.id,
+    communicationService.id,
+    blobDataContributorRoleDefinitionId
+  )
+  scope: storageAccount
+  properties: {
+    principalId: communicationService.identity.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: blobDataContributorRoleDefinitionId
   }
