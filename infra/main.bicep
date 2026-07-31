@@ -65,6 +65,8 @@ var notificationHubNamespaceName = take('${resourceNamePrefix}-nh-${uniqueSuffix
 var notificationHubName = take('${resourceNamePrefix}-notifications', 265)
 var communicationServiceName = take('${resourceNamePrefix}-acs-${uniqueSuffix}', 63)
 var serviceBusNamespaceName = take('${resourceNamePrefix}-sb-${uniqueSuffix}', 50)
+var logAnalyticsWorkspaceName = take('${resourceNamePrefix}-law-${uniqueSuffix}', 63)
+var appInsightsName = take('${resourceNamePrefix}-appi-${uniqueSuffix}', 260)
 var blobDataContributorRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
@@ -254,6 +256,27 @@ resource serviceBusSubscription 'Microsoft.ServiceBus/namespaces/topics/subscrip
   name: serviceBusSubscriptionName
 }
 
+resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
+  name: logAnalyticsWorkspaceName
+  location: location
+  properties: {
+    sku: {
+      name: 'PerGB2018'
+    }
+    retentionInDays: 30
+  }
+}
+
+resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
+  name: appInsightsName
+  location: location
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    WorkspaceResourceId: logAnalyticsWorkspace.id
+  }
+}
+
 resource apiApp 'Microsoft.Web/sites@2023-12-01' = {
   name: apiAppName
   location: location
@@ -345,6 +368,18 @@ resource apiApp 'Microsoft.Web/sites@2023-12-01' = {
           name: 'Messaging__AzureServiceBus__SubscriptionName'
           value: serviceBusSubscription.name
         }
+        {
+          name: 'Monitoring__OpenTelemetry__IsEnabled'
+          value: 'true'
+        }
+        {
+          name: 'Monitoring__OpenTelemetry__AzureMonitor__IsEnabled'
+          value: 'true'
+        }
+        {
+          name: 'Monitoring__OpenTelemetry__AzureMonitor__ConnectionString'
+          value: appInsights.properties.ConnectionString
+        }
       ]
       connectionStrings: [
         {
@@ -416,3 +451,5 @@ output communicationServiceName string = communicationService.name
 output serviceBusNamespaceName string = serviceBusNamespace.name
 output serviceBusTopicName string = serviceBusTopic.name
 output serviceBusSubscriptionName string = serviceBusSubscription.name
+output logAnalyticsWorkspaceName string = logAnalyticsWorkspace.name
+output appInsightsName string = appInsights.name
