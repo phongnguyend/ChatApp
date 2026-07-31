@@ -801,6 +801,7 @@ public sealed class ChatHub(
     {
         var session = GetSession();
         await EnsureMembership(session.UserId, conversationId);
+        await EnsureMeetingIsNotBlocked(session.UserId, conversationId);
         EnsureUserIsNotInDirectCall(session.UserId);
         var change = meetings.Start(
             conversationId,
@@ -823,6 +824,7 @@ public sealed class ChatHub(
     {
         var session = GetSession();
         await EnsureMembership(session.UserId, conversationId);
+        await EnsureMeetingIsNotBlocked(session.UserId, conversationId);
         EnsureUserIsNotInDirectCall(session.UserId);
         GroupMeetingStateTracker.MeetingParticipantChange change;
         try
@@ -1410,6 +1412,21 @@ public sealed class ChatHub(
         {
             throw new HubException(
                 "Leave or end the direct call before starting or joining a meeting.");
+        }
+    }
+
+    private async Task EnsureMeetingIsNotBlocked(
+        Guid userId,
+        Guid conversationId)
+    {
+        if (await DirectMessagingPolicy.IsBlockedAsync(
+                db,
+                userId,
+                conversationId,
+                Context.ConnectionAborted))
+        {
+            throw new HubException(
+                "Meetings cannot be started or joined while either user has blocked the other.");
         }
     }
 

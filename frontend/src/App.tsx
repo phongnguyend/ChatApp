@@ -1152,6 +1152,13 @@ function ChatApp({
           conversation.id === meetingInvite.conversationId,
       )
     : null;
+  const meetingInviteIsBlocked = Boolean(
+    meetingInviteConversation?.type === "direct" &&
+      meetingInviteConversation.directUsername &&
+      blockedUsernames.has(
+        meetingInviteConversation.directUsername.toLocaleLowerCase(),
+      ),
+  );
   const meetingInviteId = meetingInvite?.meetingId ?? null;
   const activeMessages = activeId
     ? (messagesByConversation[activeId] ?? EMPTY_MESSAGES)
@@ -2742,6 +2749,8 @@ function ChatApp({
             status !== "connected" ||
             meetingAction !== null ||
             directCall.call !== null ||
+            (activeConversation.type === "direct" &&
+              isDirectParticipantBlocked) ||
             joinedGroupMeeting !== null
           }
           aria-label="Start meeting"
@@ -2775,6 +2784,8 @@ function ChatApp({
               status !== "connected" ||
               meetingAction !== null ||
               directCall.call !== null ||
+              (activeConversation.type === "direct" &&
+                isDirectParticipantBlocked) ||
               (joinedGroupMeeting !== null &&
                 joinedGroupMeeting.meetingId !== activeGroupMeeting.meetingId)
             }
@@ -5436,6 +5447,7 @@ function ChatApp({
                 status !== "connected" ||
                 meetingAction !== null ||
                 directCall.call !== null ||
+                meetingInviteIsBlocked ||
                 joinedGroupMeeting !== null
               }
               onClick={() => void joinMeetingInvite()}
