@@ -12,7 +12,6 @@ public sealed class SessionRecording
     public string Provider { get; set; } = "peer-to-peer";
     public string? ProviderCallLocator { get; set; }
     public string? ProviderRecordingId { get; set; }
-    public string? ProviderContentLocationsJson { get; set; }
     public string Status { get; set; } = "requesting-consent";
     public string? StorageObjectName { get; set; }
     public DateTimeOffset StartedAt { get; set; } = DateTimeOffset.UtcNow;

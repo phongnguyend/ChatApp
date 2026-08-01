@@ -615,9 +615,6 @@ namespace ChatApp.Api.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.Property<string>("ProviderContentLocationsJson")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("ProviderRecordingId")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");

@@ -383,8 +383,6 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         recording.Property(x => x.Provider).HasMaxLength(80).IsRequired();
         recording.Property(x => x.ProviderCallLocator).HasMaxLength(500);
         recording.Property(x => x.ProviderRecordingId).HasMaxLength(500);
-        recording.Property(x => x.ProviderContentLocationsJson)
-            .HasColumnType("nvarchar(max)");
         recording.HasIndex(x => new { x.Provider, x.ProviderRecordingId });
         recording.Property(x => x.StorageObjectName).HasColumnType("nvarchar(max)");
         recording.Property(x => x.StartedAt).HasPrecision(3);

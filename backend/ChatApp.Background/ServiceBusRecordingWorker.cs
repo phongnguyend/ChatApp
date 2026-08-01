@@ -172,8 +172,6 @@ public sealed class ServiceBusRecordingWorker(
             return true;
         }
 
-        recording.ProviderContentLocationsJson = JsonSerializer.Serialize(
-            locations.Select(location => location.AbsoluteUri));
         if (duration > 0)
         {
             recording.DurationMilliseconds = duration;
@@ -294,7 +292,6 @@ public sealed class ServiceBusRecordingWorker(
         }
         db.Messages.Add(message);
         recording.StorageObjectName = attachments.First().StorageKey;
-        recording.ProviderContentLocationsJson = null;
         recording.DurationMilliseconds = durationMilliseconds > 0
             ? durationMilliseconds
             : null;
