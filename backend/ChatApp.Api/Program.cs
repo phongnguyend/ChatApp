@@ -15,7 +15,9 @@ builder.Services.AddControllers();
 builder.Services.AddSignalR();
 builder.Services.AddHttpClient();
 builder.Services.AddDbContext<ChatDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("ChatDatabase")));
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("ChatDatabase"),
+        sqlServer => sqlServer.MigrationsAssembly("ChatApp.Api")));
 builder.Services.AddOptions<UploadStorageOptions>()
     .Bind(uploadStorageSection)
     .Validate(
