@@ -87,7 +87,8 @@ public sealed class GroupMeetingStateTracker
             return new MeetingParticipantChange(
                 Snapshot(meeting),
                 changed,
-                false);
+                false,
+                meeting.MeetingId);
         }
     }
 
@@ -97,7 +98,7 @@ public sealed class GroupMeetingStateTracker
         {
             if (!_meetings.TryGetValue(conversationId, out var meeting))
             {
-                return new MeetingParticipantChange(null, false, false);
+                return new MeetingParticipantChange(null, false, false, null);
             }
 
             var changed = meeting.Participants.Remove(userId);
@@ -106,7 +107,8 @@ public sealed class GroupMeetingStateTracker
                 return new MeetingParticipantChange(
                     Snapshot(meeting),
                     false,
-                    false);
+                    false,
+                    meeting.MeetingId);
             }
             if (meeting.ScreenSharingUserId == userId)
             {
@@ -115,12 +117,17 @@ public sealed class GroupMeetingStateTracker
             if (meeting.Participants.Count == 0)
             {
                 _meetings.Remove(conversationId);
-                return new MeetingParticipantChange(null, true, true);
+                return new MeetingParticipantChange(
+                    null,
+                    true,
+                    true,
+                    meeting.MeetingId);
             }
             return new MeetingParticipantChange(
                 Snapshot(meeting),
                 true,
-                false);
+                false,
+                meeting.MeetingId);
         }
     }
 
@@ -226,6 +233,7 @@ public sealed class GroupMeetingStateTracker
                         changes.Add(
                             new MeetingChange(
                                 meeting.ConversationId,
+                                meeting.MeetingId,
                                 null,
                                 true));
                         continue;
@@ -233,6 +241,7 @@ public sealed class GroupMeetingStateTracker
                     changes.Add(
                         new MeetingChange(
                             meeting.ConversationId,
+                            meeting.MeetingId,
                             Snapshot(meeting),
                             false));
                 }
@@ -296,10 +305,12 @@ public sealed class GroupMeetingStateTracker
     public sealed record MeetingParticipantChange(
         MeetingSnapshot? Meeting,
         bool Changed,
-        bool AutoStopped);
+        bool AutoStopped,
+        Guid? MeetingId);
 
     public sealed record MeetingChange(
         Guid ConversationId,
+        Guid MeetingId,
         MeetingSnapshot? Meeting,
         bool AutoStopped);
 }

@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <UserSecretsId>dotnet-ChatApp.Background-35911e20-92ab-4ed3-b898-d362759ef080</UserSecretsId>
+    <UserSecretsId>ff5fd4c1-29d1-4398-a049-3d75f97ac4b0</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

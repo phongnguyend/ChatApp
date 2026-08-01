@@ -109,6 +109,13 @@ public sealed class ChatHub(
 
                 foreach (var change in meetings.Disconnect(session.UserId))
                 {
+                    if (change.AutoStopped)
+                    {
+                        await StopMeetingRecording(
+                            change.ConversationId,
+                            change.MeetingId,
+                            CancellationToken.None);
+                    }
                     await Clients.Group(ConversationGroup(change.ConversationId))
                         .SendAsync(
                             "GroupMeetingChanged",
@@ -856,6 +863,13 @@ public sealed class ChatHub(
         }
         if (change.AutoStopped)
         {
+            if (change.MeetingId is Guid meetingId)
+            {
+                await StopMeetingRecording(
+                    conversationId,
+                    meetingId,
+                    Context.ConnectionAborted);
+            }
             await SendMeetingSystemMessage(
                 conversationId,
                 "The meeting has ended.",
@@ -868,6 +882,7 @@ public sealed class ChatHub(
     {
         var session = GetSession();
         await EnsureMembership(session.UserId, conversationId);
+        var meeting = meetings.Get(conversationId);
         try
         {
             if (!meetings.Stop(conversationId, session.UserId))
@@ -880,11 +895,77 @@ public sealed class ChatHub(
             throw new HubException(exception.Message);
         }
 
+        if (meeting is not null)
+        {
+            await StopMeetingRecording(
+                conversationId,
+                meeting.MeetingId,
+                Context.ConnectionAborted);
+        }
         await BroadcastMeeting(conversationId, null);
         await SendMeetingSystemMessage(
             conversationId,
             $"{session.DisplayName} stopped the meeting.",
             session.UserId);
+    }
+
+    private async Task StopMeetingRecording(
+        Guid conversationId,
+        Guid meetingId,
+        CancellationToken cancellationToken)
+    {
+        var recording = await db.SessionRecordings
+            .Include(item => item.StartedByUser)
+            .SingleOrDefaultAsync(
+                item =>
+                    item.ConversationId == conversationId &&
+                    item.SessionId == meetingId &&
+                    item.SessionType == "meeting" &&
+                    (item.Status == "requesting-consent" ||
+                     item.Status == "recording"),
+                cancellationToken);
+        if (recording is null)
+        {
+            return;
+        }
+
+        var wasRecording = recording.Status == "recording";
+        if (wasRecording)
+        {
+            if (!callingProvider.ManagesRecording ||
+                recording.Provider != callingProvider.Name ||
+                string.IsNullOrWhiteSpace(recording.ProviderRecordingId))
+            {
+                throw new HubException(
+                    "The meeting recording cannot be stopped right now.");
+            }
+
+            await callingProvider.StopRecordingAsync(
+                recording.ProviderRecordingId,
+                cancellationToken);
+            recording.Status = "processing";
+        }
+        else
+        {
+            recording.Status = "cancelled";
+            recording.CompletedAt = DateTimeOffset.UtcNow;
+        }
+
+        recordingStates.Stop(recording.Id);
+        await db.SaveChangesAsync(cancellationToken);
+        await Clients
+            .Group(ConversationGroup(conversationId))
+            .SendAsync(
+                wasRecording ? "RecordingStopped" : "RecordingFailed",
+                wasRecording
+                    ? ToRecordingDto(recording)
+                    : new
+                    {
+                        recording = ToRecordingDto(recording),
+                        message =
+                            "Recording was cancelled because the meeting ended."
+                    },
+                cancellationToken);
     }
 
     public async Task SetGroupMeetingMicrophoneState(

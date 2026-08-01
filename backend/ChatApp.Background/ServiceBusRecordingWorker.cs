@@ -26,8 +26,6 @@ public sealed class ServiceBusRecordingWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await ResumeProviderRecordingsAsync(stoppingToken);
-
         var serviceBus = options.Value.AzureServiceBus;
         processor = client.CreateProcessor(
             serviceBus.TopicName,
@@ -188,47 +186,6 @@ public sealed class ServiceBusRecordingWorker(
                 duration),
             cancellationToken);
         return true;
-    }
-
-    private async Task ResumeProviderRecordingsAsync(
-        CancellationToken cancellationToken)
-    {
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
-        var pending = await db.SessionRecordings
-            .Where(item =>
-                item.Status == "processing" &&
-                item.ProviderRecordingId != null &&
-                item.ProviderContentLocationsJson != null)
-            .Select(item => new
-            {
-                item.ProviderRecordingId,
-                item.ProviderContentLocationsJson,
-                item.DurationMilliseconds
-            })
-            .ToListAsync(cancellationToken);
-        foreach (var item in pending)
-        {
-            var locations = JsonSerializer.Deserialize<string[]>(
-                item.ProviderContentLocationsJson!) ?? [];
-            var uris = locations
-                .Where(location => Uri.TryCreate(
-                    location,
-                    UriKind.Absolute,
-                    out _))
-                .Select(location => new Uri(location))
-                .ToArray();
-            if (uris.Length == 0)
-            {
-                continue;
-            }
-            await FinalizeProviderRecordingAsync(
-                new CallingProviderRecordingFile(
-                    item.ProviderRecordingId!,
-                    uris,
-                    item.DurationMilliseconds ?? 0),
-                cancellationToken);
-        }
     }
 
     private async Task FinalizeProviderRecordingAsync(
