@@ -9,7 +9,7 @@ namespace ChatApp.Api.Controllers;
 [Route("api/calling")]
 public sealed class CallingController(
     ChatDbContext db,
-    IServiceProvider services) : ControllerBase
+    ICallingProvider callingProvider) : ControllerBase
 {
     [HttpGet("access")]
     public async Task<ActionResult<CallingAccessCredential>> GetAccess(
@@ -31,17 +31,6 @@ public sealed class CallingController(
             return NotFound();
         }
 
-        var callingProvider = services.GetService<ICallingProvider>();
-        if (callingProvider is null)
-        {
-            return Ok(new CallingAccessCredential(
-                "",
-                false,
-                false,
-                null,
-                null,
-                null));
-        }
         return Ok(await callingProvider.GetAccessCredentialAsync(
             user,
             cancellationToken));

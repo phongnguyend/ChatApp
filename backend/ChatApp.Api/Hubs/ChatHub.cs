@@ -14,14 +14,11 @@ public sealed class ChatHub(
     CallStateTracker calls,
     GroupMeetingStateTracker meetings,
     RecordingStateTracker recordingStates,
-    IServiceProvider services,
+    ICallingProvider callingProvider,
     AzurePushNotificationService pushNotifications,
     ILogger<ChatHub> logger) : Hub
 {
     private const string UsernameQueryKey = "username";
-    private ICallingProvider? CallingProvider =>
-        services.GetService<ICallingProvider>();
-
     public override async Task OnConnectedAsync()
     {
         var username = Context.GetHttpContext()?.Request.Query[UsernameQueryKey].ToString() ?? "";
@@ -64,7 +61,6 @@ public sealed class ChatHub(
             {
                 foreach (var stopped in recordingStates.Disconnect(session.UserId))
                 {
-                    var callingProvider = CallingProvider;
                     var recording = await db.SessionRecordings
                         .Include(item => item.StartedByUser)
                         .SingleOrDefaultAsync(item =>
@@ -74,7 +70,7 @@ public sealed class ChatHub(
                     {
                         continue;
                     }
-                    if (callingProvider?.ManagesRecording == true &&
+                    if (callingProvider.ManagesRecording &&
                         recording.Provider == callingProvider.Name &&
                         !string.IsNullOrWhiteSpace(
                             recording.ProviderRecordingId))
@@ -662,32 +658,6 @@ public sealed class ChatHub(
             Context.ConnectionAborted);
     }
 
-    public async Task SendCallSignal(SendCallSignalRequest request)
-    {
-        var session = GetSession();
-        var signalType = request.SignalType.Trim().ToLowerInvariant();
-        if (signalType is not ("offer" or "answer" or "ice") ||
-            string.IsNullOrWhiteSpace(request.Payload) ||
-            request.Payload.Length > 24_000)
-        {
-            throw new HubException("Choose a valid call signal.");
-        }
-
-        var target = await EnsureDirectPeer(
-            session.UserId,
-            request.ConversationId,
-            request.TargetUserId);
-        await Clients.Clients(presence.ConnectionIdsForUser(target.Id)).SendAsync(
-            "CallSignal",
-            new CallSignalDto(
-                request.CallId,
-                request.ConversationId,
-                session.UserId,
-                signalType,
-                request.Payload),
-            Context.ConnectionAborted);
-    }
-
     public async Task EndCall(EndCallRequest request)
     {
         var session = GetSession();
@@ -915,55 +885,6 @@ public sealed class ChatHub(
             conversationId,
             $"{session.DisplayName} stopped the meeting.",
             session.UserId);
-    }
-
-    public async Task SendGroupMeetingSignal(
-        SendGroupMeetingSignalRequest request)
-    {
-        var session = GetSession();
-        var signalType = request.SignalType.Trim().ToLowerInvariant();
-        if (signalType is not ("offer" or "answer" or "ice") ||
-            string.IsNullOrWhiteSpace(request.Payload) ||
-            request.Payload.Length > 24_000)
-        {
-            throw new HubException("Choose a valid meeting signal.");
-        }
-
-        await EnsureMembership(session.UserId, request.ConversationId);
-        if (!meetings.HasParticipant(
-                request.ConversationId,
-                request.MeetingId,
-                session.UserId) ||
-            !meetings.HasParticipant(
-                request.ConversationId,
-                request.MeetingId,
-                request.TargetUserId))
-        {
-            throw new HubException(
-                "Meeting signals can only be sent between participants.");
-        }
-        if (!recordingStates.HasConsent(
-                request.MeetingId,
-                session.UserId) ||
-            !recordingStates.HasConsent(
-                request.MeetingId,
-                request.TargetUserId))
-        {
-            throw new HubException(
-                "Recording consent is required before receiving meeting media.");
-        }
-
-        await Clients.Clients(
-                presence.ConnectionIdsForUser(request.TargetUserId))
-            .SendAsync(
-                "GroupMeetingSignal",
-                new GroupMeetingSignalDto(
-                    request.MeetingId,
-                    request.ConversationId,
-                    session.UserId,
-                    signalType,
-                    request.Payload),
-                Context.ConnectionAborted);
     }
 
     public async Task SetGroupMeetingMicrophoneState(
@@ -1277,8 +1198,7 @@ public sealed class ChatHub(
             return;
         }
 
-        var callingProvider = CallingProvider;
-        if (callingProvider?.ManagesRecording == true &&
+        if (callingProvider.ManagesRecording &&
             recording.Provider == callingProvider.Name)
         {
             if (string.IsNullOrWhiteSpace(recording.ProviderRecordingId))
@@ -1305,20 +1225,13 @@ public sealed class ChatHub(
             return;
         }
 
-        await Clients
-            .Clients(presence.ConnectionIdsForUser(recording.StartedByUserId))
-            .SendAsync(
-                "RecordingStopRequested",
-                ToRecordingDto(recording),
-                Context.ConnectionAborted);
+        throw new HubException("The ACS recording provider is unavailable.");
     }
 
     private async Task StartCallingProviderRecording(
         SessionRecording recording)
     {
-        var callingProvider = CallingProvider;
-        if (callingProvider is null ||
-            !callingProvider.ManagesRecording ||
+        if (!callingProvider.ManagesRecording ||
             recording.Provider != callingProvider.Name)
         {
             return;

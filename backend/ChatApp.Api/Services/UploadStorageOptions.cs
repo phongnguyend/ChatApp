@@ -8,5 +8,4 @@ public sealed class UploadStorageOptions
 
     public string Path { get; set; } = "/uploads";
 
-    public string RecordingTempPath { get; set; } = "";
 }

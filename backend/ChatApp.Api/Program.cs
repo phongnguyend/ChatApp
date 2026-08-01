@@ -10,7 +10,6 @@ var uploadStorageProvider =
     uploadStorageSection.GetValue<string>("Provider") ?? "Local";
 var callingSection = builder.Configuration.GetSection(
     CallingOptions.SectionName);
-var callingProvider = callingSection.GetValue<string>("Provider")?.Trim();
 var messagingSection = builder.Configuration.GetSection(
     MessagingOptions.SectionName);
 var messagingProvider = messagingSection.GetValue<string>("Provider")?.Trim();
@@ -44,35 +43,21 @@ builder.Services.AddOptions<CallingOptions>()
     .Bind(callingSection)
     .Validate(
         options =>
-            !string.Equals(
+            string.Equals(
                 options.Provider,
                 "AzureCommunicationServices",
-                StringComparison.OrdinalIgnoreCase) ||
+                StringComparison.OrdinalIgnoreCase) &&
             !string.IsNullOrWhiteSpace(
                 options.AzureCommunicationServices.ConnectionString),
-        "The Azure Communication Services connection string is required.")
+        "Calling must use Azure Communication Services with a connection string.")
     .ValidateOnStart();
-if (!string.IsNullOrWhiteSpace(callingProvider))
-{
-    if (callingProvider.Equals(
-        "AzureCommunicationServices",
-        StringComparison.OrdinalIgnoreCase))
-    {
-        builder.Services.AddScoped<
-            ICallingProvider,
-            AzureCommunicationServicesCallingProvider>();
-    }
-    else
-    {
-        throw new InvalidOperationException(
-            $"Unsupported calling provider \"{callingProvider}\".");
-    }
-}
+builder.Services.AddScoped<
+    ICallingProvider,
+    AzureCommunicationServicesCallingProvider>();
 builder.Services.AddSingleton<PresenceTracker>();
 builder.Services.AddSingleton<CallStateTracker>();
 builder.Services.AddSingleton<GroupMeetingStateTracker>();
 builder.Services.AddSingleton<RecordingStateTracker>();
-builder.Services.AddSingleton<RecordingChunkTempStorage>();
 builder.Services.AddOptions<MessagingOptions>()
     .Bind(messagingSection)
     .Validate(
@@ -94,16 +79,7 @@ if (string.Equals(
             .GetRequiredService<Microsoft.Extensions.Options.IOptions<
                 MessagingOptions>>()
             .Value.AzureServiceBus.CreateClient());
-    builder.Services.AddSingleton<
-        IRecordingFinalizationPublisher,
-        ServiceBusRecordingFinalizationPublisher>();
     builder.Services.AddHostedService<ServiceBusRecordingWorker>();
-}
-else
-{
-    builder.Services.AddSingleton<
-        IRecordingFinalizationPublisher,
-        UnavailableRecordingFinalizationPublisher>();
 }
 if (uploadStorageProvider.Equals(
     "AzureBlob",

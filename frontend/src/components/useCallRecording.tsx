@@ -45,6 +45,8 @@ type UseCallRecordingOptions = {
   conversationId: string;
   sessionId: string;
   sessionType: "direct" | "meeting";
+  providerCallId: string | null;
+  providerManagedRecording: boolean;
   currentUserId: string;
   participants: RecordingParticipant[];
   sharedScreenStream: MediaStream | null;
@@ -384,6 +386,8 @@ export function useCallRecording({
   conversationId,
   sessionId,
   sessionType,
+  providerCallId,
+  providerManagedRecording,
   currentUserId,
   participants,
   sharedScreenStream,
@@ -836,7 +840,7 @@ export function useCallRecording({
       setConsentRequest(null);
       setHasLocalConsent(true);
       setIsStopping(false);
-      if (event.startedByUserId === currentUserId) {
+      if (!providerManagedRecording && event.startedByUserId === currentUserId) {
         void startClientRecorder(event).catch((error) => {
           onError(
             error instanceof Error
@@ -959,6 +963,7 @@ export function useCallRecording({
     sessionId,
     startClientRecorder,
     username,
+    providerManagedRecording,
   ]);
 
   useEffect(() => {
@@ -1045,8 +1050,9 @@ export function useCallRecording({
       return;
     }
     if (
-      typeof MediaRecorder === "undefined" ||
-      !HTMLCanvasElement.prototype.captureStream
+      !providerManagedRecording &&
+      (typeof MediaRecorder === "undefined" ||
+        !HTMLCanvasElement.prototype.captureStream)
     ) {
       onError("Call recording is not supported by this browser.");
       return;
@@ -1064,6 +1070,7 @@ export function useCallRecording({
             conversationId,
             sessionId,
             sessionType,
+            providerCallId,
           }),
         },
       );
@@ -1101,6 +1108,8 @@ export function useCallRecording({
     recording,
     sessionId,
     sessionType,
+    providerCallId,
+    providerManagedRecording,
     username,
   ]);
 

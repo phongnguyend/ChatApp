@@ -29,10 +29,7 @@ import {
   RecordingConsentDialog,
   useCallRecording,
 } from "./useCallRecording";
-import {
-  acquireScreenShareStream,
-  optimizeScreenShareSender,
-} from "./screenShare";
+import { useAzureCommunicationCall } from "./useAzureCommunicationCall";
 import "./DirectCall.css";
 
 export type CallPeer = {
@@ -70,14 +67,6 @@ type CallResponseEvent = {
   userId: string;
   displayName: string;
   accepted: boolean;
-};
-
-type CallSignalEvent = {
-  callId: string;
-  conversationId: string;
-  senderUserId: string;
-  signalType: "offer" | "answer" | "ice";
-  payload: string;
 };
 
 type CallEndedEvent = {
@@ -137,12 +126,7 @@ export function useDirectCall({
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isPeerScreenSharing, setIsPeerScreenSharing] = useState(false);
   const callRef = useRef<ActiveCall | null>(null);
-  const localStreamRef = useRef<MediaStream | null>(null);
-  const screenStreamRef = useRef<MediaStream | null>(null);
-  const screenSenderRef = useRef<RTCRtpSender | null>(null);
   const stopScreenShareRef = useRef<() => Promise<void>>(async () => {});
-  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
-  const queuedCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
 
   const updateCall = useCallback((next: ActiveCall | null) => {
     callRef.current = next;
@@ -150,19 +134,6 @@ export function useDirectCall({
   }, []);
 
   const cleanupCall = useCallback(() => {
-    peerConnectionRef.current?.close();
-    peerConnectionRef.current = null;
-    queuedCandidatesRef.current = [];
-    for (const track of localStreamRef.current?.getTracks() ?? []) {
-      track.stop();
-    }
-    for (const track of screenStreamRef.current?.getTracks() ?? []) {
-      track.onended = null;
-      track.stop();
-    }
-    localStreamRef.current = null;
-    screenStreamRef.current = null;
-    screenSenderRef.current = null;
     setLocalStream(null);
     setScreenStream(null);
     setRemoteStream(null);
@@ -175,112 +146,44 @@ export function useDirectCall({
     updateCall(null);
   }, [updateCall]);
 
-  const sendSignal = useCallback(
-    async (
-      activeCall: ActiveCall,
-      signalType: "offer" | "answer" | "ice",
-      payload: string,
-    ) => {
-      if (connection?.state !== HubConnectionState.Connected) return;
-      await connection.invoke("SendCallSignal", {
-        callId: activeCall.callId,
-        conversationId: activeCall.conversationId,
-        targetUserId: activeCall.peer.id,
-        signalType,
-        payload,
-      });
-    },
-    [connection],
-  );
-
-  const createPeerConnection = useCallback(
-    (activeCall: ActiveCall) => {
-      peerConnectionRef.current?.close();
-      const peerConnection = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-      });
-      peerConnectionRef.current = peerConnection;
-      queuedCandidatesRef.current = [];
-
-      for (const track of localStreamRef.current?.getTracks() ?? []) {
-        peerConnection.addTrack(track, localStreamRef.current!);
+  const azureMedia = useAzureCommunicationCall({
+    active: call?.status === "connecting" || call?.status === "connected",
+    apiUrl,
+    username,
+    groupId: call?.callId ?? null,
+    userId: localUserId,
+    displayName: localDisplayName,
+    initialMicrophoneEnabled: !isMuted,
+    initialCameraEnabled: isCameraEnabled,
+    onConnected: () => {
+      const activeCall = callRef.current;
+      if (activeCall?.status === "connecting") {
+        updateCall({ ...activeCall, status: "connected" });
       }
-
-      const incomingStream = new MediaStream();
-      setRemoteStream(incomingStream);
-      peerConnection.ontrack = ({ track }) => {
-        incomingStream.addTrack(track);
-        const refreshRemoteStream = () => {
-          setHasRemoteVideo(
-            incomingStream
-              .getVideoTracks()
-              .some(
-                (videoTrack) =>
-                  videoTrack.readyState === "live" && !videoTrack.muted,
-              ),
-          );
-          setRemoteStream(new MediaStream(incomingStream.getTracks()));
-        };
-        if (track.kind === "video") {
-          track.onended = () => {
-            incomingStream.removeTrack(track);
-            refreshRemoteStream();
-          };
-          track.onmute = refreshRemoteStream;
-          track.onunmute = refreshRemoteStream;
-        }
-        refreshRemoteStream();
-      };
-      peerConnection.onicecandidate = ({ candidate }) => {
-        if (!candidate) return;
-        void sendSignal(
-          activeCall,
-          "ice",
-          JSON.stringify(candidate.toJSON()),
-        ).catch(() => onError("Call connectivity could not be established."));
-      };
-      peerConnection.onconnectionstatechange = () => {
-        if (peerConnection.connectionState === "connected") {
-          const current = callRef.current;
-          if (current?.callId === activeCall.callId) {
-            updateCall({ ...current, status: "connected" });
-          }
-        } else if (
-          peerConnection.connectionState === "failed" ||
-          peerConnection.connectionState === "closed"
-        ) {
-          if (callRef.current?.callId === activeCall.callId) {
-            onError("The call connection ended.");
-            cleanupCall();
-          }
-        }
-      };
-
-      return peerConnection;
     },
-    [cleanupCall, onError, sendSignal, updateCall],
-  );
-
-  const acquireMedia = useCallback(
-    async (hasVideo: boolean, audioEnabled = true) => {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error("Audio and video calls are not supported by this browser.");
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: hasVideo,
-      });
-      for (const track of stream.getAudioTracks()) {
-        track.enabled = audioEnabled;
-      }
-      localStreamRef.current = stream;
-      setLocalStream(stream);
-      setIsMuted(!audioEnabled);
-      setIsCameraEnabled(hasVideo);
-      return stream;
+    onDisconnected: () => {
+      if (callRef.current) cleanupCall();
     },
-    [],
-  );
+    onError,
+  });
+
+  useEffect(() => {
+    setLocalStream(azureMedia.localStream);
+    setRemoteStream(call ? azureMedia.remoteStreams[call.peer.id] ?? null : null);
+    setHasRemoteVideo(Boolean(call && azureMedia.remoteStreams[call.peer.id]?.getVideoTracks().length));
+    setIsMuted(azureMedia.isMuted);
+    setIsCameraEnabled(azureMedia.isCameraEnabled);
+    setScreenStream(azureMedia.screenStream);
+    setIsScreenSharing(azureMedia.isScreenSharing);
+  }, [
+    azureMedia.isCameraEnabled,
+    azureMedia.isMuted,
+    azureMedia.isScreenSharing,
+    azureMedia.localStream,
+    azureMedia.remoteStreams,
+    azureMedia.screenStream,
+    call,
+  ]);
 
   const startCall = useCallback(
     async (
@@ -312,7 +215,8 @@ export function useDirectCall({
       };
 
       try {
-        await acquireMedia(hasVideo);
+        setIsMuted(false);
+        setIsCameraEnabled(hasVideo);
         updateCall(activeCall);
         await connection.invoke("StartCall", {
           callId: activeCall.callId,
@@ -330,7 +234,6 @@ export function useDirectCall({
       }
     },
     [
-      acquireMedia,
       cleanupCall,
       connection,
       onError,
@@ -350,8 +253,6 @@ export function useDirectCall({
     }
 
     try {
-      await acquireMedia(isCameraEnabled, !isMuted);
-      createPeerConnection(activeCall);
       updateCall({ ...activeCall, status: "connecting" });
       await connection.invoke("RespondToCall", {
         callId: activeCall.callId,
@@ -368,12 +269,8 @@ export function useDirectCall({
       );
     }
   }, [
-    acquireMedia,
     cleanupCall,
     connection,
-    createPeerConnection,
-    isCameraEnabled,
-    isMuted,
     onError,
     updateCall,
   ]);
@@ -418,12 +315,21 @@ export function useDirectCall({
   const toggleMute = useCallback(() => {
     const activeCall = callRef.current;
     if (!activeCall) return;
-    const nextMuted = !isMuted;
     if (activeCall.status !== "incoming") {
-      const audioTracks = localStreamRef.current?.getAudioTracks() ?? [];
-      if (audioTracks.length === 0) return;
-      for (const track of audioTracks) track.enabled = !nextMuted;
+      void azureMedia.toggleMute().then(() => {
+        const nextMuted = !isMuted;
+        if (connection?.state === HubConnectionState.Connected) {
+          void connection.invoke("SetCallMicrophoneState", {
+            callId: activeCall.callId,
+            conversationId: activeCall.conversationId,
+            targetUserId: activeCall.peer.id,
+            isMuted: nextMuted,
+          });
+        }
+      }).catch(() => onError("The microphone could not be updated."));
+      return;
     }
+    const nextMuted = !isMuted;
     setIsMuted(nextMuted);
     if (connection?.state === HubConnectionState.Connected) {
       void connection.invoke("SetCallMicrophoneState", {
@@ -433,178 +339,40 @@ export function useDirectCall({
         isMuted: nextMuted,
       });
     }
-  }, [connection, isMuted]);
-
-  const renegotiate = useCallback(async () => {
-    const activeCall = callRef.current;
-    const peerConnection = peerConnectionRef.current;
-    if (
-      !activeCall ||
-      !peerConnection ||
-      peerConnection.signalingState !== "stable"
-    ) {
-      return;
-    }
-
-    const offer = await peerConnection.createOffer();
-    await peerConnection.setLocalDescription(offer);
-    await sendSignal(activeCall, "offer", JSON.stringify(offer));
-  }, [sendSignal]);
+  }, [azureMedia, connection, isMuted, onError]);
 
   const toggleCamera = useCallback(async () => {
     const activeCall = callRef.current;
-    if (activeCall?.status === "incoming") {
+    if (!activeCall) return;
+    if (!azureMedia.call) {
       setIsCameraEnabled((current) => !current);
       return;
     }
-    if (activeCall?.status === "outgoing") {
-      const currentStream = localStreamRef.current;
-      if (isCameraEnabled) {
-        for (const track of currentStream?.getVideoTracks() ?? []) {
-          track.stop();
-        }
-        const audioOnlyStream = new MediaStream(
-          currentStream?.getAudioTracks() ?? [],
-        );
-        localStreamRef.current = audioOnlyStream;
-        setLocalStream(audioOnlyStream);
-        setIsCameraEnabled(false);
-        return;
-      }
-
-      let cameraStream: MediaStream | null = null;
-      try {
-        cameraStream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: true,
-        });
-        const cameraTrack = cameraStream.getVideoTracks()[0];
-        if (!cameraTrack) throw new Error("No camera is available.");
-        const nextStream = new MediaStream([
-          ...(currentStream?.getAudioTracks() ?? []),
-          cameraTrack,
-        ]);
-        localStreamRef.current = nextStream;
-        setLocalStream(nextStream);
-        setIsCameraEnabled(true);
-      } catch (requestError) {
-        for (const track of cameraStream?.getTracks() ?? []) track.stop();
-        onError(
-          requestError instanceof Error
-            ? requestError.message
-            : "The camera could not be turned on.",
-        );
-      }
-      return;
-    }
-    const peerConnection = peerConnectionRef.current;
-    if (
-      !activeCall ||
-      activeCall.status !== "connected" ||
-      !peerConnection ||
-      isScreenSharing
-    ) {
-      return;
-    }
-
-    if (isCameraEnabled) {
-      const currentStream = localStreamRef.current;
-      const videoTracks = currentStream?.getVideoTracks() ?? [];
-      for (const track of videoTracks) {
-        const sender = peerConnection
-          .getSenders()
-          .find((candidate) => candidate.track === track);
-        if (sender) peerConnection.removeTrack(sender);
-        track.stop();
-      }
-      const audioOnlyStream = new MediaStream(
-        currentStream?.getAudioTracks() ?? [],
-      );
-      localStreamRef.current = audioOnlyStream;
-      setLocalStream(audioOnlyStream);
-      setIsCameraEnabled(false);
-      try {
-        await renegotiate();
-      } catch {
-        onError("The camera could not be turned off cleanly.");
-      }
-      return;
-    }
-
-    let cameraStream: MediaStream | null = null;
-    let cameraSender: RTCRtpSender | null = null;
     try {
-      cameraStream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: true,
-      });
-      const cameraTrack = cameraStream.getVideoTracks()[0];
-      if (!cameraTrack) throw new Error("No camera is available.");
-
-      const currentStream = localStreamRef.current;
-      const nextStream = new MediaStream([
-        ...(currentStream?.getAudioTracks() ?? []),
-        cameraTrack,
-      ]);
-      cameraSender = peerConnection.addTrack(cameraTrack, nextStream);
-      localStreamRef.current = nextStream;
-      setLocalStream(nextStream);
-      setIsCameraEnabled(true);
-      await renegotiate();
+      await azureMedia.toggleCamera();
     } catch (requestError) {
-      if (cameraSender) peerConnection.removeTrack(cameraSender);
-      for (const track of cameraStream?.getTracks() ?? []) track.stop();
-      const audioOnlyStream = new MediaStream(
-        localStreamRef.current?.getAudioTracks() ?? [],
-      );
-      localStreamRef.current = audioOnlyStream;
-      setLocalStream(audioOnlyStream);
-      setIsCameraEnabled(false);
-      onError(
-        requestError instanceof Error
-          ? requestError.message
-          : "The camera could not be turned on.",
-      );
+      onError(requestError instanceof Error ? requestError.message : "The camera could not be updated.");
     }
-  }, [isCameraEnabled, isScreenSharing, onError, renegotiate]);
+  }, [azureMedia, onError]);
 
   const stopScreenShare = useCallback(async (notifyServer = true) => {
-    const displayStream = screenStreamRef.current;
-    const screenSender = screenSenderRef.current;
-    const peerConnection = peerConnectionRef.current;
-    if (!displayStream && !screenSender) return;
-
-    screenStreamRef.current = null;
-    screenSenderRef.current = null;
-    for (const track of displayStream?.getTracks() ?? []) {
-      track.onended = null;
-      track.stop();
-    }
-    setScreenStream(null);
-    setIsScreenSharing(false);
-
-    try {
-      if (peerConnection && screenSender) {
-        peerConnection.removeTrack(screenSender);
-        await renegotiate();
-      }
-    } catch {
-      onError("Screen sharing could not be stopped cleanly.");
-    } finally {
-      const activeCall = callRef.current;
-      if (
-        notifyServer &&
-        activeCall &&
-        connection?.state === HubConnectionState.Connected
-      ) {
-        void connection.invoke("StopScreenShare", {
-          callId: activeCall.callId,
-          conversationId: activeCall.conversationId,
-          targetUserId: activeCall.peer.id,
-        });
+    if (azureMedia.isScreenSharing) {
+      try {
+        await azureMedia.stopScreenShare();
+      } catch {
+        onError("Screen sharing could not be stopped cleanly.");
+      } finally {
+        const activeCall = callRef.current;
+        if (notifyServer && activeCall && connection?.state === HubConnectionState.Connected) {
+          void connection.invoke("StopScreenShare", {
+            callId: activeCall.callId,
+            conversationId: activeCall.conversationId,
+            targetUserId: activeCall.peer.id,
+          });
+        }
       }
     }
-  }, [connection, onError, renegotiate]);
+  }, [azureMedia, connection, onError]);
 
   useEffect(() => {
     stopScreenShareRef.current = stopScreenShare;
@@ -612,87 +380,31 @@ export function useDirectCall({
 
   const startScreenShare = useCallback(async () => {
     const activeCall = callRef.current;
-    const peerConnection = peerConnectionRef.current;
-    if (
-      !activeCall ||
-      activeCall.status !== "connected" ||
-      !peerConnection ||
-      isScreenSharing
-    ) {
-      return;
-    }
-    if (!navigator.mediaDevices?.getDisplayMedia) {
-      onError("Screen sharing is not supported by this browser.");
-      return;
-    }
-
-    let displayStream: MediaStream | null = null;
-    let shareRegistered = false;
-    try {
-      displayStream = await acquireScreenShareStream();
-      const screenTrack = displayStream.getVideoTracks()[0];
-      if (!screenTrack) throw new Error("No screen was selected.");
-
-      if (connection?.state !== HubConnectionState.Connected) {
-        throw new Error("Live chat disconnected before screen sharing started.");
-      }
-      await connection.invoke("StartScreenShare", {
-        callId: activeCall.callId,
-        conversationId: activeCall.conversationId,
-        targetUserId: activeCall.peer.id,
-      });
-      shareRegistered = true;
-
-      screenSenderRef.current = peerConnection.addTrack(
-        screenTrack,
-        displayStream,
-      );
-      await optimizeScreenShareSender(screenSenderRef.current);
-      await renegotiate();
-
-      screenStreamRef.current = displayStream;
-      setScreenStream(displayStream);
-      setIsScreenSharing(true);
-      screenTrack.onended = () => {
-        void stopScreenShareRef.current();
-      };
-    } catch (requestError) {
-      for (const track of displayStream?.getTracks() ?? []) track.stop();
-      const failedSender = screenSenderRef.current;
-      if (failedSender) {
-        try {
-          peerConnection.removeTrack(failedSender);
-          if (peerConnection.signalingState === "have-local-offer") {
-            await peerConnection.setLocalDescription({ type: "rollback" });
-          }
-        } catch {
-          // The active call can continue even if browser rollback is unavailable.
-        }
-      }
-      screenSenderRef.current = null;
-      if (
-        shareRegistered &&
-        connection?.state === HubConnectionState.Connected
-      ) {
-        void connection.invoke("StopScreenShare", {
+    if (activeCall?.status === "connected" && azureMedia.call && !azureMedia.isScreenSharing) {
+      let registered = false;
+      try {
+        if (connection?.state !== HubConnectionState.Connected) throw new Error("Live chat disconnected before screen sharing started.");
+        await connection.invoke("StartScreenShare", {
           callId: activeCall.callId,
           conversationId: activeCall.conversationId,
           targetUserId: activeCall.peer.id,
         });
+        registered = true;
+        await azureMedia.startScreenShare();
+      } catch (requestError) {
+        if (registered && connection?.state === HubConnectionState.Connected) {
+          void connection.invoke("StopScreenShare", {
+            callId: activeCall.callId,
+            conversationId: activeCall.conversationId,
+            targetUserId: activeCall.peer.id,
+          });
+        }
+        if (!(requestError instanceof DOMException && ["AbortError", "NotAllowedError"].includes(requestError.name))) {
+          onError(requestError instanceof Error ? requestError.message : "Screen sharing could not be started.");
+        }
       }
-      if (
-        requestError instanceof DOMException &&
-        ["AbortError", "NotAllowedError"].includes(requestError.name)
-      ) {
-        return;
-      }
-      onError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Screen sharing could not be started.",
-      );
     }
-  }, [connection, isScreenSharing, onError, renegotiate]);
+  }, [azureMedia, connection, onError]);
 
   useEffect(() => {
     if (!connection) return;
@@ -732,12 +444,7 @@ export function useDirectCall({
         return;
       }
       try {
-        const connectingCall = { ...activeCall, status: "connecting" as const };
-        updateCall(connectingCall);
-        const peerConnection = createPeerConnection(connectingCall);
-        const offer = await peerConnection.createOffer();
-        await peerConnection.setLocalDescription(offer);
-        await sendSignal(connectingCall, "offer", JSON.stringify(offer));
+        updateCall({ ...activeCall, status: "connecting" as const });
       } catch {
         onError("The call connection could not be created.");
         cleanupCall();
@@ -748,61 +455,6 @@ export function useDirectCall({
       if (callRef.current?.callId !== event.callId) return;
       onError(`${event.displayName} declined the call.`);
       cleanupCall();
-    };
-
-    const onSignal = async (event: CallSignalEvent) => {
-      const activeCall = callRef.current;
-      if (
-        !activeCall ||
-        activeCall.callId !== event.callId ||
-        activeCall.peer.id !== event.senderUserId
-      ) {
-        return;
-      }
-
-      try {
-        const peerConnection =
-          peerConnectionRef.current ?? createPeerConnection(activeCall);
-        if (event.signalType === "ice") {
-          const candidate = JSON.parse(event.payload) as RTCIceCandidateInit;
-          if (peerConnection.remoteDescription) {
-            await peerConnection.addIceCandidate(candidate);
-          } else {
-            queuedCandidatesRef.current.push(candidate);
-          }
-          return;
-        }
-
-        const description = JSON.parse(
-          event.payload,
-        ) as RTCSessionDescriptionInit;
-        const hasOfferCollision =
-          event.signalType === "offer" &&
-          peerConnection.signalingState !== "stable";
-        if (
-          hasOfferCollision &&
-          localUserId.localeCompare(activeCall.peer.id) < 0
-        ) {
-          return;
-        }
-        if (hasOfferCollision) {
-          await peerConnection.setLocalDescription({ type: "rollback" });
-        }
-        await peerConnection.setRemoteDescription(description);
-        for (const candidate of queuedCandidatesRef.current) {
-          await peerConnection.addIceCandidate(candidate);
-        }
-        queuedCandidatesRef.current = [];
-
-        if (event.signalType === "offer") {
-          const answer = await peerConnection.createAnswer();
-          await peerConnection.setLocalDescription(answer);
-          await sendSignal(activeCall, "answer", JSON.stringify(answer));
-        }
-      } catch {
-        onError("The call connection could not be negotiated.");
-        cleanupCall();
-      }
     };
 
     const onEnded = (event: CallEndedEvent) => {
@@ -854,7 +506,6 @@ export function useDirectCall({
     connection.on("CallIncoming", onIncoming);
     connection.on("CallAccepted", onAccepted);
     connection.on("CallDeclined", onDeclined);
-    connection.on("CallSignal", onSignal);
     connection.on("CallEnded", onEnded);
     connection.on("CallScreenShareChanged", onScreenShareChanged);
     connection.on("CallScreenShareTakenOver", onScreenShareTakenOver);
@@ -866,7 +517,6 @@ export function useDirectCall({
       connection.off("CallIncoming", onIncoming);
       connection.off("CallAccepted", onAccepted);
       connection.off("CallDeclined", onDeclined);
-      connection.off("CallSignal", onSignal);
       connection.off("CallEnded", onEnded);
       connection.off("CallScreenShareChanged", onScreenShareChanged);
       connection.off("CallScreenShareTakenOver", onScreenShareTakenOver);
@@ -878,11 +528,8 @@ export function useDirectCall({
   }, [
     cleanupCall,
     connection,
-    createPeerConnection,
-    localUserId,
     onError,
     resolveAvatarUrl,
-    sendSignal,
     stopScreenShare,
     updateCall,
   ]);
@@ -1013,6 +660,8 @@ export function DirectCallOverlay({
     conversationId: call?.conversationId ?? "",
     sessionId: call?.callId ?? "",
     sessionType: "direct",
+    providerCallId: call?.callId ?? null,
+    providerManagedRecording: true,
     currentUserId: localUserId,
     participants: call
       ? [

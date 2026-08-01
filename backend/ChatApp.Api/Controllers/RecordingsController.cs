@@ -14,18 +14,12 @@ namespace ChatApp.Api.Controllers;
 [Route("api/recordings")]
 public sealed class RecordingsController(
     ChatDbContext db,
-    IUploadObjectStorage storage,
-    RecordingChunkTempStorage chunkTempStorage,
     CallStateTracker calls,
     GroupMeetingStateTracker meetings,
     RecordingStateTracker recordingStates,
-    IRecordingFinalizationPublisher finalizations,
-    IServiceProvider services,
-    IHubContext<ChatHub> hubContext,
-    ILogger<RecordingsController> logger) : ControllerBase
+    ICallingProvider callingProvider,
+    IHubContext<ChatHub> hubContext) : ControllerBase
 {
-    private const long MaximumChunkSize = 32 * 1024 * 1024;
-
     [HttpPost]
     public async Task<ActionResult<RecordingStateDto>> Create(
         [FromQuery] string username,
@@ -46,15 +40,6 @@ public sealed class RecordingsController(
         }
 
         var sessionType = request.SessionType.Trim().ToLowerInvariant();
-        var callingProvider = services.GetService<ICallingProvider>();
-        if (callingProvider?.ManagesRecording == true &&
-            string.IsNullOrWhiteSpace(request.ProviderCallId))
-        {
-            return BadRequest(new
-            {
-                message = "The calling provider has not connected the media session yet."
-            });
-        }
         if (!await IsActiveParticipant(
                 user.Id,
                 request.ConversationId,
@@ -93,10 +78,8 @@ public sealed class RecordingsController(
             StartedByUser = user,
             StartedByUserId = user.Id,
             SessionType = sessionType,
-            Provider = callingProvider?.Name ?? "",
-            ProviderCallLocator = callingProvider?.ManagesRecording == true
-                ? request.SessionId.ToString()
-                : request.ProviderCallId?.Trim(),
+            Provider = callingProvider.Name,
+            ProviderCallLocator = request.SessionId.ToString(),
             Status = "requesting-consent",
             StartedAt = DateTimeOffset.UtcNow
         };
@@ -114,147 +97,6 @@ public sealed class RecordingsController(
         }
 
         return Ok(ToDto(recording, user.DisplayName));
-    }
-
-    [HttpPut("{recordingId:guid}/chunks/{sequence:int}")]
-    [RequestSizeLimit(MaximumChunkSize)]
-    public async Task<IActionResult> UploadChunk(
-        Guid recordingId,
-        int sequence,
-        [FromQuery] string username,
-        CancellationToken cancellationToken)
-    {
-        if (sequence is < 0 or > 1_000_000 ||
-            Request.ContentLength is null or <= 0 or > MaximumChunkSize)
-        {
-            return BadRequest(new { message = "Choose a valid recording chunk." });
-        }
-
-        var user = await FindUser(username, cancellationToken);
-        var recording = await db.SessionRecordings
-            .SingleOrDefaultAsync(
-                item => item.Id == recordingId,
-                cancellationToken);
-        if (user is null || recording is null)
-        {
-            return NotFound();
-        }
-        if (recording.StartedByUserId != user.Id)
-        {
-            return Forbid();
-        }
-        if (recording.Status != "recording")
-        {
-            return Conflict(new
-            {
-                message = "This recording is not accepting chunks."
-            });
-        }
-        if (await db.SessionRecordingChunks.AnyAsync(
-                chunk =>
-                    chunk.RecordingId == recordingId &&
-                    chunk.Sequence == sequence,
-                cancellationToken))
-        {
-            return NoContent();
-        }
-
-        var storageReference = await chunkTempStorage.WriteAsync(
-            recordingId,
-            sequence,
-            Request.Body,
-            cancellationToken);
-        try
-        {
-            db.SessionRecordingChunks.Add(new SessionRecordingChunk
-            {
-                Recording = recording,
-                RecordingId = recordingId,
-                Sequence = sequence,
-                StorageObjectName = storageReference,
-                FileSize = Request.ContentLength.Value
-            });
-            await db.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException)
-        {
-            if (!await db.SessionRecordingChunks.AnyAsync(
-                    chunk =>
-                        chunk.RecordingId == recordingId &&
-                        chunk.Sequence == sequence,
-                    cancellationToken))
-            {
-                throw;
-            }
-        }
-
-        return NoContent();
-    }
-
-    [HttpPost("{recordingId:guid}/complete")]
-    public async Task<ActionResult<RecordingStateDto>> Complete(
-        Guid recordingId,
-        [FromQuery] string username,
-        CompleteRecordingRequest request,
-        CancellationToken cancellationToken)
-    {
-        var user = await FindUser(username, cancellationToken);
-        var recording = await db.SessionRecordings
-            .Include(item => item.StartedByUser)
-            .SingleOrDefaultAsync(
-                item => item.Id == recordingId,
-                cancellationToken);
-        if (user is null || recording is null)
-        {
-            return NotFound();
-        }
-        if (recording.StartedByUserId != user.Id)
-        {
-            return Forbid();
-        }
-        if (recording.Status != "recording")
-        {
-            return Conflict(new
-            {
-                message = "This recording cannot be completed."
-            });
-        }
-        if (request.DurationMilliseconds is < 0 or > 86_400_000)
-        {
-            return BadRequest(new { message = "Choose a valid duration." });
-        }
-
-        var chunks = await db.SessionRecordingChunks
-            .Where(chunk => chunk.RecordingId == recordingId)
-            .OrderBy(chunk => chunk.Sequence)
-            .ToListAsync(cancellationToken);
-        if (chunks.Count == 0 ||
-            chunks.Select((chunk, index) => chunk.Sequence == index)
-                .Any(matches => !matches))
-        {
-            return BadRequest(new
-            {
-                message = "The recording has missing chunks."
-            });
-        }
-
-        recording.Status = "processing";
-        recording.DurationMilliseconds = request.DurationMilliseconds;
-        await db.SaveChangesAsync(cancellationToken);
-        recordingStates.Stop(recording.Id);
-        await hubContext.Clients
-            .Group(ChatHub.ConversationGroup(recording.ConversationId))
-            .SendAsync(
-                "RecordingStopped",
-                ToDto(recording, recording.StartedByUser.DisplayName),
-                cancellationToken);
-        await SendSystemMessage(
-            recording.ConversationId,
-            $"{recording.StartedByUser.DisplayName} stopped the recording. Processing…",
-            cancellationToken);
-
-        await finalizations.PublishAsync(recording.Id, CancellationToken.None);
-        return Accepted(ToDto(recording, recording.StartedByUser.DisplayName));
     }
 
     [HttpPost("{recordingId:guid}/cancel")]
@@ -293,40 +135,8 @@ public sealed class RecordingsController(
 
         recording.Status = "cancelled";
         recording.CompletedAt = DateTimeOffset.UtcNow;
-        var chunks = await db.SessionRecordingChunks
-            .Where(chunk => chunk.RecordingId == recording.Id)
-            .ToListAsync(cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         recordingStates.Stop(recording.Id);
-        foreach (var chunk in chunks)
-        {
-            try
-            {
-                if (RecordingChunkTempStorage.IsTemporaryReference(
-                        chunk.StorageObjectName))
-                {
-                    await chunkTempStorage.DeleteAsync(
-                        chunk.RecordingId,
-                        chunk.Sequence,
-                        CancellationToken.None);
-                }
-                else
-                {
-                    await storage.DeleteAsync(
-                        chunk.StorageObjectName,
-                        CancellationToken.None);
-                }
-            }
-            catch (Exception exception)
-            {
-                logger.LogWarning(
-                    exception,
-                    "Could not delete cancelled recording chunk {Chunk}.",
-                    chunk.StorageObjectName);
-            }
-        }
-        db.SessionRecordingChunks.RemoveRange(chunks);
-        await db.SaveChangesAsync(CancellationToken.None);
         await PublishFailed(recording, "Recording was cancelled.");
         return NoContent();
     }

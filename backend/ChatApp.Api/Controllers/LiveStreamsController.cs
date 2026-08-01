@@ -15,7 +15,7 @@ namespace ChatApp.Api.Controllers;
 public sealed class LiveStreamsController(
     ChatDbContext db,
     IHubContext<ChatHub> hubContext,
-    IServiceProvider services,
+    ICallingProvider callingProvider,
     ILogger<LiveStreamsController> logger) : ControllerBase
 {
     [HttpGet("active")]
@@ -121,9 +121,8 @@ public sealed class LiveStreamsController(
     {
         var user = await FindUser(username, cancellationToken);
         if (user is null) return NotFound();
-        if (services.GetService<ICallingProvider>() is not
-                { ManagesMedia: true, ManagesRecording: true } provider ||
-            provider.Name != "azure-communication-services")
+        if (!callingProvider.ManagesMedia ||
+            !callingProvider.ManagesRecording)
         {
             return Problem(
                 statusCode: StatusCodes.Status503ServiceUnavailable,
@@ -131,7 +130,7 @@ public sealed class LiveStreamsController(
         }
         // Ensure the host has a stable ACS identity before the stream is listed,
         // so viewers can render media from the host identity only.
-        await provider.GetAccessCredentialAsync(user, cancellationToken);
+        await callingProvider.GetAccessCredentialAsync(user, cancellationToken);
 
         await using var transaction = await db.Database.BeginTransactionAsync(
             IsolationLevel.Serializable,
@@ -158,7 +157,7 @@ public sealed class LiveStreamsController(
             ConversationId = conversation.Id,
             HostUser = user,
             HostUserId = user.Id,
-            Provider = provider.Name,
+            Provider = callingProvider.Name,
             ProviderCallId = sessionId.ToString()
         };
         db.LiveStreamSessions.Add(session);
@@ -207,19 +206,16 @@ public sealed class LiveStreamsController(
                 item.SessionType == "live_stream" &&
                 item.Status == "recording",
             cancellationToken);
-        ICallingProvider? provider = null;
         if (recording is not null)
         {
-            if (services.GetService<ICallingProvider>() is not
-                    { ManagesRecording: true } resolvedProvider ||
-                resolvedProvider.Name != recording.Provider ||
+            if (!callingProvider.ManagesRecording ||
+                callingProvider.Name != recording.Provider ||
                 string.IsNullOrWhiteSpace(recording.ProviderRecordingId))
             {
                 return Problem(
                     statusCode: StatusCodes.Status503ServiceUnavailable,
                     detail: "The live stream recording cannot be stopped right now.");
             }
-            provider = resolvedProvider;
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -235,7 +231,7 @@ public sealed class LiveStreamsController(
         {
             if (recording is not null)
             {
-                await provider!.StopRecordingAsync(
+                await callingProvider.StopRecordingAsync(
                     recording.ProviderRecordingId!,
                     cancellationToken);
             }
@@ -432,9 +428,8 @@ public sealed class LiveStreamsController(
         {
             return null;
         }
-        if (services.GetService<ICallingProvider>() is not
-                { ManagesRecording: true } provider ||
-            provider.Name != session.Provider)
+        if (!callingProvider.ManagesRecording ||
+            callingProvider.Name != session.Provider)
         {
             return Problem(
                 statusCode: StatusCodes.Status503ServiceUnavailable,
@@ -449,7 +444,7 @@ public sealed class LiveStreamsController(
             StartedByUser = host,
             StartedByUserId = host.Id,
             SessionType = "live_stream",
-            Provider = provider.Name,
+            Provider = callingProvider.Name,
             ProviderCallLocator = session.ProviderCallId,
             Status = "requesting-consent",
             StartedAt = DateTimeOffset.UtcNow
@@ -459,7 +454,7 @@ public sealed class LiveStreamsController(
         try
         {
             recording.ProviderRecordingId =
-                await provider.StartRecordingAsync(
+                await callingProvider.StartRecordingAsync(
                     session.ProviderCallId,
                     cancellationToken);
             recording.Status = "recording";

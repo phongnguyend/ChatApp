@@ -20,8 +20,6 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
     public DbSet<LiveLocationShare> LiveLocationShares => Set<LiveLocationShare>();
     public DbSet<SessionRecording> SessionRecordings =>
         Set<SessionRecording>();
-    public DbSet<SessionRecordingChunk> SessionRecordingChunks =>
-        Set<SessionRecordingChunk>();
     public DbSet<CallingProviderIdentity> CallingProviderIdentities =>
         Set<CallingProviderIdentity>();
     public DbSet<LiveStreamSession> LiveStreamSessions => Set<LiveStreamSession>();
@@ -403,17 +401,6 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
             .HasForeignKey(x => x.StartedByUserId)
             .OnDelete(DeleteBehavior.NoAction);
 
-        var chunk = modelBuilder.Entity<SessionRecordingChunk>();
-        chunk.ToTable("SessionRecordingChunks");
-        chunk.HasKey(x => new { x.RecordingId, x.Sequence });
-        chunk.Property(x => x.StorageObjectName)
-            .HasColumnType("nvarchar(max)")
-            .IsRequired();
-        chunk.Property(x => x.UploadedAt).HasPrecision(3);
-        chunk.HasOne(x => x.Recording)
-            .WithMany(x => x.Chunks)
-            .HasForeignKey(x => x.RecordingId)
-            .OnDelete(DeleteBehavior.Cascade);
     }
 
     private static void ConfigureCallingProviderIdentities(

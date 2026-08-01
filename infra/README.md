@@ -21,8 +21,9 @@ storage account, allowing Call Recording to export files to a configured blob
 container through Bring Your Own Storage (BYOS). The Communication Services
 primary connection string is injected into the API App Service settings as
 `Calling__AzureCommunicationServices__ConnectionString`; it is never exposed to
-the frontend. Browser-recording finalization jobs are published by the API to
-Service Bus. ACS `RecordingFileStatusUpdated` events are delivered directly from
+the frontend. Direct-call and group-meeting media use ACS group calls, keyed by
+the app's SignalR-managed call or meeting ID. ACS
+`RecordingFileStatusUpdated` events are delivered directly from
 Event Grid to the same topic with managed identity, so no public recording-event
 webhook is required.
 

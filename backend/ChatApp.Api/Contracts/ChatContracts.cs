@@ -203,13 +203,6 @@ public sealed record RespondToCallRequest(
     Guid InitiatorUserId,
     bool Accepted);
 
-public sealed record SendCallSignalRequest(
-    Guid CallId,
-    Guid ConversationId,
-    Guid TargetUserId,
-    string SignalType,
-    string Payload);
-
 public sealed record EndCallRequest(
     Guid CallId,
     Guid ConversationId,
@@ -231,13 +224,6 @@ public sealed record CallResponseDto(
     Guid UserId,
     string DisplayName,
     bool Accepted);
-
-public sealed record CallSignalDto(
-    Guid CallId,
-    Guid ConversationId,
-    Guid SenderUserId,
-    string SignalType,
-    string Payload);
 
 public sealed record CallEndedDto(
     Guid CallId,
@@ -293,20 +279,6 @@ public sealed record GroupMeetingChangedDto(
     Guid ConversationId,
     GroupMeetingDto? Meeting);
 
-public sealed record SendGroupMeetingSignalRequest(
-    Guid MeetingId,
-    Guid ConversationId,
-    Guid TargetUserId,
-    string SignalType,
-    string Payload);
-
-public sealed record GroupMeetingSignalDto(
-    Guid MeetingId,
-    Guid ConversationId,
-    Guid SenderUserId,
-    string SignalType,
-    string Payload);
-
 public sealed record GroupMeetingMicrophoneStateRequest(
     Guid MeetingId,
     Guid ConversationId,
@@ -324,10 +296,7 @@ public sealed record GroupMeetingScreenShareTakenOverDto(
 public sealed record CreateRecordingRequest(
     Guid ConversationId,
     Guid SessionId,
-    string SessionType,
-    string? ProviderCallId = null);
-
-public sealed record CompleteRecordingRequest(long DurationMilliseconds);
+    string SessionType);
 
 public sealed record RecordingConsentResponseRequest(
     Guid RecordingId,

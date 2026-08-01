@@ -12,9 +12,9 @@ multi-person group creation, live group member management, user discovery, onlin
 presence, typing indicators, unread counts, profile and group avatar uploads,
 camera capture, current-location sharing with confirmation previews, start/stop
 live-location sharing with an updating Leaflet map, automatic
-SignalR reconnection, direct audio/video calls with browser WebRTC media and
-SignalR signaling and in-call screen sharing, and responsive desktop/mobile
-layouts. Azure Communication Services-powered live-stream conversations let a
+SignalR reconnection, SignalR-coordinated direct and group meetings whose audio,
+video, screen sharing, and server-side recording run through Azure Communication
+Services, and responsive desktop/mobile layouts. ACS-powered live-stream conversations let a
 host start and stop multiple historical sessions while enforcing one active
 live stream per host; viewers join through regular conversation membership and
 only the host can publish camera, microphone, or screen-share media. Browser push
@@ -87,6 +87,21 @@ npm run dev
 ```
 
 Open `http://localhost:5173`, enter a username, and join the General conversation.
+
+Direct calls, group meetings, live streams, and call recording require Azure
+Communication Services. Configure the API with the resource connection string;
+the connection string remains server-side and the frontend receives only a
+short-lived VoIP user token:
+
+```powershell
+$env:Calling__Provider = "AzureCommunicationServices"
+$env:Calling__AzureCommunicationServices__ConnectionString = "<acs-connection-string>"
+dotnet run --project backend/ChatApp.Api
+```
+
+SignalR continues to carry invitations, acceptance/decline, participant state,
+screen-share ownership, and recording-consent/status events. It does not carry
+SDP, ICE, audio, video, or screen media.
 
 ## Azure browser push notifications
 

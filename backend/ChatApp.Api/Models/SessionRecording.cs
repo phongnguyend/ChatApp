@@ -18,5 +18,4 @@ public sealed class SessionRecording
     public DateTimeOffset StartedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? CompletedAt { get; set; }
     public long? DurationMilliseconds { get; set; }
-    public ICollection<SessionRecordingChunk> Chunks { get; set; } = [];
 }

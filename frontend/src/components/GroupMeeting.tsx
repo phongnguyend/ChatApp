@@ -26,10 +26,7 @@ import {
   RecordingConsentDialog,
   useCallRecording,
 } from "./useCallRecording";
-import {
-  acquireScreenShareStream,
-  optimizeScreenShareSender,
-} from "./screenShare";
+import { useAzureCommunicationCall } from "./useAzureCommunicationCall";
 import "./GroupMeeting.css";
 
 export type GroupMeetingParticipant = {
@@ -48,14 +45,6 @@ export type GroupMeeting = {
   startedAt: string;
   screenSharingUserId: string | null;
   participants: GroupMeetingParticipant[];
-};
-
-type MeetingSignalEvent = {
-  meetingId: string;
-  conversationId: string;
-  senderUserId: string;
-  signalType: "offer" | "answer" | "ice";
-  payload: string;
 };
 
 type MeetingScreenShareTakenOverEvent = {
@@ -109,172 +98,67 @@ export function GroupMeetingOverlay({
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isStageMaximized, setIsStageMaximized] = useState(false);
   const [isScreenMaximized, setIsScreenMaximized] = useState(false);
-  const localStreamRef = useRef<MediaStream | null>(null);
-  const screenStreamRef = useRef<MediaStream | null>(null);
   const meetingStageRef = useRef<HTMLElement | null>(null);
   const sharedScreenPanelRef = useRef<HTMLDivElement | null>(null);
   const sharedScreenVideoRef = useRef<HTMLVideoElement | null>(null);
   const stopScreenShareRef = useRef<(notifyServer?: boolean) => Promise<void>>(
     async () => {},
   );
-  const peerConnectionsRef = useRef(
-    new Map<string, RTCPeerConnection>(),
-  );
-  const remoteSourceStreamsRef = useRef(new Map<string, MediaStream>());
-  const queuedCandidatesRef = useRef(
-    new Map<string, RTCIceCandidateInit[]>(),
-  );
   const meetingRef = useRef(meeting);
   const onLeaveRef = useRef(onLeave);
-  const recordingConsentBlockedRef = useRef(false);
 
   useEffect(() => {
     meetingRef.current = meeting;
     onLeaveRef.current = onLeave;
   }, [meeting, onLeave]);
 
-  const sendSignal = useCallback(
-    async (
-      targetUserId: string,
-      signalType: "offer" | "answer" | "ice",
-      payload: string,
-    ) => {
-      const activeMeeting = meetingRef.current;
-      if (connection?.state !== HubConnectionState.Connected) return;
-      await connection.invoke("SendGroupMeetingSignal", {
-        meetingId: activeMeeting.meetingId,
-        conversationId: activeMeeting.conversationId,
-        targetUserId,
-        signalType,
-        payload,
-      });
-    },
-    [connection],
-  );
-
-  const createPeerConnection = useCallback(
-    (participantId: string) => {
-      const existing = peerConnectionsRef.current.get(participantId);
-      if (existing) return existing;
-
-      const peerConnection = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-      });
-      peerConnectionsRef.current.set(participantId, peerConnection);
-      queuedCandidatesRef.current.set(participantId, []);
-      for (const track of localStreamRef.current?.getTracks() ?? []) {
-        peerConnection.addTrack(track, localStreamRef.current!);
-      }
-      for (const track of screenStreamRef.current?.getTracks() ?? []) {
-        peerConnection.addTrack(track, screenStreamRef.current!);
-      }
-
-      const incomingStream = new MediaStream();
-      remoteSourceStreamsRef.current.set(participantId, incomingStream);
-      const refreshRemoteStream = () => {
-        setRemoteStreams((current) => ({
-          ...current,
-          [participantId]: new MediaStream(incomingStream.getTracks()),
-        }));
-      };
-      peerConnection.ontrack = ({ track }) => {
-        incomingStream.addTrack(track);
-        track.onmute = refreshRemoteStream;
-        track.onunmute = refreshRemoteStream;
-        track.onended = () => {
-          incomingStream.removeTrack(track);
-          refreshRemoteStream();
-        };
-        refreshRemoteStream();
-      };
-      peerConnection.onicecandidate = ({ candidate }) => {
-        if (!candidate) return;
-        void sendSignal(
-          participantId,
-          "ice",
-          JSON.stringify(candidate.toJSON()),
-        ).catch(() => onError("Meeting connectivity could not be established."));
-      };
-      peerConnection.onnegotiationneeded = () => {
-        if (peerConnection.signalingState !== "stable") return;
-        void (async () => {
-          const offer = await peerConnection.createOffer();
-          await peerConnection.setLocalDescription(offer);
-          await sendSignal(participantId, "offer", JSON.stringify(offer));
-        })().catch(() => onError("Meeting media could not be negotiated."));
-      };
-      return peerConnection;
-    },
-    [onError, sendSignal],
-  );
+  const azureMedia = useAzureCommunicationCall({
+    active: true,
+    apiUrl,
+    username,
+    groupId: meeting.meetingId,
+    userId: currentUser.id,
+    displayName: currentUser.displayName,
+    initialMicrophoneEnabled,
+    initialCameraEnabled,
+    onDisconnected: () => onLeaveRef.current(),
+    onError,
+  });
 
   useEffect(() => {
-    let cancelled = false;
-    const peerConnections = peerConnectionsRef.current;
-    const remoteSourceStreams = remoteSourceStreamsRef.current;
-    const queuedCandidates = queuedCandidatesRef.current;
-    void (async () => {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error("Group meetings are not supported by this browser.");
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: initialCameraEnabled,
-      });
-      for (const track of stream.getAudioTracks()) {
-        track.enabled = initialMicrophoneEnabled;
-      }
-      if (cancelled) {
-        for (const track of stream.getTracks()) track.stop();
-        return;
-      }
-      localStreamRef.current = stream;
-      setLocalStream(stream);
-      if (
-        !initialMicrophoneEnabled &&
-        connection?.state === HubConnectionState.Connected
-      ) {
-        void connection
-          .invoke("SetGroupMeetingMicrophoneState", {
-            meetingId: meeting.meetingId,
-            conversationId: meeting.conversationId,
-            isMuted: true,
-          })
-          .catch(() =>
-            onError("Microphone status could not be updated."),
-          );
-      }
-    })().catch((mediaError) => {
-      onError(
-        mediaError instanceof Error
-          ? mediaError.message
-          : "Microphone access is required to join the meeting.",
-      );
-      onLeaveRef.current();
-    });
-
-    return () => {
-      cancelled = true;
-      for (const track of localStreamRef.current?.getTracks() ?? []) {
-        track.stop();
-      }
-      for (const track of screenStreamRef.current?.getTracks() ?? []) {
-        track.onended = null;
-        track.stop();
-      }
-      localStreamRef.current = null;
-      screenStreamRef.current = null;
-      for (const peerConnection of peerConnections.values()) {
-        peerConnection.close();
-      }
-      peerConnections.clear();
-      remoteSourceStreams.clear();
-      queuedCandidates.clear();
-    };
+    setLocalStream(azureMedia.localStream);
+    setRemoteStreams(azureMedia.remoteStreams);
+    setIsMuted(azureMedia.isMuted);
+    setIsCameraEnabled(azureMedia.isCameraEnabled);
+    setScreenStream(azureMedia.screenStream);
+    setIsScreenSharing(azureMedia.isScreenSharing);
   }, [
+    azureMedia.isCameraEnabled,
+    azureMedia.isMuted,
+    azureMedia.isScreenSharing,
+    azureMedia.localStream,
+    azureMedia.remoteStreams,
+    azureMedia.screenStream,
+  ]);
+
+  useEffect(() => {
+    if (
+      !azureMedia.call ||
+      connection?.state !== HubConnectionState.Connected
+    ) {
+      return;
+    }
+    void connection
+      .invoke("SetGroupMeetingMicrophoneState", {
+        meetingId: meeting.meetingId,
+        conversationId: meeting.conversationId,
+        isMuted,
+      })
+      .catch(() => onError("Microphone status could not be updated."));
+  }, [
+    azureMedia.call,
     connection,
-    initialCameraEnabled,
-    initialMicrophoneEnabled,
+    isMuted,
     meeting.conversationId,
     meeting.meetingId,
     onError,
@@ -282,68 +166,6 @@ export function GroupMeetingOverlay({
 
   useEffect(() => {
     if (!connection) return;
-    const onSignal = async (event: MeetingSignalEvent) => {
-      if (
-        event.meetingId !== meetingRef.current.meetingId ||
-        event.conversationId !== meetingRef.current.conversationId ||
-        !meetingRef.current.participants.some(
-          (participant) => participant.userId === event.senderUserId,
-        )
-      ) {
-        return;
-      }
-
-      try {
-        const peerConnection = createPeerConnection(event.senderUserId);
-        if (event.signalType === "ice") {
-          const candidate = JSON.parse(event.payload) as RTCIceCandidateInit;
-          if (peerConnection.remoteDescription) {
-            await peerConnection.addIceCandidate(candidate);
-          } else {
-            queuedCandidatesRef.current
-              .get(event.senderUserId)
-              ?.push(candidate);
-          }
-          return;
-        }
-
-        const description = JSON.parse(
-          event.payload,
-        ) as RTCSessionDescriptionInit;
-        const hasOfferCollision =
-          event.signalType === "offer" &&
-          peerConnection.signalingState !== "stable";
-        if (
-          hasOfferCollision &&
-          currentUser.id.localeCompare(event.senderUserId) < 0
-        ) {
-          return;
-        }
-        if (hasOfferCollision) {
-          await peerConnection.setLocalDescription({ type: "rollback" });
-        }
-        await peerConnection.setRemoteDescription(description);
-        for (
-          const candidate of
-          queuedCandidatesRef.current.get(event.senderUserId) ?? []
-        ) {
-          await peerConnection.addIceCandidate(candidate);
-        }
-        queuedCandidatesRef.current.set(event.senderUserId, []);
-
-        if (event.signalType === "offer") {
-          const answer = await peerConnection.createAnswer();
-          await peerConnection.setLocalDescription(answer);
-          await sendSignal(
-            event.senderUserId,
-            "answer",
-            JSON.stringify(answer),
-          );
-        }
-      } catch {
-        onError("A meeting participant could not be connected.");
-      }
-    };
     const onScreenShareTakenOver = (
       event: MeetingScreenShareTakenOverEvent,
     ) => {
@@ -356,172 +178,63 @@ export function GroupMeetingOverlay({
       }
       void stopScreenShareRef.current(false);
     };
-
-    connection.on("GroupMeetingSignal", onSignal);
     connection.on(
       "GroupMeetingScreenShareTakenOver",
       onScreenShareTakenOver,
     );
-    return () => {
-      connection.off("GroupMeetingSignal", onSignal);
-      connection.off(
-        "GroupMeetingScreenShareTakenOver",
-        onScreenShareTakenOver,
-      );
-    };
-  }, [
-    connection,
-    createPeerConnection,
-    currentUser.id,
-    onError,
-    sendSignal,
-  ]);
-
-  useEffect(() => {
-    if (!localStream) return;
-    const participantIds = new Set(
-      meeting.participants
-        .map((participant) => participant.userId)
-        .filter((participantId) => participantId !== currentUser.id),
+    return () => connection.off(
+      "GroupMeetingScreenShareTakenOver",
+      onScreenShareTakenOver,
     );
-
-    for (const [participantId, peerConnection] of
-      peerConnectionsRef.current) {
-      if (participantIds.has(participantId)) continue;
-      peerConnection.close();
-      peerConnectionsRef.current.delete(participantId);
-      remoteSourceStreamsRef.current.delete(participantId);
-      queuedCandidatesRef.current.delete(participantId);
-      setRemoteStreams((current) => {
-        const next = { ...current };
-        delete next[participantId];
-        return next;
-      });
-    }
-
-    for (const participantId of participantIds) {
-      const peerConnection = createPeerConnection(participantId);
-      for (const track of localStream.getTracks()) {
-        const alreadySending = peerConnection
-          .getSenders()
-          .some((sender) => sender.track === track);
-        if (!alreadySending) peerConnection.addTrack(track, localStream);
-      }
-      for (const track of screenStreamRef.current?.getTracks() ?? []) {
-        const alreadySending = peerConnection
-          .getSenders()
-          .some((sender) => sender.track === track);
-        if (!alreadySending) {
-          peerConnection.addTrack(track, screenStreamRef.current!);
-        }
-      }
-    }
-  }, [
-    createPeerConnection,
-    currentUser.id,
-    localStream,
-    meeting.participants,
-  ]);
+  }, [connection, currentUser.id]);
 
   const toggleMute = () => {
     const nextMuted = !isMuted;
-    for (const track of localStreamRef.current?.getAudioTracks() ?? []) {
-      track.enabled = !nextMuted;
-    }
-    setIsMuted(nextMuted);
-    if (connection?.state === HubConnectionState.Connected) {
-      void connection
-        .invoke("SetGroupMeetingMicrophoneState", {
-          meetingId: meeting.meetingId,
-          conversationId: meeting.conversationId,
-          isMuted: nextMuted,
+    if (azureMedia.call) {
+      void azureMedia.toggleMute()
+        .then(() => {
+          if (connection?.state === HubConnectionState.Connected) {
+            return connection.invoke("SetGroupMeetingMicrophoneState", {
+              meetingId: meeting.meetingId,
+              conversationId: meeting.conversationId,
+              isMuted: nextMuted,
+            });
+          }
         })
         .catch(() => onError("Microphone status could not be updated."));
+      return;
     }
   };
 
   const toggleCamera = async () => {
-    const currentStream = localStreamRef.current;
-    if (!currentStream) return;
-    if (isCameraEnabled) {
-      for (const track of currentStream.getVideoTracks()) {
-        for (const peerConnection of peerConnectionsRef.current.values()) {
-          const sender = peerConnection
-            .getSenders()
-            .find((candidate) => candidate.track === track);
-          if (sender) peerConnection.removeTrack(sender);
-        }
-        track.stop();
+    if (azureMedia.call) {
+      try {
+        await azureMedia.toggleCamera();
+      } catch (cameraError) {
+        onError(cameraError instanceof Error ? cameraError.message : "The camera could not be updated.");
       }
-      const audioStream = new MediaStream(currentStream.getAudioTracks());
-      localStreamRef.current = audioStream;
-      setLocalStream(audioStream);
-      setIsCameraEnabled(false);
       return;
-    }
-
-    try {
-      const cameraStream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: true,
-      });
-      const cameraTrack = cameraStream.getVideoTracks()[0];
-      if (!cameraTrack) throw new Error("No camera is available.");
-      const nextStream = new MediaStream([
-        ...currentStream.getAudioTracks(),
-        cameraTrack,
-      ]);
-      for (const peerConnection of peerConnectionsRef.current.values()) {
-        peerConnection.addTrack(cameraTrack, nextStream);
-      }
-      localStreamRef.current = nextStream;
-      setLocalStream(nextStream);
-      setIsCameraEnabled(true);
-    } catch (cameraError) {
-      onError(
-        cameraError instanceof Error
-          ? cameraError.message
-          : "The camera could not be turned on.",
-      );
     }
   };
 
   const stopScreenShare = useCallback(
     async (notifyServer = true) => {
-      const displayStream = screenStreamRef.current;
-      if (!displayStream) return;
-      const displayTracks = new Set(displayStream.getTracks());
-      screenStreamRef.current = null;
-      setScreenStream(null);
-      setIsScreenSharing(false);
-
-      for (const peerConnection of peerConnectionsRef.current.values()) {
-        for (const sender of peerConnection.getSenders()) {
-          if (sender.track && displayTracks.has(sender.track)) {
-            peerConnection.removeTrack(sender);
-          }
-        }
-      }
-      for (const track of displayStream.getTracks()) {
-        track.onended = null;
-        track.stop();
-      }
-
-      if (
-        notifyServer &&
-        connection?.state === HubConnectionState.Connected
-      ) {
+      if (azureMedia.isScreenSharing) {
         try {
-          await connection.invoke("StopGroupMeetingScreenShare", {
-            meetingId: meeting.meetingId,
-            conversationId: meeting.conversationId,
-          });
+          await azureMedia.stopScreenShare();
+          if (notifyServer && connection?.state === HubConnectionState.Connected) {
+            await connection.invoke("StopGroupMeetingScreenShare", {
+              meetingId: meeting.meetingId,
+              conversationId: meeting.conversationId,
+            });
+          }
         } catch {
           onError("Screen sharing could not be stopped cleanly.");
         }
+        return;
       }
     },
-    [connection, meeting.conversationId, meeting.meetingId, onError],
+    [azureMedia, connection, meeting.conversationId, meeting.meetingId, onError],
   );
 
   useEffect(() => {
@@ -529,47 +242,28 @@ export function GroupMeetingOverlay({
   }, [stopScreenShare]);
 
   const startScreenShare = async () => {
-    if (
-      isScreenSharing ||
-      connection?.state !== HubConnectionState.Connected ||
-      !navigator.mediaDevices?.getDisplayMedia
-    ) {
+    if (azureMedia.call && !azureMedia.isScreenSharing) {
+      let registered = false;
+      try {
+        if (connection?.state !== HubConnectionState.Connected) return;
+        await connection.invoke("StartGroupMeetingScreenShare", {
+          meetingId: meeting.meetingId,
+          conversationId: meeting.conversationId,
+        });
+        registered = true;
+        await azureMedia.startScreenShare();
+      } catch (screenError) {
+        if (registered && connection?.state === HubConnectionState.Connected) {
+          void connection.invoke("StopGroupMeetingScreenShare", {
+            meetingId: meeting.meetingId,
+            conversationId: meeting.conversationId,
+          });
+        }
+        if (!(screenError instanceof DOMException && ["AbortError", "NotAllowedError"].includes(screenError.name))) {
+          onError(screenError instanceof Error ? screenError.message : "Screen sharing could not be started.");
+        }
+      }
       return;
-    }
-
-    let displayStream: MediaStream | null = null;
-    try {
-      displayStream = await acquireScreenShareStream();
-      const screenTrack = displayStream.getVideoTracks()[0];
-      if (!screenTrack) throw new Error("No screen was selected.");
-
-      await connection.invoke("StartGroupMeetingScreenShare", {
-        meetingId: meeting.meetingId,
-        conversationId: meeting.conversationId,
-      });
-      for (const peerConnection of peerConnectionsRef.current.values()) {
-        const sender = peerConnection.addTrack(screenTrack, displayStream);
-        await optimizeScreenShareSender(sender);
-      }
-      screenStreamRef.current = displayStream;
-      setScreenStream(displayStream);
-      setIsScreenSharing(true);
-      screenTrack.onended = () => {
-        void stopScreenShareRef.current();
-      };
-    } catch (screenError) {
-      for (const track of displayStream?.getTracks() ?? []) track.stop();
-      if (
-        screenError instanceof DOMException &&
-        ["AbortError", "NotAllowedError"].includes(screenError.name)
-      ) {
-        return;
-      }
-      onError(
-        screenError instanceof Error
-          ? screenError.message
-          : "Screen sharing could not be started.",
-      );
     }
   };
 
@@ -696,6 +390,8 @@ export function GroupMeetingOverlay({
     conversationId: meeting.conversationId,
     sessionId: meeting.meetingId,
     sessionType: "meeting",
+    providerCallId: meeting.meetingId,
+    providerManagedRecording: true,
     currentUserId: currentUser.id,
     participants: recordingParticipants,
     sharedScreenStream: activeScreenStream,
@@ -703,33 +399,6 @@ export function GroupMeetingOverlay({
     onConsentDeclined: onLeave,
     onError,
   });
-
-  useEffect(() => {
-    if (!recordingController.hasLocalConsent) {
-      recordingConsentBlockedRef.current = true;
-      return;
-    }
-    if (!recordingConsentBlockedRef.current) return;
-    recordingConsentBlockedRef.current = false;
-    for (const [participantId, peerConnection] of
-      peerConnectionsRef.current) {
-      void (async () => {
-        try {
-          const offer = await peerConnection.createOffer();
-          await peerConnection.setLocalDescription(offer);
-          await sendSignal(participantId, "offer", JSON.stringify(offer));
-        } catch {
-          onError(
-            "Meeting media could not be connected after recording consent.",
-          );
-        }
-      })();
-    }
-  }, [
-    onError,
-    recordingController.hasLocalConsent,
-    sendSignal,
-  ]);
 
   useEffect(() => {
     if (sharedScreenVideoRef.current) {
