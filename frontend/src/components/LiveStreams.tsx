@@ -411,6 +411,8 @@ function LiveStreamStage({ stream, apiUrl, username, displayName, onLeave, onSto
         callAgent = agent;
         activeCall = agent.join({ groupId: stream.providerCallId! }, { audioOptions: { muted: !stream.isHost } });
         setCall(activeCall);
+        await waitForConnectedCall(activeCall);
+        if (cancelled) return;
         const observed = new Set<RemoteParticipant>();
         const observedVideoStreams = new Set<RemoteVideoStream>();
         const refresh = () => {
@@ -574,8 +576,10 @@ function LiveStreamStage({ stream, apiUrl, username, displayName, onLeave, onSto
     await onLeave();
   }
 
-  async function endStream() {
-    await teardownRef.current();
+  function endStream() {
+    // Stop the provider recording while the host is still connected. The
+    // successful response removes the stage and its effect cleanup then hangs
+    // up the ACS call.
     onStop();
   }
 
@@ -643,6 +647,25 @@ function LiveStreamStage({ stream, apiUrl, username, displayName, onLeave, onSto
       </footer>
     </div>
   );
+}
+
+function waitForConnectedCall(call: Call) {
+  if (call.state === "Connected") return Promise.resolve();
+  return new Promise<void>((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      call.off("stateChanged", changed);
+      reject(new Error("Timed out while connecting to the live stream."));
+    }, 30_000);
+    const changed = () => {
+      if (call.state !== "Connected" && call.state !== "Disconnected") return;
+      window.clearTimeout(timeout);
+      call.off("stateChanged", changed);
+      if (call.state === "Connected") resolve();
+      else reject(new Error("The live-stream call disconnected."));
+    };
+    call.on("stateChanged", changed);
+    changed();
+  });
 }
 
 function VideoSurface({ stream, label, isMirrored, variant }: {

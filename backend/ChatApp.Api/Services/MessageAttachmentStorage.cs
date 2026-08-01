@@ -143,7 +143,10 @@ public sealed class MessageAttachmentStorage(
             throw new InvalidDataException("Invalid attachment storage key.");
         }
 
-        return $"attachments/{storageKey}";
+        return Uri.TryCreate(storageKey, UriKind.Absolute, out var uri) &&
+            uri.Scheme == Uri.UriSchemeHttps
+                ? uri.AbsoluteUri
+                : $"attachments/{storageKey}";
     }
 
     private static bool HasValidImageSignature(

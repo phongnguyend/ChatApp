@@ -10,10 +10,12 @@ namespace ChatApp.Api.Services;
 
 public sealed class AzureCommunicationServicesCallingProvider(
     ChatDbContext db,
-    IOptions<CallingOptions> options) : ICallingProvider
+    IOptions<CallingOptions> options,
+    IOptions<AzureBlobOptions> blobOptions) : ICallingProvider
 {
     private readonly string connectionString =
         options.Value.AzureCommunicationServices.ConnectionString;
+    private readonly AzureBlobOptions blobOptions = blobOptions.Value;
 
     public string Name => "azure-communication-services";
     public bool ManagesMedia => true;
@@ -69,13 +71,21 @@ public sealed class AzureCommunicationServicesCallingProvider(
         CancellationToken cancellationToken)
     {
         EnsureConfigured();
+        if (!blobOptions.IsValid())
+        {
+            throw new InvalidOperationException(
+                "Azure Blob storage must be configured for call recordings.");
+        }
         var client = new CallAutomationClient(connectionString);
         var options = new StartRecordingOptions(
             new GroupCallLocator(callLocator))
         {
             RecordingChannel = RecordingChannel.Mixed,
             RecordingContent = RecordingContent.AudioVideo,
-            RecordingFormat = RecordingFormat.Mp4
+            RecordingFormat = RecordingFormat.Mp4,
+            RecordingStorage =
+                RecordingStorage.CreateAzureBlobContainerRecordingStorage(
+                    blobOptions.CreateBlobContainerClient().Uri)
         };
         var response = await client.GetCallRecording().StartAsync(
             options,
@@ -89,22 +99,12 @@ public sealed class AzureCommunicationServicesCallingProvider(
     {
         EnsureConfigured();
         var client = new CallAutomationClient(connectionString);
-        await client.GetCallRecording().StopAsync(
+        var recording = client.GetCallRecording();
+        var state = await recording.GetStateAsync(
             providerRecordingId,
             cancellationToken);
-    }
-
-    public async Task DownloadRecordingAsync(
-        Uri contentLocation,
-        Stream destination,
-        CancellationToken cancellationToken)
-    {
-        EnsureConfigured();
-        var client = new CallAutomationClient(connectionString);
-        await client.GetCallRecording().DownloadToAsync(
-            contentLocation,
-            destination,
-            cancellationToken: cancellationToken);
+        if (state.Value.RecordingState != RecordingState.Active) return;
+        await recording.StopAsync(providerRecordingId, cancellationToken);
     }
 
     private void EnsureConfigured()

@@ -42,6 +42,20 @@ public sealed class AzureBlobUploadObjectStorage : IUploadObjectStorage
         string key,
         CancellationToken cancellationToken)
     {
+        if (TryGetDirectBlobClient(key, out var directBlob))
+        {
+            try
+            {
+                var response = await directBlob.DownloadStreamingAsync(
+                    cancellationToken: cancellationToken);
+                return response.Value.Content;
+            }
+            catch (RequestFailedException exception) when (exception.Status == 404)
+            {
+                return null;
+            }
+        }
+
         var normalizedKey = NormalizeKey(key);
         var cachePath = GetCachePath(normalizedKey);
         var cachedStream = TryOpenCache(cachePath);
@@ -89,6 +103,14 @@ public sealed class AzureBlobUploadObjectStorage : IUploadObjectStorage
         string key,
         CancellationToken cancellationToken)
     {
+        if (TryGetDirectBlobClient(key, out var directBlob))
+        {
+            await directBlob.DeleteIfExistsAsync(
+                DeleteSnapshotsOption.IncludeSnapshots,
+                cancellationToken: cancellationToken);
+            return;
+        }
+
         var normalizedKey = NormalizeKey(key);
         var keyLock = GetKeyLock(normalizedKey);
         await keyLock.WaitAsync(cancellationToken);
@@ -148,6 +170,40 @@ public sealed class AzureBlobUploadObjectStorage : IUploadObjectStorage
         string.IsNullOrEmpty(blobPath)
             ? normalizedKey
             : $"{blobPath}/{normalizedKey}";
+
+    private bool TryGetDirectBlobClient(
+        string key,
+        out BlobClient blobClient)
+    {
+        blobClient = null!;
+        if (!Uri.TryCreate(key, UriKind.Absolute, out var uri) ||
+            uri.Scheme != Uri.UriSchemeHttps ||
+            !string.Equals(
+                uri.Scheme,
+                container.Uri.Scheme,
+                StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(
+                uri.Authority,
+                container.Uri.Authority,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var containerPath = container.Uri.AbsolutePath.TrimEnd('/');
+        if (!uri.AbsolutePath.StartsWith(
+                $"{containerPath}/",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var blobName = Uri.UnescapeDataString(
+            uri.AbsolutePath[(containerPath.Length + 1)..]);
+        if (string.IsNullOrWhiteSpace(blobName)) return false;
+        blobClient = container.GetBlobClient(blobName);
+        return true;
+    }
 
     private string GetCachePath(string normalizedKey)
     {

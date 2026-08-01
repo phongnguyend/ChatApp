@@ -15,7 +15,8 @@ namespace ChatApp.Api.Controllers;
 public sealed class LiveStreamsController(
     ChatDbContext db,
     IHubContext<ChatHub> hubContext,
-    IServiceProvider services) : ControllerBase
+    IServiceProvider services,
+    ILogger<LiveStreamsController> logger) : ControllerBase
 {
     [HttpGet("active")]
     public async Task<ActionResult<IReadOnlyList<LiveStreamDto>>> GetActive(
@@ -120,7 +121,8 @@ public sealed class LiveStreamsController(
     {
         var user = await FindUser(username, cancellationToken);
         if (user is null) return NotFound();
-        if (services.GetService<ICallingProvider>() is not { ManagesMedia: true } provider ||
+        if (services.GetService<ICallingProvider>() is not
+                { ManagesMedia: true, ManagesRecording: true } provider ||
             provider.Name != "azure-communication-services")
         {
             return Problem(
@@ -160,20 +162,22 @@ public sealed class LiveStreamsController(
             ProviderCallId = sessionId.ToString()
         };
         db.LiveStreamSessions.Add(session);
-        var systemMessage = await AddSystemMessage(
-            conversation,
-            $"{user.DisplayName} started the live stream.",
-            user.Id,
-            cancellationToken);
+        ChatMessage systemMessage;
         try
         {
+            systemMessage = await AddSystemMessage(
+                conversation,
+                $"{user.DisplayName} started the live stream.",
+                user.Id,
+                cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
         }
         catch (DbUpdateException)
         {
             return Conflict(new { message = "This host or live stream is already active." });
         }
+
+        await transaction.CommitAsync(cancellationToken);
 
         await NotifyChanged(cancellationToken);
         await BroadcastSystemMessage(systemMessage, cancellationToken);
@@ -197,15 +201,56 @@ public sealed class LiveStreamsController(
         if (session is null) return NotFound();
         if (session.HostUserId != user.Id) return Forbid();
 
+        var recording = await db.SessionRecordings.SingleOrDefaultAsync(
+            item =>
+                item.SessionId == session.Id &&
+                item.SessionType == "live_stream" &&
+                item.Status == "recording",
+            cancellationToken);
+        ICallingProvider? provider = null;
+        if (recording is not null)
+        {
+            if (services.GetService<ICallingProvider>() is not
+                    { ManagesRecording: true } resolvedProvider ||
+                resolvedProvider.Name != recording.Provider ||
+                string.IsNullOrWhiteSpace(recording.ProviderRecordingId))
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status503ServiceUnavailable,
+                    detail: "The live stream recording cannot be stopped right now.");
+            }
+            provider = resolvedProvider;
+        }
+
         var now = DateTimeOffset.UtcNow;
         session.EndedAt = now;
+        if (recording is not null) recording.Status = "processing";
         var systemMessage = await AddSystemMessage(
             session.Conversation,
             $"{user.DisplayName} stopped the live stream.",
             user.Id,
             cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+        try
+        {
+            if (recording is not null)
+            {
+                await provider!.StopRecordingAsync(
+                    recording.ProviderRecordingId!,
+                    cancellationToken);
+            }
+            await transaction.CommitAsync(CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(
+                exception,
+                "Recording could not stop for live stream session {SessionId}.",
+                session.Id);
+            return Problem(
+                statusCode: StatusCodes.Status502BadGateway,
+                detail: "The live stream recording could not be stopped.");
+        }
         await NotifyChanged(cancellationToken);
         await BroadcastSystemMessage(systemMessage, cancellationToken);
         return Ok(ToDto(session, user.Id));
@@ -360,10 +405,77 @@ public sealed class LiveStreamsController(
             $"{user.DisplayName} {action} the live stream.",
             user.Id,
             cancellationToken);
+        if (action == "joined" && session.HostUserId == user.Id)
+        {
+            var recordingError = await StartLiveStreamRecording(
+                session,
+                user,
+                cancellationToken);
+            if (recordingError is not null) return recordingError;
+        }
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await BroadcastSystemMessage(message, cancellationToken);
         return NoContent();
+    }
+
+    private async Task<IActionResult?> StartLiveStreamRecording(
+        LiveStreamSession session,
+        ChatUser host,
+        CancellationToken cancellationToken)
+    {
+        if (await db.SessionRecordings.AnyAsync(
+                item =>
+                    item.SessionId == session.Id &&
+                    item.SessionType == "live_stream",
+                cancellationToken))
+        {
+            return null;
+        }
+        if (services.GetService<ICallingProvider>() is not
+                { ManagesRecording: true } provider ||
+            provider.Name != session.Provider)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                detail: "The live stream recording cannot be started right now.");
+        }
+
+        var recording = new SessionRecording
+        {
+            Conversation = session.Conversation,
+            ConversationId = session.ConversationId,
+            SessionId = session.Id,
+            StartedByUser = host,
+            StartedByUserId = host.Id,
+            SessionType = "live_stream",
+            Provider = provider.Name,
+            ProviderCallLocator = session.ProviderCallId,
+            Status = "requesting-consent",
+            StartedAt = DateTimeOffset.UtcNow
+        };
+        db.SessionRecordings.Add(recording);
+        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            recording.ProviderRecordingId =
+                await provider.StartRecordingAsync(
+                    session.ProviderCallId,
+                    cancellationToken);
+            recording.Status = "recording";
+            await db.SaveChangesAsync(CancellationToken.None);
+            return null;
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(
+                exception,
+                "Recording could not start for connected live stream session {SessionId}.",
+                session.Id);
+            return Problem(
+                statusCode: StatusCodes.Status502BadGateway,
+                detail: "The live stream recording could not be started.");
+        }
     }
 
     private async Task<ChatMessage> AddSystemMessage(

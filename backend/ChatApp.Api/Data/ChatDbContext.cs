@@ -374,7 +374,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         {
             table.HasCheckConstraint(
                 "CK_SessionRecordings_SessionType",
-                "[SessionType] IN ('direct', 'meeting')");
+                "[SessionType] IN ('direct', 'meeting', 'live_stream')");
             table.HasCheckConstraint(
                 "CK_SessionRecordings_Status",
                 "[Status] IN ('requesting-consent', 'recording', 'processing', 'completed', 'cancelled', 'failed')");

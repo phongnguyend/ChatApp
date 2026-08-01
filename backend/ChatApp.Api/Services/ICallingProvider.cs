@@ -28,8 +28,4 @@ public interface ICallingProvider
         string providerRecordingId,
         CancellationToken cancellationToken);
 
-    Task DownloadRecordingAsync(
-        Uri contentLocation,
-        Stream destination,
-        CancellationToken cancellationToken);
 }
