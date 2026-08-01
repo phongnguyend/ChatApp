@@ -1,4 +1,4 @@
-using ChatApp.Api.Data;
+using ChatApp.Application.Data;
 using ChatApp.Api.Hubs;
 using ChatApp.Api.Services;
 using Microsoft.EntityFrameworkCore;
@@ -10,9 +10,6 @@ var uploadStorageProvider =
     uploadStorageSection.GetValue<string>("Provider") ?? "Local";
 var callingSection = builder.Configuration.GetSection(
     CallingOptions.SectionName);
-var messagingSection = builder.Configuration.GetSection(
-    MessagingOptions.SectionName);
-var messagingProvider = messagingSection.GetValue<string>("Provider")?.Trim();
 
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
@@ -58,29 +55,6 @@ builder.Services.AddSingleton<PresenceTracker>();
 builder.Services.AddSingleton<CallStateTracker>();
 builder.Services.AddSingleton<GroupMeetingStateTracker>();
 builder.Services.AddSingleton<RecordingStateTracker>();
-builder.Services.AddOptions<MessagingOptions>()
-    .Bind(messagingSection)
-    .Validate(
-        options =>
-            !string.Equals(
-                options.Provider,
-                "AzureServiceBus",
-                StringComparison.OrdinalIgnoreCase) ||
-            options.AzureServiceBus.IsValid(),
-        "Azure Service Bus messaging configuration is incomplete.")
-    .ValidateOnStart();
-if (string.Equals(
-        messagingProvider,
-        "AzureServiceBus",
-        StringComparison.OrdinalIgnoreCase))
-{
-    builder.Services.AddSingleton(serviceProvider =>
-        serviceProvider
-            .GetRequiredService<Microsoft.Extensions.Options.IOptions<
-                MessagingOptions>>()
-            .Value.AzureServiceBus.CreateClient());
-    builder.Services.AddHostedService<ServiceBusRecordingWorker>();
-}
 if (uploadStorageProvider.Equals(
     "AzureBlob",
     StringComparison.OrdinalIgnoreCase))

@@ -1,4 +1,4 @@
-using ChatApp.Api.Data;
+using ChatApp.Application.Data;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 

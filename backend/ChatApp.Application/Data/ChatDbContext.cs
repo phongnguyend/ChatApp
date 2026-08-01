@@ -1,7 +1,7 @@
-using ChatApp.Api.Models;
+using ChatApp.Application.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace ChatApp.Api.Data;
+namespace ChatApp.Application.Data;
 
 public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
     : DbContext(options)

@@ -1,4 +1,4 @@
-namespace ChatApp.Api.Models;
+namespace ChatApp.Application.Models;
 
 public sealed class MessageReaction
 {

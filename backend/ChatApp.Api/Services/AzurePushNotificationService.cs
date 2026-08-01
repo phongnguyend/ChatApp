@@ -2,7 +2,7 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using ChatApp.Api.Data;
+using ChatApp.Application.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 

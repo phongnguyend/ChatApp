@@ -1,7 +1,7 @@
 using Azure.Identity;
 using Azure.Messaging.ServiceBus;
 
-namespace ChatApp.Api.Services;
+namespace ChatApp.Background;
 
 public sealed class MessagingOptions
 {

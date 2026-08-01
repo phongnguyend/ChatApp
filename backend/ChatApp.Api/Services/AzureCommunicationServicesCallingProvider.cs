@@ -1,8 +1,8 @@
 using Azure.Communication;
 using Azure.Communication.CallAutomation;
 using Azure.Communication.Identity;
-using ChatApp.Api.Data;
-using ChatApp.Api.Models;
+using ChatApp.Application.Data;
+using ChatApp.Application.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 

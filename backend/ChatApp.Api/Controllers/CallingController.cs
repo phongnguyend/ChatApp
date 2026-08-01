@@ -1,4 +1,4 @@
-using ChatApp.Api.Data;
+using ChatApp.Application.Data;
 using ChatApp.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;

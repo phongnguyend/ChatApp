@@ -1,5 +1,5 @@
-using ChatApp.Api.Contracts;
-using ChatApp.Api.Data;
+using ChatApp.Application.Contracts;
+using ChatApp.Application.Data;
 using ChatApp.Api.Hubs;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;

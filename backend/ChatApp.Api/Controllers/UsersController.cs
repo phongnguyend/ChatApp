@@ -1,7 +1,7 @@
-using ChatApp.Api.Contracts;
-using ChatApp.Api.Data;
+using ChatApp.Application.Contracts;
+using ChatApp.Application.Data;
 using ChatApp.Api.Hubs;
-using ChatApp.Api.Models;
+using ChatApp.Application.Models;
 using ChatApp.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;

@@ -1,4 +1,4 @@
-using ChatApp.Api.Models;
+using ChatApp.Application.Models;
 
 namespace ChatApp.Api.Services;
 

@@ -1,8 +1,8 @@
 using System.Data;
-using ChatApp.Api.Contracts;
-using ChatApp.Api.Data;
+using ChatApp.Application.Contracts;
+using ChatApp.Application.Data;
 using ChatApp.Api.Hubs;
-using ChatApp.Api.Models;
+using ChatApp.Application.Models;
 using ChatApp.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -20,6 +20,93 @@ public sealed class RecordingsController(
     ICallingProvider callingProvider,
     IHubContext<ChatHub> hubContext) : ControllerBase
 {
+    [HttpPost("internal/completed")]
+    public async Task<IActionResult> NotifyRecordingCompleted(
+        RecordingCompletedNotificationRequest request,
+        CancellationToken cancellationToken)
+    {
+        var recording = await db.SessionRecordings
+            .Include(item => item.StartedByUser)
+            .SingleOrDefaultAsync(
+                item => item.Id == request.RecordingId,
+                cancellationToken);
+        if (recording is null)
+        {
+            return NotFound();
+        }
+        if (recording.Status != "completed" ||
+            string.IsNullOrWhiteSpace(recording.StorageObjectName))
+        {
+            return Conflict(new
+            {
+                message = "The recording has not completed processing."
+            });
+        }
+
+        var message = await db.Messages
+            .Include(item => item.Attachments)
+            .Where(item =>
+                item.ConversationId == recording.ConversationId &&
+                item.Attachments.Any(attachment =>
+                    attachment.StorageKey == recording.StorageObjectName))
+            .OrderByDescending(item => item.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (message is null)
+        {
+            return NotFound();
+        }
+
+        recordingStates.Stop(recording.Id);
+        var attachments = message.Attachments
+            .Select(attachment => new MessageAttachmentDto(
+                attachment.Id,
+                attachment.FileName,
+                attachment.ContentType,
+                attachment.FileSize,
+                null,
+                null,
+                attachment.DurationMs))
+            .ToArray();
+        await hubContext.Clients
+            .Group(ChatHub.ConversationGroup(recording.ConversationId))
+            .SendAsync(
+                "MessageReceived",
+                new MessageDto(
+                    message.Id,
+                    message.ConversationId,
+                    null,
+                    null,
+                    null,
+                    message.Content,
+                    message.MessageType,
+                    null,
+                    message.SequenceNumber,
+                    null,
+                    message.CreatedAt,
+                    null,
+                    null,
+                    attachments),
+                cancellationToken);
+        await hubContext.Clients
+            .Group(ChatHub.ConversationGroup(recording.ConversationId))
+            .SendAsync(
+                "RecordingCompleted",
+                new
+                {
+                    recording = new RecordingStateDto(
+                        recording.Id,
+                        recording.ConversationId,
+                        recording.SessionId,
+                        recording.StartedByUserId,
+                        recording.StartedByUser.DisplayName,
+                        recording.StartedAt,
+                        recording.Status),
+                    attachments
+                },
+                cancellationToken);
+        return NoContent();
+    }
+
     [HttpPost]
     public async Task<ActionResult<RecordingStateDto>> Create(
         [FromQuery] string username,

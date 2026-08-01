@@ -1,15 +1,14 @@
 using System.Data;
+using System.Net.Http.Json;
 using System.Text.Json;
 using Azure.Messaging.ServiceBus;
-using ChatApp.Api.Contracts;
-using ChatApp.Api.Data;
-using ChatApp.Api.Hubs;
-using ChatApp.Api.Models;
-using Microsoft.AspNetCore.SignalR;
+using ChatApp.Application.Contracts;
+using ChatApp.Application.Data;
+using ChatApp.Application.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
-namespace ChatApp.Api.Services;
+namespace ChatApp.Background;
 
 public sealed record CallingProviderRecordingFile(
     string ProviderRecordingId,
@@ -18,17 +17,15 @@ public sealed record CallingProviderRecordingFile(
 
 public sealed class ServiceBusRecordingWorker(
     ServiceBusClient client,
+    HttpClient apiClient,
     IOptions<MessagingOptions> options,
     IServiceScopeFactory scopeFactory,
-    RecordingStateTracker recordingStates,
-    IHubContext<ChatHub> hubContext,
     ILogger<ServiceBusRecordingWorker> logger) : BackgroundService
 {
     private ServiceBusProcessor? processor;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        return;
         await ResumeProviderRecordingsAsync(stoppingToken);
 
         var serviceBus = options.Value.AzureServiceBus;
@@ -162,15 +159,18 @@ public sealed class ServiceBusRecordingWorker(
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
         var recording = await db.SessionRecordings.SingleOrDefaultAsync(
-            item =>
-                item.ProviderRecordingId == providerRecordingId &&
-                item.Status != "completed",
+            item => item.ProviderRecordingId == providerRecordingId,
             cancellationToken);
         if (recording is null)
         {
             logger.LogInformation(
                 "Ignoring ACS recording event {ProviderRecordingId} because no pending recording exists.",
                 providerRecordingId);
+            return true;
+        }
+        if (recording.Status == "completed")
+        {
+            await NotifyApiAsync(recording.Id, cancellationToken);
             return true;
         }
 
@@ -244,8 +244,13 @@ public sealed class ServiceBusRecordingWorker(
                     item.ProviderRecordingId ==
                         providerFile.ProviderRecordingId,
                 cancellationToken);
-        if (recording is null || recording.Status == "completed")
+        if (recording is null)
         {
+            return;
+        }
+        if (recording.Status == "completed")
+        {
+            await NotifyApiAsync(recording.Id, cancellationToken);
             return;
         }
         if (recording.Status != "processing")
@@ -278,66 +283,25 @@ public sealed class ServiceBusRecordingWorker(
             .ToArray();
         try
         {
-            var message = await SaveProviderRecordingMessageAsync(
+            await SaveProviderRecordingMessageAsync(
                 db,
                 recording,
                 messageId,
                 attachments,
                 providerFile.DurationMilliseconds,
                 cancellationToken);
-            recordingStates.Stop(recording.Id);
-            var attachmentDtos = attachments
-                .Select(ToProviderAttachmentDto)
-                .ToArray();
-            await hubContext.Clients
-                .Group(ChatHub.ConversationGroup(recording.ConversationId))
-                .SendAsync(
-                    "MessageReceived",
-                    new MessageDto(
-                        message.Id,
-                        message.ConversationId,
-                        null,
-                        null,
-                        null,
-                        message.Content,
-                        message.MessageType,
-                        null,
-                        message.SequenceNumber,
-                        null,
-                        message.CreatedAt,
-                        null,
-                        null,
-                        attachmentDtos),
-                    cancellationToken);
-            await hubContext.Clients
-                .Group(ChatHub.ConversationGroup(recording.ConversationId))
-                .SendAsync(
-                    "RecordingCompleted",
-                    new
-                    {
-                        recording = new RecordingStateDto(
-                            recording.Id,
-                            recording.ConversationId,
-                            recording.SessionId,
-                            recording.StartedByUserId,
-                            recording.StartedByUser.DisplayName,
-                            recording.StartedAt,
-                            recording.Status),
-                        attachments = attachmentDtos
-                    },
-                    cancellationToken);
         }
         catch
         {
             recording.Status = "failed";
             recording.CompletedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(CancellationToken.None);
-            recordingStates.Stop(recording.Id);
             throw;
         }
+        await NotifyApiAsync(recording.Id, cancellationToken);
     }
 
-    private static async Task<ChatMessage> SaveProviderRecordingMessageAsync(
+    private static async Task SaveProviderRecordingMessageAsync(
         ChatDbContext db,
         SessionRecording recording,
         Guid messageId,
@@ -394,19 +358,18 @@ public sealed class ServiceBusRecordingWorker(
                 cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return message;
     }
 
-    private static MessageAttachmentDto ToProviderAttachmentDto(
-        MessageAttachment attachment) =>
-        new(
-            attachment.Id,
-            attachment.FileName,
-            attachment.ContentType,
-            attachment.FileSize,
-            null,
-            null,
-            attachment.DurationMs);
+    private async Task NotifyApiAsync(
+        Guid recordingId,
+        CancellationToken cancellationToken)
+    {
+        using var response = await apiClient.PostAsJsonAsync(
+            "api/recordings/internal/completed",
+            new RecordingCompletedNotificationRequest(recordingId),
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
 
     private static string? RecordingIdFromSubject(string subject)
     {

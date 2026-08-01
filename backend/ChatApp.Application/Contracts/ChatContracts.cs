@@ -1,4 +1,4 @@
-namespace ChatApp.Api.Contracts;
+namespace ChatApp.Application.Contracts;
 
 public sealed record LoginRequest(string Username);
 
@@ -318,3 +318,5 @@ public sealed record RecordingConsentRequestedDto(
 public sealed record ActiveRecordingDto(
     RecordingStateDto Recording,
     bool RequiresConsent);
+
+public sealed record RecordingCompletedNotificationRequest(Guid RecordingId);
