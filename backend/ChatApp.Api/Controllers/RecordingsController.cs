@@ -19,7 +19,7 @@ public sealed class RecordingsController(
     CallStateTracker calls,
     GroupMeetingStateTracker meetings,
     RecordingStateTracker recordingStates,
-    RecordingFinalizationQueue finalizations,
+    IRecordingFinalizationPublisher finalizations,
     IServiceProvider services,
     IHubContext<ChatHub> hubContext,
     ILogger<RecordingsController> logger) : ControllerBase
@@ -253,7 +253,7 @@ public sealed class RecordingsController(
             $"{recording.StartedByUser.DisplayName} stopped the recording. Processing…",
             cancellationToken);
 
-        await finalizations.EnqueueAsync(recording.Id, CancellationToken.None);
+        await finalizations.PublishAsync(recording.Id, CancellationToken.None);
         return Accepted(ToDto(recording, recording.StartedByUser.DisplayName));
     }
 

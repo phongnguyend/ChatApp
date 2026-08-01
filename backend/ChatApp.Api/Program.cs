@@ -11,6 +11,9 @@ var uploadStorageProvider =
 var callingSection = builder.Configuration.GetSection(
     CallingOptions.SectionName);
 var callingProvider = callingSection.GetValue<string>("Provider")?.Trim();
+var messagingSection = builder.Configuration.GetSection(
+    MessagingOptions.SectionName);
+var messagingProvider = messagingSection.GetValue<string>("Provider")?.Trim();
 
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
@@ -58,10 +61,6 @@ if (!string.IsNullOrWhiteSpace(callingProvider))
         builder.Services.AddScoped<
             ICallingProvider,
             AzureCommunicationServicesCallingProvider>();
-        builder.Services.AddSingleton<
-            CallingProviderRecordingFinalizationQueue>();
-        builder.Services.AddHostedService<
-            CallingProviderRecordingFinalizationWorker>();
     }
     else
     {
@@ -73,8 +72,39 @@ builder.Services.AddSingleton<PresenceTracker>();
 builder.Services.AddSingleton<CallStateTracker>();
 builder.Services.AddSingleton<GroupMeetingStateTracker>();
 builder.Services.AddSingleton<RecordingStateTracker>();
-builder.Services.AddSingleton<RecordingFinalizationQueue>();
 builder.Services.AddSingleton<RecordingChunkTempStorage>();
+builder.Services.AddOptions<MessagingOptions>()
+    .Bind(messagingSection)
+    .Validate(
+        options =>
+            !string.Equals(
+                options.Provider,
+                "AzureServiceBus",
+                StringComparison.OrdinalIgnoreCase) ||
+            options.AzureServiceBus.IsValid(),
+        "Azure Service Bus messaging configuration is incomplete.")
+    .ValidateOnStart();
+if (string.Equals(
+        messagingProvider,
+        "AzureServiceBus",
+        StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton(serviceProvider =>
+        serviceProvider
+            .GetRequiredService<Microsoft.Extensions.Options.IOptions<
+                MessagingOptions>>()
+            .Value.AzureServiceBus.CreateClient());
+    builder.Services.AddSingleton<
+        IRecordingFinalizationPublisher,
+        ServiceBusRecordingFinalizationPublisher>();
+    builder.Services.AddHostedService<ServiceBusRecordingWorker>();
+}
+else
+{
+    builder.Services.AddSingleton<
+        IRecordingFinalizationPublisher,
+        UnavailableRecordingFinalizationPublisher>();
+}
 if (uploadStorageProvider.Equals(
     "AzureBlob",
     StringComparison.OrdinalIgnoreCase))
@@ -98,7 +128,6 @@ builder.Services.AddScoped<IAvatarStorage, AvatarStorage>();
 builder.Services.AddScoped<IMessageAttachmentStorage, MessageAttachmentStorage>();
 builder.Services.AddScoped<AzurePushNotificationService>();
 builder.Services.AddHostedService<LiveLocationExpiryService>();
-builder.Services.AddHostedService<RecordingFinalizationWorker>();
 
 var allowedOrigins = builder.Configuration
     .GetSection("AllowedOrigins")

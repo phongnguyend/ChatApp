@@ -7,6 +7,9 @@
 - a private Azure Blob Storage container for uploads;
 - an Azure SQL logical server and Basic database;
 - an Azure Communication Services resource for calls and live streams;
+- an Event Grid system topic that forwards ACS recording-ready events to
+  Service Bus;
+- an Azure Service Bus topic and API subscription for durable recording work;
 - an Azure Notification Hubs namespace and browser-push notification hub.
 
 The API receives its SQL connection string and application settings from App
@@ -18,7 +21,10 @@ storage account, allowing Call Recording to export files to a configured blob
 container through Bring Your Own Storage (BYOS). The Communication Services
 primary connection string is injected into the API App Service settings as
 `Calling__AzureCommunicationServices__ConnectionString`; it is never exposed to
-the frontend.
+the frontend. Browser-recording finalization jobs are published by the API to
+Service Bus. ACS `RecordingFileStatusUpdated` events are delivered directly from
+Event Grid to the same topic with managed identity, so no public recording-event
+webhook is required.
 
 ## Deploy
 
@@ -167,7 +173,8 @@ The selected pipeline environment is passed directly to the Bicep
 variable group.
 
 The service principal behind `azureServiceConnection` needs permission to
-create resources in the subscription and create both storage role assignments.
+create resources in the subscription and create the storage and Service Bus role
+assignments.
 When creating the Azure DevOps pipeline, select
 `infra/azure-pipelines.yml` as its YAML path and authorize both the service
 connection and variable group.

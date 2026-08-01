@@ -65,6 +65,7 @@ var notificationHubNamespaceName = take('${resourceNamePrefix}-nh-${uniqueSuffix
 var notificationHubName = take('${resourceNamePrefix}-notifications', 265)
 var communicationServiceName = take('${resourceNamePrefix}-acs-${uniqueSuffix}', 63)
 var serviceBusNamespaceName = take('${resourceNamePrefix}-sb-${uniqueSuffix}', 50)
+var communicationRecordingSystemTopicName = take('${resourceNamePrefix}-acs-recordings', 50)
 var logAnalyticsWorkspaceName = take('${resourceNamePrefix}-law-${uniqueSuffix}', 63)
 var appInsightsName = take('${resourceNamePrefix}-appi-${uniqueSuffix}', 260)
 var blobDataContributorRoleDefinitionId = subscriptionResourceId(
@@ -254,6 +255,64 @@ resource serviceBusTopic 'Microsoft.ServiceBus/namespaces/topics@2024-01-01' = {
 resource serviceBusSubscription 'Microsoft.ServiceBus/namespaces/topics/subscriptions@2024-01-01' = {
   parent: serviceBusTopic
   name: serviceBusSubscriptionName
+}
+
+resource communicationRecordingSystemTopic 'Microsoft.EventGrid/systemTopics@2025-02-15' = {
+  name: communicationRecordingSystemTopicName
+  location: 'global'
+  identity: {
+    type: 'SystemAssigned'
+  }
+  properties: {
+    source: communicationService.id
+    topicType: 'Microsoft.Communication.CommunicationServices'
+  }
+}
+
+resource communicationRecordingEventGridSender 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(
+    serviceBusNamespace.id,
+    communicationRecordingSystemTopic.id,
+    serviceBusDataSenderRoleDefinitionId
+  )
+  scope: serviceBusNamespace
+  properties: {
+    principalId: communicationRecordingSystemTopic.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: serviceBusDataSenderRoleDefinitionId
+  }
+}
+
+resource communicationRecordingEventSubscription 'Microsoft.EventGrid/systemTopics/eventSubscriptions@2025-02-15' = {
+  parent: communicationRecordingSystemTopic
+  name: 'recording-files-to-service-bus'
+  properties: {
+    deliveryWithResourceIdentity: {
+      destination: {
+        endpointType: 'ServiceBusTopic'
+        properties: {
+          resourceId: serviceBusTopic.id
+        }
+      }
+      identity: {
+        type: 'SystemAssigned'
+      }
+    }
+    eventDeliverySchema: 'EventGridSchema'
+    filter: {
+      includedEventTypes: [
+        'Microsoft.Communication.RecordingFileStatusUpdated'
+      ]
+      isSubjectCaseSensitive: false
+    }
+    retryPolicy: {
+      eventTimeToLiveInMinutes: 1440
+      maxDeliveryAttempts: 30
+    }
+  }
+  dependsOn: [
+    communicationRecordingEventGridSender
+  ]
 }
 
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
@@ -455,5 +514,6 @@ output communicationServiceName string = communicationService.name
 output serviceBusNamespaceName string = serviceBusNamespace.name
 output serviceBusTopicName string = serviceBusTopic.name
 output serviceBusSubscriptionName string = serviceBusSubscription.name
+output communicationRecordingSystemTopicName string = communicationRecordingSystemTopic.name
 output logAnalyticsWorkspaceName string = logAnalyticsWorkspace.name
 output appInsightsName string = appInsights.name

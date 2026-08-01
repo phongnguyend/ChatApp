@@ -13,5 +13,4 @@ public sealed class CallingOptions
 public sealed class AzureCommunicationServicesOptions
 {
     public string ConnectionString { get; set; } = "";
-    public string EventGridWebhookSecret { get; set; } = "";
 }
