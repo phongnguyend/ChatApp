@@ -34,17 +34,17 @@ param uploadsContainerName string = 'chatapp-uploads'
 @description('Name of the Service Bus topic used for application messaging.')
 @minLength(1)
 @maxLength(260)
-param serviceBusTopicName string = 'chatapp-messages'
+param serviceBusTopicName string = 'recording-file-status-updated'
 
 @description('Name of the Service Bus subscription used by the API to receive messages.')
 @minLength(1)
 @maxLength(50)
-param serviceBusSubscriptionName string = 'chatapp-messages-sub'
+param serviceBusSubscriptionName string = 'recording-file-status-updated-sub'
 
 @description('Name of the Service Bus subscription that retains a copy of every topic message for auditing.')
 @minLength(1)
 @maxLength(50)
-param serviceBusAuditSubscriptionName string = 'chatapp-messages-audit'
+param serviceBusAuditSubscriptionName string = 'recording-file-status-updated-audit'
 
 @secure()
 @description('Contact URI used as the Web Push VAPID subject, such as mailto:admin@example.com.')
@@ -280,11 +280,7 @@ resource communicationRecordingSystemTopic 'Microsoft.EventGrid/systemTopics@202
 }
 
 resource communicationRecordingEventGridSender 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(
-    serviceBusNamespace.id,
-    communicationRecordingSystemTopic.id,
-    serviceBusDataSenderRoleDefinitionId
-  )
+  name: guid(serviceBusNamespace.id, communicationRecordingSystemTopic.id, serviceBusDataSenderRoleDefinitionId)
   scope: serviceBusNamespace
   properties: {
     principalId: communicationRecordingSystemTopic.identity.principalId

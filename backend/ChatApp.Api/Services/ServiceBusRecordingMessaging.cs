@@ -75,6 +75,7 @@ public sealed class ServiceBusRecordingWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        return;
         await ResumeBrowserRecordingsAsync(stoppingToken);
         await ResumeProviderRecordingsAsync(stoppingToken);
 
