@@ -41,6 +41,11 @@ param serviceBusTopicName string = 'chatapp-messages'
 @maxLength(50)
 param serviceBusSubscriptionName string = 'chatapp-messages-sub'
 
+@description('Name of the Service Bus subscription that retains a copy of every topic message for auditing.')
+@minLength(1)
+@maxLength(50)
+param serviceBusAuditSubscriptionName string = 'chatapp-messages-audit'
+
 @secure()
 @description('Contact URI used as the Web Push VAPID subject, such as mailto:admin@example.com.')
 param browserPushSubject string
@@ -255,6 +260,11 @@ resource serviceBusTopic 'Microsoft.ServiceBus/namespaces/topics@2024-01-01' = {
 resource serviceBusSubscription 'Microsoft.ServiceBus/namespaces/topics/subscriptions@2024-01-01' = {
   parent: serviceBusTopic
   name: serviceBusSubscriptionName
+}
+
+resource serviceBusAuditSubscription 'Microsoft.ServiceBus/namespaces/topics/subscriptions@2024-01-01' = {
+  parent: serviceBusTopic
+  name: serviceBusAuditSubscriptionName
 }
 
 resource communicationRecordingSystemTopic 'Microsoft.EventGrid/systemTopics@2025-02-15' = {
