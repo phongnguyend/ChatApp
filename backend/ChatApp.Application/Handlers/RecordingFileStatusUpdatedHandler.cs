@@ -1,115 +1,24 @@
 using System.Data;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Azure.Messaging.ServiceBus;
 using ChatApp.Application.Contracts;
 using ChatApp.Application.Data;
 using ChatApp.Application.Models;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 
-namespace ChatApp.Background;
+namespace ChatApp.Application.Handlers;
 
-public sealed record CallingProviderRecordingFile(
-    string ProviderRecordingId,
-    IReadOnlyList<Uri> ContentLocations,
-    long DurationMilliseconds);
-
-public sealed class ServiceBusRecordingWorker(
-    ServiceBusClient client,
+public sealed class RecordingFileStatusUpdatedHandler(
+    ChatDbContext db,
     HttpClient apiClient,
-    IOptions<MessagingOptions> options,
-    IServiceScopeFactory scopeFactory,
-    ILogger<ServiceBusRecordingWorker> logger) : BackgroundService
+    ILogger<RecordingFileStatusUpdatedHandler> logger)
 {
-    private ServiceBusProcessor? processor;
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    public async Task<bool> HandleAsync(
+        JsonElement eventGridEvent,
+        CancellationToken cancellationToken = default)
     {
-        var serviceBus = options.Value.AzureServiceBus;
-        processor = client.CreateProcessor(
-            serviceBus.TopicName,
-            serviceBus.SubscriptionName,
-            new ServiceBusProcessorOptions
-            {
-                AutoCompleteMessages = false,
-                MaxAutoLockRenewalDuration = TimeSpan.FromHours(1),
-                MaxConcurrentCalls = 1
-            });
-        processor.ProcessMessageAsync += ProcessMessageAsync;
-        processor.ProcessErrorAsync += ProcessErrorAsync;
-        await processor.StartProcessingAsync(stoppingToken);
-        try
-        {
-            await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken);
-        }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-        {
-        }
-        finally
-        {
-            await processor.StopProcessingAsync(CancellationToken.None);
-            await processor.DisposeAsync();
-            processor = null;
-        }
-    }
-
-    private async Task ProcessMessageAsync(ProcessMessageEventArgs args)
-    {
-        try
-        {
-            var handled = await HandleEventGridEventsAsync(args.Message);
-            if (handled)
-            {
-                await args.CompleteMessageAsync(args.Message);
-            }
-            else
-            {
-                await args.DeadLetterMessageAsync(
-                    args.Message,
-                    "UnsupportedMessage",
-                    "The Service Bus message is not a supported recording event.");
-            }
-        }
-        catch (Exception exception)
-        {
-            logger.LogError(
-                exception,
-                "Service Bus recording message {MessageId} could not be processed.",
-                args.Message.MessageId);
-            await args.AbandonMessageAsync(args.Message);
-        }
-    }
-
-    private async Task<bool> HandleEventGridEventsAsync(
-        ServiceBusReceivedMessage message)
-    {
-        using var document = JsonDocument.Parse(message.Body.ToStream());
-        if (document.RootElement.ValueKind == JsonValueKind.Array)
-        {
-            var handled = false;
-            foreach (var cloudEvent in document.RootElement.EnumerateArray())
-            {
-                handled = await HandleProviderEventGridEventAsync(
-                    cloudEvent,
-                    CancellationToken.None) || handled;
-            }
-            return handled;
-        }
-        if (document.RootElement.ValueKind == JsonValueKind.Object)
-        {
-            return await HandleProviderEventGridEventAsync(
-                document.RootElement,
-                CancellationToken.None);
-        }
-        return false;
-    }
-
-    private async Task<bool> HandleProviderEventGridEventAsync(
-        JsonElement cloudEvent,
-        CancellationToken cancellationToken)
-    {
-        var eventType = cloudEvent.TryGetProperty(
+        var eventType = eventGridEvent.TryGetProperty(
             "eventType",
             out var eventTypeElement)
             ? eventTypeElement.GetString()
@@ -122,12 +31,14 @@ public sealed class ServiceBusRecordingWorker(
             return false;
         }
 
-        var subject = cloudEvent.TryGetProperty("subject", out var subjectElement)
+        var subject = eventGridEvent.TryGetProperty(
+            "subject",
+            out var subjectElement)
             ? subjectElement.GetString() ?? ""
             : "";
         var providerRecordingId = RecordingIdFromSubject(subject);
         if (string.IsNullOrWhiteSpace(providerRecordingId) ||
-            !cloudEvent.TryGetProperty("data", out var data) ||
+            !eventGridEvent.TryGetProperty("data", out var data) ||
             !data.TryGetProperty("recordingStorageInfo", out var storageInfo) ||
             !storageInfo.TryGetProperty("recordingChunks", out var chunks) ||
             chunks.ValueKind != JsonValueKind.Array)
@@ -154,15 +65,13 @@ public sealed class ServiceBusRecordingWorker(
                 "The ACS recording event does not contain any recording files.");
         }
 
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
         var recording = await db.SessionRecordings.SingleOrDefaultAsync(
             item => item.ProviderRecordingId == providerRecordingId,
             cancellationToken);
         if (recording is null)
         {
             logger.LogInformation(
-                "Ignoring ACS recording event {ProviderRecordingId} because no pending recording exists.",
+                "Ignoring ACS recording event {ProviderRecordingId} because no recording exists.",
                 providerRecordingId);
             return true;
         }
@@ -177,43 +86,25 @@ public sealed class ServiceBusRecordingWorker(
             recording.DurationMilliseconds = duration;
         }
         await db.SaveChangesAsync(cancellationToken);
-        await FinalizeProviderRecordingAsync(
-            new CallingProviderRecordingFile(
-                providerRecordingId,
-                locations,
-                duration),
+        await FinalizeRecordingAsync(
+            recording,
+            locations,
+            duration,
             cancellationToken);
         return true;
     }
 
-    private async Task FinalizeProviderRecordingAsync(
-        CallingProviderRecordingFile providerFile,
+    private async Task FinalizeRecordingAsync(
+        SessionRecording recording,
+        IReadOnlyList<Uri> contentLocations,
+        long durationMilliseconds,
         CancellationToken cancellationToken)
     {
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
-        var recording = await db.SessionRecordings
-            .Include(item => item.StartedByUser)
-            .SingleOrDefaultAsync(
-                item =>
-                    item.ProviderRecordingId ==
-                        providerFile.ProviderRecordingId,
-                cancellationToken);
-        if (recording is null)
-        {
-            return;
-        }
-        if (recording.Status == "completed")
-        {
-            await NotifyApiAsync(recording.Id, cancellationToken);
-            return;
-        }
-
         var messageId = Guid.NewGuid();
-        var attachments = providerFile.ContentLocations
+        var attachments = contentLocations
             .Select((location, index) =>
             {
-                var suffix = providerFile.ContentLocations.Count == 1
+                var suffix = contentLocations.Count == 1
                     ? ""
                     : $"-part-{index + 1}";
                 return new MessageAttachment
@@ -225,20 +116,19 @@ public sealed class ServiceBusRecordingWorker(
                         $"recording-{recording.StartedAt:yyyyMMdd-HHmmss}{suffix}.mp4",
                     ContentType = "video/mp4",
                     FileSize = 0,
-                    DurationMs = providerFile.DurationMilliseconds > 0
-                        ? providerFile.DurationMilliseconds
+                    DurationMs = durationMilliseconds > 0
+                        ? durationMilliseconds
                         : null
                 };
             })
             .ToArray();
         try
         {
-            await SaveProviderRecordingMessageAsync(
-                db,
+            await SaveRecordingMessageAsync(
                 recording,
                 messageId,
                 attachments,
-                providerFile.DurationMilliseconds,
+                durationMilliseconds,
                 cancellationToken);
         }
         catch
@@ -251,8 +141,7 @@ public sealed class ServiceBusRecordingWorker(
         await NotifyApiAsync(recording.Id, cancellationToken);
     }
 
-    private static async Task SaveProviderRecordingMessageAsync(
-        ChatDbContext db,
+    private async Task SaveRecordingMessageAsync(
         SessionRecording recording,
         Guid messageId,
         IReadOnlyCollection<MessageAttachment> attachments,
@@ -329,15 +218,5 @@ public sealed class ServiceBusRecordingWorker(
         return start < 0
             ? null
             : subject[(start + segment.Length)..].Split('/')[0];
-    }
-
-    private Task ProcessErrorAsync(ProcessErrorEventArgs args)
-    {
-        logger.LogError(
-            args.Exception,
-            "Azure Service Bus recording processor failed in {ErrorSource} for {EntityPath}.",
-            args.ErrorSource,
-            args.EntityPath);
-        return Task.CompletedTask;
     }
 }

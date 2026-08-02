@@ -2,5 +2,6 @@
   <Project Path="ChatApp.Api/ChatApp.Api.csproj" />
   <Project Path="ChatApp.Application/ChatApp.Application.csproj" Id="2e68158d-c8cb-48a1-babb-4d07067f45db" />
   <Project Path="ChatApp.AspireAppHost/ChatApp.AspireAppHost.csproj" Id="e9189dc3-08de-4b40-bdd8-3887f840cd70" />
+  <Project Path="ChatApp.AzureFunctions/ChatApp.AzureFunctions.csproj" />
   <Project Path="ChatApp.Background/ChatApp.Background.csproj" Id="430395d5-dcb4-4d4a-8ad3-d3614136cd80" />
 </Solution>

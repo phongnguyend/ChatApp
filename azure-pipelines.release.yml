@@ -25,7 +25,7 @@ stages:
     displayName: Build and deploy applications
     jobs:
       - job: Release
-        displayName: Release API and frontend
+        displayName: Release API, functions, and frontend
         steps:
           - checkout: self
 
@@ -83,6 +83,22 @@ stages:
               archiveFile: $(Build.ArtifactStagingDirectory)/api.zip
               replaceExistingArchive: true
 
+          - script: |
+              set -euo pipefail
+              dotnet publish backend/ChatApp.AzureFunctions/ChatApp.AzureFunctions.csproj \
+                --configuration Release \
+                --output "$(Build.ArtifactStagingDirectory)/functions"
+            displayName: Build Azure Functions
+
+          - task: ArchiveFiles@2
+            displayName: Package Azure Functions
+            inputs:
+              rootFolderOrFile: $(Build.ArtifactStagingDirectory)/functions
+              includeRootFolder: false
+              archiveType: zip
+              archiveFile: $(Build.ArtifactStagingDirectory)/functions.zip
+              replaceExistingArchive: true
+
           - script: npm ci
             displayName: Install frontend dependencies
             workingDirectory: frontend
@@ -105,6 +121,12 @@ stages:
               targetPath: frontend/dist
               artifact: frontend-${{ parameters.environment }}
 
+          - task: PublishPipelineArtifact@1
+            displayName: Publish Azure Functions artifact
+            inputs:
+              targetPath: $(Build.ArtifactStagingDirectory)/functions.zip
+              artifact: functions-${{ parameters.environment }}
+
           - task: AzureCLI@2
             displayName: Deploy API
             inputs:
@@ -124,6 +146,15 @@ stages:
               RESOURCE_GROUP_NAME: $(resourceGroupName)
               API_APP_NAME: $(apiAppName)
               API_PACKAGE_PATH: $(Build.ArtifactStagingDirectory)/api.zip
+
+          - task: AzureFunctionApp@2
+            displayName: Deploy Azure Functions
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              appType: functionAppLinux
+              appName: $(functionAppName)
+              package: $(Build.ArtifactStagingDirectory)/functions.zip
+              deploymentMethod: zipDeploy
 
           - task: AzureStaticWebApp@0
             displayName: Deploy frontend

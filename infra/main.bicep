@@ -67,6 +67,7 @@ var uniqueSuffix = uniqueString(resourceGroup().id)
 var resourceNamePrefix = toLower('${workloadName}-${environmentName}')
 var appServicePlanName = '${resourceNamePrefix}-plan'
 var apiAppName = take('${resourceNamePrefix}-api-${uniqueSuffix}', 60)
+var functionAppName = take('${resourceNamePrefix}-functions-${uniqueSuffix}', 60)
 var staticWebAppName = take('${resourceNamePrefix}-web-${uniqueSuffix}', 60)
 var storageAccountName = 'st${uniqueString(resourceGroup().id, workloadName, environmentName)}'
 var sqlServerName = take('${resourceNamePrefix}-sql-${uniqueSuffix}', 63)
@@ -477,6 +478,71 @@ resource apiApp 'Microsoft.Web/sites@2023-12-01' = {
   }
 }
 
+resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
+  name: functionAppName
+  location: location
+  kind: 'functionapp,linux'
+  identity: {
+    type: 'SystemAssigned'
+  }
+  properties: {
+    clientAffinityEnabled: false
+    httpsOnly: true
+    publicNetworkAccess: 'Enabled'
+    serverFarmId: appServicePlan.id
+    siteConfig: {
+      alwaysOn: true
+      appSettings: [
+        {
+          name: 'FUNCTIONS_EXTENSION_VERSION'
+          value: '~4'
+        }
+        {
+          name: 'FUNCTIONS_WORKER_RUNTIME'
+          value: 'dotnet-isolated'
+        }
+        {
+          name: 'WEBSITE_RUN_FROM_PACKAGE'
+          value: '1'
+        }
+        {
+          name: 'AzureWebJobsStorage'
+          value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
+        }
+        {
+          name: 'ConnectionStrings__ChatDatabase'
+          value: 'Server=tcp:${sqlServer.properties.fullyQualifiedDomainName},1433;Initial Catalog=${sqlDatabase.name};Persist Security Info=False;User ID=${sqlAdministratorLogin};Password=${sqlAdministratorPassword};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;'
+        }
+        {
+          name: 'Api__BaseUrl'
+          value: 'https://${apiApp.properties.defaultHostName}'
+        }
+        {
+          name: 'ServiceBusConnection__fullyQualifiedNamespace'
+          value: '${serviceBusNamespace.name}.servicebus.windows.net'
+        }
+        {
+          name: 'ServiceBusTopicName'
+          value: serviceBusTopic.name
+        }
+        {
+          name: 'ServiceBusSubscriptionName'
+          value: serviceBusSubscription.name
+        }
+        {
+          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+          value: appInsights.properties.ConnectionString
+        }
+      ]
+      ftpsState: 'Disabled'
+      http20Enabled: true
+      linuxFxVersion: 'DOTNET-ISOLATED|10.0'
+      minTlsVersion: '1.2'
+      use32BitWorkerProcess: false
+    }
+  }
+}
+
 resource apiBlobDataContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(storageAccount.id, apiApp.id, blobDataContributorRoleDefinitionId)
   scope: storageAccount
@@ -517,8 +583,19 @@ resource apiServiceBusDataReceiver 'Microsoft.Authorization/roleAssignments@2022
   }
 }
 
+resource functionServiceBusDataReceiver 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(serviceBusNamespace.id, functionApp.id, serviceBusDataReceiverRoleDefinitionId)
+  scope: serviceBusNamespace
+  properties: {
+    principalId: functionApp.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: serviceBusDataReceiverRoleDefinitionId
+  }
+}
+
 output apiAppName string = apiApp.name
 output apiUrl string = 'https://${apiApp.properties.defaultHostName}'
+output functionAppName string = functionApp.name
 output staticWebAppName string = staticWebApp.name
 output staticWebAppUrl string = 'https://${staticWebApp.properties.defaultHostname}'
 output storageAccountName string = storageAccount.name

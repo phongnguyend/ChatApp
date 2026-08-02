@@ -103,6 +103,7 @@ $outputs = az deployment group show `
 
 $apiUrl = $outputs.apiUrl.value
 $apiAppName = $outputs.apiAppName.value
+$functionAppName = $outputs.functionAppName.value
 $staticWebAppName = $outputs.staticWebAppName.value
 ```
 
@@ -163,6 +164,7 @@ each required environment variable group with these variables:
 | `sqlAdministratorPassword`          | `(secret)`                       | Mark this variable as secret                     |
 | `uploadsContainerName`              | `chatapp-uploads`                | Private Blob container name                      |
 | `apiAppName`                        | `chatapp-dev-api-...`            | App Service name used by the release pipeline    |
+| `functionAppName`                   | `chatapp-dev-functions-...`      | Function App name used by the release pipeline   |
 | `staticWebAppName`                  | `chatapp-dev-web-...`            | Static Web App name used by the release pipeline |
 | `staticWebAppUrl`                   | `https://...azurestaticapps.net` | Static Web App production URL                    |
 | `azureNotificationsSubject`         | `mailto:admin@example.com`       | Web Push VAPID subject                           |

@@ -1,5 +1,6 @@
 using ChatApp.Background;
 using ChatApp.Application.Data;
+using ChatApp.Application.Handlers;
 using Microsoft.EntityFrameworkCore;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -30,14 +31,15 @@ if (string.Equals(
             .GetRequiredService<Microsoft.Extensions.Options.IOptions<
                 MessagingOptions>>()
             .Value.AzureServiceBus.CreateClient());
-    builder.Services.AddHttpClient<ServiceBusRecordingWorker>(client =>
+    builder.Services.AddHttpClient<RecordingFileStatusUpdatedHandler>(client =>
     {
         var baseUrl = builder.Configuration["Api:BaseUrl"] ??
             "http://localhost:5045";
         client.BaseAddress = new Uri(baseUrl, UriKind.Absolute);
     });
+    builder.Services.AddSingleton<RecordingFileStatusUpdatedWorker>();
     builder.Services.AddHostedService(serviceProvider =>
-        serviceProvider.GetRequiredService<ServiceBusRecordingWorker>());
+        serviceProvider.GetRequiredService<RecordingFileStatusUpdatedWorker>());
 }
 
 var host = builder.Build();
