@@ -1,12 +1,12 @@
 {
-    "IsEncrypted": false,
-    "Values": {
-        "AzureWebJobsStorage": "UseDevelopmentStorage=true",
-        "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
-        "ServiceBusConnection": "Endpoint=sb://<namespace>.servicebus.windows.net/;SharedAccessKeyName=<listen-policy>;SharedAccessKey=<key>",
-        "ServiceBusTopicName": "recording-file-status-updated",
-        "ServiceBusSubscriptionName": "recording-file-status-updated-debug",
-        "ConnectionStrings__ChatDatabase": "Server=(localdb)\\mssqllocaldb;Database=ChatApp;Trusted_Connection=True;TrustServerCertificate=True",
-        "Api__BaseUrl": "http://localhost:5045"
-    }
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+    "ServiceBusConnection": "Endpoint=sb://<namespace>.servicebus.windows.net/;SharedAccessKeyName=<listen-policy>;SharedAccessKey=<key>",
+    "ServiceBusTopicName": "recording-file-status-updated",
+    "ServiceBusSubscriptionName": "recording-file-status-updated-debug",
+    "ConnectionStrings__ChatDatabase": "Server=(localdb)\\mssqllocaldb;Database=ChatApp;Trusted_Connection=True;TrustServerCertificate=True",
+    "Api__BaseUrl": "http://localhost:5045"
+  }
 }
