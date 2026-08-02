@@ -208,11 +208,6 @@ public sealed class ServiceBusRecordingWorker(
             await NotifyApiAsync(recording.Id, cancellationToken);
             return;
         }
-        if (recording.Status != "processing")
-        {
-            throw new InvalidOperationException(
-                "The provider recording is not awaiting finalization.");
-        }
 
         var messageId = Guid.NewGuid();
         var attachments = providerFile.ContentLocations

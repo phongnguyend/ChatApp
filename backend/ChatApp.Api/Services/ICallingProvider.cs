@@ -28,4 +28,8 @@ public interface ICallingProvider
         string providerRecordingId,
         CancellationToken cancellationToken);
 
+    Task<string> GetRecordingStatusAsync(
+        string providerRecordingId,
+        CancellationToken cancellationToken);
+
 }

@@ -254,6 +254,176 @@ public sealed class RecordingsController(
         return recording is null ? NotFound() : Ok(recording);
     }
 
+    [HttpGet("conversation/{conversationId:guid}")]
+    public async Task<ActionResult<IReadOnlyList<SessionRecordingListItemDto>>>
+        GetForConversation(
+            Guid conversationId,
+            [FromQuery] string username,
+            CancellationToken cancellationToken)
+    {
+        var normalized = Username.Normalize(username);
+        var isMember = await db.ConversationMembers.AnyAsync(
+            member =>
+                member.ConversationId == conversationId &&
+                member.LeftAt == null &&
+                member.User.NormalizedUsername == normalized,
+            cancellationToken);
+        if (!isMember)
+        {
+            return NotFound();
+        }
+
+        var managedProviderName = callingProvider.Name;
+        var canCheckManagedRecording = callingProvider.ManagesRecording;
+
+        return await db.SessionRecordings
+            .AsNoTracking()
+            .Where(recording => recording.ConversationId == conversationId)
+            .OrderByDescending(recording => recording.StartedAt)
+            .Select(recording => new SessionRecordingListItemDto(
+                recording.Id,
+                recording.ConversationId,
+                recording.SessionId,
+                recording.StartedByUserId,
+                recording.StartedByUser.DisplayName,
+                recording.StartedByUser.AvatarUrl,
+                recording.SessionType,
+                recording.Provider,
+                recording.Status,
+                recording.StartedAt,
+                recording.CompletedAt,
+                recording.DurationMilliseconds,
+                db.MessageAttachments
+                    .Where(attachment =>
+                        recording.StorageObjectName != null &&
+                        attachment.StorageKey == recording.StorageObjectName)
+                    .Select(attachment => new MessageAttachmentDto(
+                        attachment.Id,
+                        attachment.FileName,
+                        attachment.ContentType,
+                        attachment.FileSize,
+                        attachment.Width,
+                        attachment.Height,
+                        attachment.DurationMs))
+                    .FirstOrDefault(),
+                canCheckManagedRecording &&
+                recording.Provider == managedProviderName &&
+                recording.ProviderRecordingId != null))
+            .ToListAsync(cancellationToken);
+    }
+
+    [HttpPost("{recordingId:guid}/check-status")]
+    public async Task<ActionResult<RecordingProviderStatusDto>> CheckStatus(
+        Guid recordingId,
+        [FromQuery] string username,
+        CancellationToken cancellationToken)
+    {
+        var normalized = Username.Normalize(username);
+        var recording = await db.SessionRecordings
+            .Where(item =>
+                item.Id == recordingId &&
+                item.Conversation.Members.Any(member =>
+                    member.LeftAt == null &&
+                    member.User.NormalizedUsername == normalized))
+            .SingleOrDefaultAsync(cancellationToken);
+        if (recording is null)
+        {
+            return NotFound();
+        }
+        if (recording.Status == "completed")
+        {
+            return Conflict(new
+            {
+                message = "The recording has already completed."
+            });
+        }
+        if (!callingProvider.ManagesRecording ||
+            recording.Provider != callingProvider.Name ||
+            string.IsNullOrWhiteSpace(recording.ProviderRecordingId))
+        {
+            return Conflict(new
+            {
+                message = "This recording does not have an Azure recording status to check."
+            });
+        }
+
+        var providerStatus = await callingProvider.GetRecordingStatusAsync(
+            recording.ProviderRecordingId,
+            cancellationToken);
+        if (providerStatus == "active" &&
+            recording.Status == "requesting-consent")
+        {
+            recording.Status = "recording";
+        }
+        else if (providerStatus == "inactive" &&
+                 recording.Status == "recording")
+        {
+            recording.Status = "processing";
+        }
+        await db.SaveChangesAsync(cancellationToken);
+
+        return new RecordingProviderStatusDto(
+            recording.Id,
+            recording.Status,
+            providerStatus,
+            DateTimeOffset.UtcNow);
+    }
+
+    [HttpDelete("{recordingId:guid}")]
+    public async Task<IActionResult> DeleteIncomplete(
+        Guid recordingId,
+        [FromQuery] string username,
+        CancellationToken cancellationToken)
+    {
+        var user = await FindUser(username, cancellationToken);
+        var recording = await db.SessionRecordings.SingleOrDefaultAsync(
+            item => item.Id == recordingId,
+            cancellationToken);
+        if (user is null || recording is null)
+        {
+            return NotFound();
+        }
+
+        var isOwner = await db.ConversationMembers.AnyAsync(
+            member =>
+                member.ConversationId == recording.ConversationId &&
+                member.UserId == user.Id &&
+                member.LeftAt == null &&
+                member.Role == "owner",
+            cancellationToken);
+        if (recording.StartedByUserId != user.Id && !isOwner)
+        {
+            return Forbid();
+        }
+        if (recording.Status == "completed")
+        {
+            return Conflict(new
+            {
+                message = "Completed recordings cannot be deleted here."
+            });
+        }
+
+        if (callingProvider.ManagesRecording &&
+            recording.Provider == callingProvider.Name &&
+            !string.IsNullOrWhiteSpace(recording.ProviderRecordingId))
+        {
+            var providerStatus = await callingProvider.GetRecordingStatusAsync(
+                recording.ProviderRecordingId,
+                cancellationToken);
+            if (providerStatus == "active")
+            {
+                await callingProvider.StopRecordingAsync(
+                    recording.ProviderRecordingId,
+                    cancellationToken);
+            }
+        }
+
+        recordingStates.Stop(recording.Id);
+        db.SessionRecordings.Remove(recording);
+        await db.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
     private async Task<bool> IsActiveParticipant(
         Guid userId,
         Guid conversationId,

@@ -1,4 +1,5 @@
 using Azure.Communication;
+using Azure;
 using Azure.Communication.CallAutomation;
 using Azure.Communication.Identity;
 using ChatApp.Application.Data;
@@ -105,6 +106,26 @@ public sealed class AzureCommunicationServicesCallingProvider(
             cancellationToken);
         if (state.Value.RecordingState != RecordingState.Active) return;
         await recording.StopAsync(providerRecordingId, cancellationToken);
+    }
+
+    public async Task<string> GetRecordingStatusAsync(
+        string providerRecordingId,
+        CancellationToken cancellationToken)
+    {
+        EnsureConfigured();
+        var client = new CallAutomationClient(connectionString);
+        try
+        {
+            var state = await client.GetCallRecording().GetStateAsync(
+                providerRecordingId,
+                cancellationToken);
+            return state.Value.RecordingState?.ToString().ToLowerInvariant() ??
+                "unknown";
+        }
+        catch (RequestFailedException exception) when (exception.Status == 404)
+        {
+            return "not-found";
+        }
     }
 
     private void EnsureConfigured()

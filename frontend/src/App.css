@@ -1012,11 +1012,14 @@
   display: flex;
   align-items: stretch;
   gap: 24px;
+  overflow-x: auto;
   background: rgba(255, 255, 255, 0.38);
+  scrollbar-width: thin;
 }
 
 .conversation-tabs button {
   position: relative;
+  flex: 0 0 auto;
   padding: 0 2px;
   border: 0;
   display: flex;
@@ -1282,6 +1285,27 @@
   background: var(--navy);
 }
 
+.conversation-recording-preview {
+  min-height: 168px;
+  display: grid;
+  place-items: center;
+  background: var(--navy);
+}
+
+.conversation-recording-preview.video video {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: contain;
+}
+
+.conversation-recording-state {
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  color: white;
+  text-transform: capitalize;
+}
+
 .conversation-media-meta {
   min-width: 0;
   padding: 10px 11px;
@@ -1290,7 +1314,7 @@
   gap: 10px;
 }
 
-.conversation-media-meta > div {
+.conversation-media-meta > div:first-child {
   min-width: 0;
   flex: 1;
 }
@@ -1316,7 +1340,8 @@
   white-space: nowrap;
 }
 
-.conversation-media-meta > a {
+.conversation-media-meta > a,
+.conversation-recording-actions > a {
   width: 30px;
   height: 30px;
   border-radius: 9px;
@@ -1326,9 +1351,52 @@
   background: #f1efe9;
 }
 
-.conversation-media-meta > a:hover {
+.conversation-media-meta > a:hover,
+.conversation-recording-actions > a:hover {
   color: var(--coral);
   background: #f9e9e4;
+}
+
+.conversation-recording-actions {
+  min-width: auto;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.conversation-recording-actions > button {
+  width: 30px;
+  min-height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: #686e69;
+  background: #f1efe9;
+}
+
+.conversation-recording-actions > button:hover:not(:disabled) {
+  color: var(--coral);
+  background: #f9e9e4;
+}
+
+.conversation-recording-actions > button.delete-recording {
+  color: #a84e42;
+  background: #f9e9e4;
+}
+
+.conversation-recording-actions > button.delete-recording:hover:not(:disabled) {
+  color: white;
+  background: #b95849;
+}
+
+.conversation-recording-actions > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .conversation-location-grid {

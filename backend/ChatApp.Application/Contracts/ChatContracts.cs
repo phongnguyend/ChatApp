@@ -311,6 +311,28 @@ public sealed record RecordingStateDto(
     DateTimeOffset StartedAt,
     string Status);
 
+public sealed record SessionRecordingListItemDto(
+    Guid Id,
+    Guid ConversationId,
+    Guid SessionId,
+    Guid StartedByUserId,
+    string StartedByDisplayName,
+    string? StartedByAvatarUrl,
+    string SessionType,
+    string Provider,
+    string Status,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? CompletedAt,
+    long? DurationMilliseconds,
+    MessageAttachmentDto? Attachment,
+    bool CanCheckProviderStatus);
+
+public sealed record RecordingProviderStatusDto(
+    Guid RecordingId,
+    string Status,
+    string ProviderStatus,
+    DateTimeOffset CheckedAt);
+
 public sealed record RecordingConsentRequestedDto(
     RecordingStateDto Recording,
     bool IsNewParticipant);

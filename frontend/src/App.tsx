@@ -9,6 +9,7 @@ import {
   Bell,
   Check,
   BellOff,
+  CirclePlay,
   Download,
   ExternalLink,
   FileText,
@@ -31,9 +32,11 @@ import {
   Plus,
   Route,
   Radio,
+  RefreshCw,
   Send,
   Search,
   Square,
+  Trash2,
   UserRoundPlus,
   Users,
   Video,
@@ -211,6 +214,32 @@ type Message = {
   liveLocation?: LiveLocation | null;
 };
 
+type SessionRecording = {
+  id: string;
+  conversationId: string;
+  sessionId: string;
+  startedByUserId: string;
+  startedByDisplayName: string;
+  startedByAvatarUrl: string | null;
+  sessionType: string;
+  provider: string;
+  status: string;
+  startedAt: string;
+  completedAt: string | null;
+  durationMilliseconds: number | null;
+  attachment: ChatAttachment | null;
+  canCheckProviderStatus: boolean;
+  providerStatus?: string | null;
+  providerStatusCheckedAt?: string | null;
+};
+
+type RecordingStatusCheck = {
+  recordingId: string;
+  status: string;
+  providerStatus: string;
+  checkedAt: string;
+};
+
 type LiveLocation = {
   messageId: string;
   conversationId: string;
@@ -256,8 +285,14 @@ type TypingEvent = {
 };
 
 type ConnectionStatus = "connecting" | "connected" | "reconnecting" | "offline";
-type ConversationTab = "chat" | "files" | "photos" | "locations";
+type ConversationTab =
+  | "chat"
+  | "files"
+  | "photos"
+  | "locations"
+  | "recordings";
 const EMPTY_MESSAGES: Message[] = [];
+const EMPTY_RECORDINGS: SessionRecording[] = [];
 
 function conversationDisplayTitle(
   conversation: Conversation | null | undefined,
@@ -1004,6 +1039,19 @@ function ChatApp({
   const [messagesByConversation, setMessagesByConversation] = useState<
     Record<string, Message[]>
   >({});
+  const [recordingsByConversation, setRecordingsByConversation] = useState<
+    Record<string, SessionRecording[]>
+  >({});
+  const [loadingRecordingsConversationId, setLoadingRecordingsConversationId] =
+    useState<string | null>(null);
+  const [checkingRecordingId, setCheckingRecordingId] = useState<string | null>(
+    null,
+  );
+  const [deletingRecordingId, setDeletingRecordingId] = useState<string | null>(
+    null,
+  );
+  const [recordingToDelete, setRecordingToDelete] =
+    useState<SessionRecording | null>(null);
   const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
   const [blockedUsernames, setBlockedUsernames] = useState<Set<string>>(
     () => new Set(),
@@ -1108,6 +1156,7 @@ function ChatApp({
   const connectionRef = useRef<HubConnection | null>(null);
   const dismissedMeetingInvitesRef = useRef(new Set<string>());
   const activeIdRef = useRef<string | null>(null);
+  const loadedRecordingConversationIdsRef = useRef(new Set<string>());
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const draftInputRef = useRef<HTMLTextAreaElement | null>(null);
   const typingTimerRef = useRef<number | null>(null);
@@ -1181,6 +1230,9 @@ function ChatApp({
   const activeMessages = activeId
     ? (messagesByConversation[activeId] ?? EMPTY_MESSAGES)
     : EMPTY_MESSAGES;
+  const activeRecordings = activeId
+    ? (recordingsByConversation[activeId] ?? EMPTY_RECORDINGS)
+    : EMPTY_RECORDINGS;
   const replyingToMessage = replyingToMessageId
     ? activeMessages.find((message) => message.id === replyingToMessageId)
     : undefined;
@@ -1297,6 +1349,12 @@ function ChatApp({
       delete next[conversationId];
       return next;
     });
+    setRecordingsByConversation((current) => {
+      const next = { ...current };
+      delete next[conversationId];
+      return next;
+    });
+    loadedRecordingConversationIdsRef.current.delete(conversationId);
     setMembersByConversation((current) => {
       const next = { ...current };
       delete next[conversationId];
@@ -2098,12 +2156,59 @@ function ChatApp({
   }, [activeId, user.username]);
 
   useEffect(() => {
+    if (!activeId) return;
+    if (
+      conversationTab !== "recordings" &&
+      loadedRecordingConversationIdsRef.current.has(activeId)
+    ) {
+      return;
+    }
+    const conversationId = activeId;
+    const abortController = new AbortController();
+    setLoadingRecordingsConversationId(conversationId);
+
+    fetch(
+      `${API_URL}/api/recordings/conversation/${conversationId}?username=${encodeURIComponent(user.username)}`,
+      { signal: abortController.signal },
+    )
+      .then(async (response) => {
+        if (!response.ok) throw new Error(await readError(response));
+        return (await response.json()) as SessionRecording[];
+      })
+      .then((recordings) => {
+        loadedRecordingConversationIdsRef.current.add(conversationId);
+        setRecordingsByConversation((current) => ({
+          ...current,
+          [conversationId]: recordings,
+        }));
+      })
+      .catch((requestError) => {
+        if (abortController.signal.aborted) return;
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Could not load recordings.",
+        );
+      })
+      .finally(() => {
+        if (!abortController.signal.aborted) {
+          setLoadingRecordingsConversationId((current) =>
+            current === conversationId ? null : current,
+          );
+        }
+      });
+
+    return () => abortController.abort();
+  }, [activeId, conversationTab, user.username]);
+
+  useEffect(() => {
     setAttachmentFiles([]);
     setReplyingToMessageId(null);
     setConversationTab("chat");
     setSelectedLocationIds([]);
     setMaximizedLocation(null);
     setLiveDirectionsMessageId(null);
+    setRecordingToDelete(null);
   }, [activeId]);
 
   useEffect(() => {
@@ -2535,6 +2640,71 @@ function ChatApp({
     return `${API_URL}/api/attachments/${attachmentId}?username=${encodeURIComponent(
       user.username,
     )}${download ? "&download=true" : ""}`;
+  }
+
+  async function checkRecordingStatus(recordingId: string) {
+    if (!activeId || checkingRecordingId) return;
+    setCheckingRecordingId(recordingId);
+    setError("");
+    try {
+      const response = await fetch(
+        `${API_URL}/api/recordings/${recordingId}/check-status?username=${encodeURIComponent(user.username)}`,
+        { method: "POST" },
+      );
+      if (!response.ok) throw new Error(await readError(response));
+      const result = (await response.json()) as RecordingStatusCheck;
+      setRecordingsByConversation((current) => ({
+        ...current,
+        [activeId]: (current[activeId] ?? []).map((recording) =>
+          recording.id === result.recordingId
+            ? {
+                ...recording,
+                status: result.status,
+                providerStatus: result.providerStatus,
+                providerStatusCheckedAt: result.checkedAt,
+              }
+            : recording,
+        ),
+      }));
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Could not check the Azure recording status.",
+      );
+    } finally {
+      setCheckingRecordingId(null);
+    }
+  }
+
+  async function deleteIncompleteRecording() {
+    if (!activeId || !recordingToDelete || deletingRecordingId) return;
+    const recording = recordingToDelete;
+
+    setDeletingRecordingId(recording.id);
+    setError("");
+    try {
+      const response = await fetch(
+        `${API_URL}/api/recordings/${recording.id}?username=${encodeURIComponent(user.username)}`,
+        { method: "DELETE" },
+      );
+      if (!response.ok) throw new Error(await readError(response));
+      setRecordingsByConversation((current) => ({
+        ...current,
+        [activeId]: (current[activeId] ?? []).filter(
+          (item) => item.id !== recording.id,
+        ),
+      }));
+      setRecordingToDelete(null);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Could not delete the recording.",
+      );
+    } finally {
+      setDeletingRecordingId(null);
+    }
   }
 
   function handleDraftChange(value: string) {
@@ -3768,6 +3938,20 @@ function ChatApp({
               <span>{activeLocationItems.length}</span>
             )}
           </button>
+          <button
+            id="conversation-tab-recordings"
+            type="button"
+            role="tab"
+            aria-selected={conversationTab === "recordings"}
+            aria-controls="conversation-recordings-panel"
+            onClick={() => setConversationTab("recordings")}
+          >
+            <CirclePlay size={16} />
+            Recordings
+            {activeRecordings.length > 0 && (
+              <span>{activeRecordings.length}</span>
+            )}
+          </button>
         </nav>
 
         <div
@@ -4446,6 +4630,176 @@ function ChatApp({
                       : card;
                   },
                 )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {conversationTab === "recordings" && (
+          <div
+            className="conversation-assets"
+            id="conversation-recordings-panel"
+            role="tabpanel"
+            aria-labelledby="conversation-tab-recordings"
+          >
+            <div className="conversation-assets-heading">
+              <div>
+                <p className="eyebrow">Saved recordings</p>
+                <h2>Recordings in this conversation</h2>
+              </div>
+              <span>
+                {activeRecordings.length}{" "}
+                {activeRecordings.length === 1
+                  ? "recording"
+                  : "recordings"}
+              </span>
+            </div>
+            {loadingRecordingsConversationId === activeId ? (
+              <div className="center-state">
+                <LoaderCircle className="spin" size={24} />
+                <p>Loading recordings...</p>
+              </div>
+            ) : activeRecordings.length === 0 ? (
+              <div className="empty-assets">
+                <span>
+                  <CirclePlay size={25} />
+                </span>
+                <h3>No recordings yet</h3>
+                <p>
+                  Call, meeting, and live-stream recording sessions will
+                  appear here.
+                </p>
+              </div>
+            ) : (
+              <div className="conversation-media-grid">
+                {activeRecordings.map((recording) => {
+                  const attachment = recording.attachment;
+                  const duration =
+                    recording.durationMilliseconds ??
+                    attachment?.durationMs ??
+                    null;
+                  const starterName =
+                    recording.startedByUserId === user.id
+                      ? "You"
+                      : recording.startedByDisplayName;
+                  const canDeleteRecording =
+                    recording.startedByUserId === user.id ||
+                    canManageGroupMembers;
+                  return (
+                    <article
+                      className="conversation-media-card"
+                      key={recording.id}
+                    >
+                      <div className="conversation-recording-preview video">
+                        {attachment ? (
+                          <video
+                            controls
+                            preload="metadata"
+                            src={attachmentUrl(attachment.id)}
+                            onLoadedMetadata={(event) =>
+                              resolveUnknownVideoDuration(
+                                event.currentTarget,
+                                duration,
+                              )
+                            }
+                          />
+                        ) : (
+                          <div className="conversation-recording-state">
+                            {recording.status === "recording" ||
+                            recording.status === "processing" ? (
+                              <LoaderCircle className="spin" size={28} />
+                            ) : (
+                              <CirclePlay size={28} />
+                            )}
+                            <strong>
+                              {recording.status.replaceAll("-", " ")}
+                            </strong>
+                          </div>
+                        )}
+                      </div>
+                      <div className="conversation-media-meta">
+                        <div>
+                          <strong>
+                            {recording.sessionType.replaceAll("_", " ")}{" "}
+                            recording
+                          </strong>
+                          {duration !== null ? (
+                            <small>
+                              Duration {formatMediaDuration(duration)}
+                            </small>
+                          ) : null}
+                          <small>
+                            {starterName} ·{" "}
+                            {formatAttachmentDate(recording.startedAt)}
+                          </small>
+                          {recording.providerStatus ? (
+                            <small>
+                              Azure: {recording.providerStatus}
+                            </small>
+                          ) : null}
+                        </div>
+                        <div className="conversation-recording-actions">
+                          {recording.status !== "completed" ? (
+                            <>
+                              <button
+                                type="button"
+                                disabled={
+                                  !recording.canCheckProviderStatus ||
+                                  checkingRecordingId !== null ||
+                                  deletingRecordingId !== null
+                                }
+                                title={
+                                  recording.canCheckProviderStatus
+                                    ? "Check status in Azure Communication Services"
+                                    : "Azure status is unavailable until recording starts"
+                                }
+                                aria-label="Check recording status in Azure"
+                                onClick={() =>
+                                  void checkRecordingStatus(recording.id)
+                                }
+                              >
+                                {checkingRecordingId === recording.id ? (
+                                  <LoaderCircle className="spin" size={14} />
+                                ) : (
+                                  <RefreshCw size={16} />
+                                )}
+                              </button>
+                              {canDeleteRecording ? (
+                                <button
+                                  className="delete-recording"
+                                  type="button"
+                                  disabled={
+                                    checkingRecordingId !== null ||
+                                    deletingRecordingId !== null
+                                  }
+                                  title="Delete incomplete recording"
+                                  aria-label="Delete incomplete recording"
+                                  onClick={() => setRecordingToDelete(recording)}
+                                >
+                                  {deletingRecordingId === recording.id ? (
+                                    <LoaderCircle className="spin" size={14} />
+                                  ) : (
+                                    <Trash2 size={16} />
+                                  )}
+                                </button>
+                              ) : null}
+                            </>
+                          ) : null}
+                          {attachment ? (
+                            <a
+                              href={attachmentUrl(attachment.id, true)}
+                              download={attachment.fileName}
+                              aria-label={`Download ${attachment.fileName}`}
+                              title="Download"
+                            >
+                              <Download size={16} />
+                            </a>
+                          ) : null}
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -5440,6 +5794,65 @@ function ChatApp({
                 onClick={() => void deleteMessage()}
               >
                 {isDeletingMessage ? "Deleting..." : "Delete message"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {recordingToDelete && (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            className="modal-card confirmation-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-recording-title"
+            aria-describedby="delete-recording-description"
+          >
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">Delete recording</p>
+                <h2 id="delete-recording-title">
+                  Delete this incomplete recording?
+                </h2>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                aria-label="Close"
+                disabled={deletingRecordingId !== null}
+                onClick={() => setRecordingToDelete(null)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <p id="delete-recording-description">
+              This removes the{" "}
+              {recordingToDelete.sessionType.replaceAll("_", " ")} recording
+              session. An active Azure recording will be stopped first. This
+              action cannot be undone.
+            </p>
+            <div className="modal-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                autoFocus
+                disabled={deletingRecordingId !== null}
+                onClick={() => setRecordingToDelete(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="danger-button"
+                type="button"
+                disabled={deletingRecordingId !== null}
+                onClick={() => void deleteIncompleteRecording()}
+              >
+                {deletingRecordingId ? (
+                  <LoaderCircle className="spin" size={17} />
+                ) : (
+                  "Delete recording"
+                )}
               </button>
             </div>
           </div>
