@@ -46,6 +46,11 @@ param serviceBusSubscriptionName string = 'recording-file-status-updated-sub'
 @maxLength(50)
 param serviceBusAuditSubscriptionName string = 'recording-file-status-updated-audit'
 
+@description('Name of the Service Bus subscription used to retain recording events for debugging.')
+@minLength(1)
+@maxLength(50)
+param serviceBusDebugSubscriptionName string = 'recording-file-status-updated-debug'
+
 @secure()
 @description('Contact URI used as the Web Push VAPID subject, such as mailto:admin@example.com.')
 param browserPushSubject string
@@ -265,6 +270,11 @@ resource serviceBusSubscription 'Microsoft.ServiceBus/namespaces/topics/subscrip
 resource serviceBusAuditSubscription 'Microsoft.ServiceBus/namespaces/topics/subscriptions@2024-01-01' = {
   parent: serviceBusTopic
   name: serviceBusAuditSubscriptionName
+}
+
+resource serviceBusDebugSubscription 'Microsoft.ServiceBus/namespaces/topics/subscriptions@2024-01-01' = {
+  parent: serviceBusTopic
+  name: serviceBusDebugSubscriptionName
 }
 
 resource communicationRecordingSystemTopic 'Microsoft.EventGrid/systemTopics@2025-02-15' = {
@@ -520,6 +530,7 @@ output communicationServiceName string = communicationService.name
 output serviceBusNamespaceName string = serviceBusNamespace.name
 output serviceBusTopicName string = serviceBusTopic.name
 output serviceBusSubscriptionName string = serviceBusSubscription.name
+output serviceBusDebugSubscriptionName string = serviceBusDebugSubscription.name
 output communicationRecordingSystemTopicName string = communicationRecordingSystemTopic.name
 output logAnalyticsWorkspaceName string = logAnalyticsWorkspace.name
 output appInsightsName string = appInsights.name

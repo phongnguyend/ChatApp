@@ -1013,8 +1013,13 @@
   align-items: stretch;
   gap: 24px;
   overflow-x: auto;
+  overflow-y: hidden;
   background: rgba(255, 255, 255, 0.38);
-  scrollbar-width: thin;
+  scrollbar-width: none;
+}
+
+.conversation-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .conversation-tabs button {
