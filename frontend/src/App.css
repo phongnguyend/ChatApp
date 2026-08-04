@@ -3246,6 +3246,42 @@
   margin-top: 22px;
 }
 
+.join-link-dialog {
+  width: min(440px, 100%);
+}
+
+.join-link-qr-code {
+  width: min(240px, 100%);
+  aspect-ratio: 1;
+  margin: 0 auto 24px;
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.join-link-field {
+  display: grid;
+  gap: 10px;
+}
+
+.join-link-field a {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #dcd8cf;
+  border-radius: 8px;
+  color: #395d58;
+  background: white;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.join-link-field .secondary-button {
+  display: inline-flex;
+  gap: 8px;
+}
+
 .online-profile-dialog {
   width: min(380px, 100%);
 }

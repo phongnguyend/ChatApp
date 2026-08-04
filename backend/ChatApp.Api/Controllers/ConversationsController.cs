@@ -8,6 +8,7 @@ using ChatApp.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using QRCoder;
 
 namespace ChatApp.Api.Controllers;
 
@@ -21,6 +22,39 @@ public sealed class ConversationsController(
     IMessageAttachmentStorage attachmentStorage,
     AzurePushNotificationService pushNotifications) : ControllerBase
 {
+    [HttpGet("{id:guid}/join-qr-code")]
+    public async Task<IActionResult> GetJoinQrCode(
+        Guid id,
+        [FromQuery] string origin,
+        CancellationToken cancellationToken)
+    {
+        if (!Uri.TryCreate(origin, UriKind.Absolute, out var uiOrigin) ||
+            (uiOrigin.Scheme != Uri.UriSchemeHttp && uiOrigin.Scheme != Uri.UriSchemeHttps))
+        {
+            return BadRequest("A valid HTTP or HTTPS UI origin is required.");
+        }
+
+        var canBeJoined = await db.Conversations
+            .AsNoTracking()
+            .AnyAsync(
+                x => x.Id == id &&
+                    !x.IsArchived &&
+                    (x.Type == "group" || x.Type == "live_stream"),
+                cancellationToken);
+        if (!canBeJoined)
+        {
+            return NotFound();
+        }
+
+        var joinUrl = new Uri(uiOrigin, $"/conversasions/join/{id}").AbsoluteUri;
+        using var qrCodeData = QRCodeGenerator.GenerateQrCode(
+            joinUrl,
+            QRCodeGenerator.ECCLevel.Q);
+        using var qrCode = new PngByteQRCode(qrCodeData);
+
+        return File(qrCode.GetGraphic(12), "image/png");
+    }
+
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<ConversationDto>>> GetForUser(
         [FromQuery] string username,

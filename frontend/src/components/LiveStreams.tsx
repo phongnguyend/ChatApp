@@ -286,7 +286,7 @@ export function LiveStreamConversationControls({
 
   if (!stream) return null;
   return (
-    <div className="header-group-actions">
+    <>
       {stream.isActive && (
         <button className="icon-button header-group-action" type="button" onClick={() => onOpenStage(stream)} title="View live stream" aria-label="View live stream">
           <Video size={17} />
@@ -304,7 +304,7 @@ export function LiveStreamConversationControls({
           {busy ? <LoaderCircle className="spin" size={16} /> : stream.isActive ? <Square size={16} /> : <Radio size={16} />}
         </button>
       )}
-    </div>
+    </>
   );
 }
 

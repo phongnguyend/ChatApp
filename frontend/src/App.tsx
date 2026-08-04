@@ -10,12 +10,14 @@ import {
   Check,
   BellOff,
   CirclePlay,
+  Copy,
   Download,
   ExternalLink,
   FileText,
   Hash,
   Images,
   LoaderCircle,
+  Link2,
   LocateFixed,
   LogOut,
   MapPinned,
@@ -1130,6 +1132,9 @@ function ChatApp({
   const [displayNameError, setDisplayNameError] = useState("");
   const [isSavingDisplayName, setIsSavingDisplayName] = useState(false);
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
+  const [sharedConversation, setSharedConversation] =
+    useState<Conversation | null>(null);
+  const [isJoinLinkCopied, setIsJoinLinkCopied] = useState(false);
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [isStartingLiveLocation, setIsStartingLiveLocation] = useState(false);
@@ -1187,6 +1192,12 @@ function ChatApp({
   }, [directCallIsActive, endDirectCall, status]);
 
   const activeConversation = conversations.find((item) => item.id === activeId);
+  const joinConversationUrl = sharedConversation
+    ? `${window.location.origin}/conversasions/join/${encodeURIComponent(sharedConversation.id)}`
+    : "";
+  const joinQrCodeUrl = sharedConversation
+    ? `${API_URL}/api/conversations/${encodeURIComponent(sharedConversation.id)}/join-qr-code?origin=${encodeURIComponent(window.location.origin)}`
+    : "";
   const meetingConversationIdsKey = conversations
     .map((conversation) => conversation.id)
     .sort()
@@ -3679,6 +3690,18 @@ function ChatApp({
             <div className="header-group-actions">
               {renderMeetingControls()}
               <button
+                className="icon-button header-group-action"
+                type="button"
+                aria-label="Show conversation join link"
+                title="Join link"
+                onClick={() => {
+                  setIsJoinLinkCopied(false);
+                  setSharedConversation(activeConversation);
+                }}
+              >
+                <Link2 size={17} />
+              </button>
+              <button
                 className={`icon-button header-group-action mute-conversation-action ${
                   activeConversation.isMuted ? "active" : ""
                 }`}
@@ -3852,14 +3875,28 @@ function ChatApp({
             </div>
           )}
           {activeConversation?.type === "live_stream" && (
-            <LiveStreamConversationControls
-              apiUrl={API_URL}
-              username={user.username}
-              conversationId={activeConversation.id}
-              connection={hubConnection}
-              onOpenStage={setRequestedLiveStream}
-              onError={setError}
-            />
+            <div className="header-group-actions">
+              <LiveStreamConversationControls
+                apiUrl={API_URL}
+                username={user.username}
+                conversationId={activeConversation.id}
+                connection={hubConnection}
+                onOpenStage={setRequestedLiveStream}
+                onError={setError}
+              />
+              <button
+                className="icon-button header-group-action"
+                type="button"
+                aria-label="Show conversation join link"
+                title="Join link"
+                onClick={() => {
+                  setIsJoinLinkCopied(false);
+                  setSharedConversation(activeConversation);
+                }}
+              >
+                <Link2 size={17} />
+              </button>
+            </div>
           )}
           <div className={`connection-pill ${status}`}>
             {status === "offline" ? <WifiOff size={13} /> : <span />}
@@ -5468,6 +5505,59 @@ function ChatApp({
                 {dialogError}
               </p>
             )}
+          </div>
+        </div>
+      )}
+
+      {sharedConversation && (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            className="modal-card join-link-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="join-link-dialog-title"
+          >
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">Invite people</p>
+                <h2 id="join-link-dialog-title">Join this conversation</h2>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                aria-label="Close"
+                onClick={() => setSharedConversation(null)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <img
+              className="join-link-qr-code"
+              src={joinQrCodeUrl}
+              alt={`QR code to join ${conversationDisplayTitle(sharedConversation, "conversation")}`}
+            />
+
+            <div className="join-link-field">
+              <a href={joinConversationUrl} target="_blank" rel="noreferrer">
+                {joinConversationUrl}
+              </a>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(joinConversationUrl);
+                    setIsJoinLinkCopied(true);
+                  } catch {
+                    setError("Could not copy the join link.");
+                  }
+                }}
+              >
+                {isJoinLinkCopied ? <Check size={16} /> : <Copy size={16} />}
+                {isJoinLinkCopied ? "Copied" : "Copy link"}
+              </button>
+            </div>
           </div>
         </div>
       )}
