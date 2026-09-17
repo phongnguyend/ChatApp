@@ -1782,6 +1782,9 @@ function ChatApp({
         ...current.filter((item) => item.id !== conversation.id),
       ]);
     });
+    connection.on("MeetingConversationChanged", () => {
+      void loadConversations();
+    });
     connection.on(
       "GroupMeetingChanged",
       (event: GroupMeetingChangedEvent) => {
@@ -2954,6 +2957,83 @@ function ChatApp({
     setSelectedUsers([]);
   }
 
+  async function openCalendarConversation(
+    conversationId: string,
+    action: "chat" | "join",
+  ) {
+    const connection = connectionRef.current;
+    if (action === "join") {
+      if (connection?.state !== HubConnectionState.Connected) {
+        throw new Error("Connect to chat before joining the meeting.");
+      }
+      if (meetingAction !== null) {
+        throw new Error("Finish the current meeting action first.");
+      }
+      if (directCall.call !== null) {
+        throw new Error("End your current call before joining this meeting.");
+      }
+      if (joinedGroupMeeting && joinedGroupMeeting.conversationId !== conversationId) {
+        throw new Error("Leave your current meeting before joining another one.");
+      }
+    }
+
+    if (connection?.state === HubConnectionState.Connected) {
+      try {
+        await connection.invoke("JoinConversation", conversationId);
+      } catch (error) {
+        if (action === "join") throw error;
+      }
+    }
+
+    if (action === "join" && connection) {
+      setMeetingAction("join");
+      try {
+        let joined: GroupMeeting | null = null;
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const existing = await connection.invoke<GroupMeeting | null>(
+            "GetGroupMeeting",
+            conversationId,
+          );
+          try {
+            joined = await connection.invoke<GroupMeeting>(
+              existing ? "JoinGroupMeeting" : "StartGroupMeeting",
+              conversationId,
+            );
+            if (!joined.participants.some((participant) => participant.userId === user.id)) {
+              joined = await connection.invoke<GroupMeeting>(
+                "JoinGroupMeeting",
+                conversationId,
+              );
+            }
+            break;
+          } catch (error) {
+            if (attempt > 0 || await connection.invoke<GroupMeeting | null>(
+              "GetGroupMeeting",
+              conversationId,
+            )) {
+              throw error;
+            }
+          }
+        }
+        if (!joined) throw new Error("Could not start or join the meeting.");
+        setGroupMeetings((current) => ({ ...current, [conversationId]: joined }));
+      } finally {
+        setMeetingAction(null);
+      }
+    }
+
+    try {
+      await loadConversations();
+    } catch (error) {
+      if (action === "chat") throw error;
+      setError("The meeting is open, but chats could not be refreshed.");
+    }
+    setActiveId(conversationId);
+    setConversationTab("chat");
+    setIsCalendarOpen(false);
+    setIsSidebarOpen(false);
+  }
+
   async function changeGroupMeeting(
     action: "start" | "join" | "leave" | "stop",
     conversationId = activeConversation?.id,
@@ -3699,6 +3779,7 @@ function ChatApp({
         apiUrl={API_URL}
         currentUsername={user.username}
         onBack={() => setIsCalendarOpen(false)}
+        onOpenConversation={openCalendarConversation}
         hidden={!isCalendarOpen}
       />
 

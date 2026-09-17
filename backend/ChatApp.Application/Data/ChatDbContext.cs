@@ -23,6 +23,9 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
     public DbSet<CallingProviderIdentity> CallingProviderIdentities =>
         Set<CallingProviderIdentity>();
     public DbSet<LiveStreamSession> LiveStreamSessions => Set<LiveStreamSession>();
+    public DbSet<ScheduledMeeting> ScheduledMeetings => Set<ScheduledMeeting>();
+    public DbSet<ScheduledMeetingParticipant> ScheduledMeetingParticipants =>
+        Set<ScheduledMeetingParticipant>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -41,6 +44,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         ConfigureSessionRecordings(modelBuilder);
         ConfigureCallingProviderIdentities(modelBuilder);
         ConfigureLiveStreams(modelBuilder);
+        ConfigureScheduledMeetings(modelBuilder);
     }
 
     private static void ConfigureUsers(ModelBuilder modelBuilder)
@@ -115,6 +119,57 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
             .HasForeignKey(x => x.HostUserId)
             .OnDelete(DeleteBehavior.NoAction);
 
+    }
+
+    private static void ConfigureScheduledMeetings(ModelBuilder modelBuilder)
+    {
+        var meeting = modelBuilder.Entity<ScheduledMeeting>();
+        meeting.ToTable("ScheduledMeetings", table =>
+        {
+            table.HasCheckConstraint("CK_ScheduledMeetings_Status",
+                "[Status] IN ('scheduled', 'cancelled')");
+            table.HasCheckConstraint("CK_ScheduledMeetings_Dates",
+                "[EndDate] >= [StartDate]");
+            table.HasCheckConstraint("CK_ScheduledMeetings_Times",
+                "([IsAllDay] = 1 AND [StartTime] IS NULL AND [EndTime] IS NULL) OR " +
+                "([IsAllDay] = 0 AND [StartTime] IS NOT NULL AND [EndTime] IS NOT NULL AND " +
+                "([EndDate] > [StartDate] OR [EndTime] > [StartTime]))");
+        });
+        meeting.HasKey(x => x.Id);
+        meeting.Property(x => x.Title).HasMaxLength(200).IsRequired();
+        meeting.Property(x => x.Description).HasMaxLength(4000);
+        meeting.Property(x => x.StartDate).HasColumnType("date");
+        meeting.Property(x => x.EndDate).HasColumnType("date");
+        meeting.Property(x => x.StartTime).HasColumnType("time(0)");
+        meeting.Property(x => x.EndTime).HasColumnType("time(0)");
+        meeting.Property(x => x.Status).HasMaxLength(20).IsRequired();
+        meeting.Property(x => x.CreatedAt).HasPrecision(3);
+        meeting.Property(x => x.UpdatedAt).HasPrecision(3);
+        meeting.Property(x => x.CancelledAt).HasPrecision(3);
+        meeting.HasIndex(x => new { x.StartDate, x.EndDate });
+        meeting.HasIndex(x => x.OrganizerUserId);
+        meeting.HasIndex(x => x.ConversationId).IsUnique();
+        meeting.HasOne(x => x.Conversation)
+            .WithMany()
+            .HasForeignKey(x => x.ConversationId)
+            .OnDelete(DeleteBehavior.NoAction);
+        meeting.HasOne(x => x.OrganizerUser)
+            .WithMany()
+            .HasForeignKey(x => x.OrganizerUserId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        var participant = modelBuilder.Entity<ScheduledMeetingParticipant>();
+        participant.ToTable("ScheduledMeetingParticipants");
+        participant.HasKey(x => new { x.MeetingId, x.UserId });
+        participant.HasIndex(x => x.UserId);
+        participant.HasOne(x => x.Meeting)
+            .WithMany(x => x.Participants)
+            .HasForeignKey(x => x.MeetingId)
+            .OnDelete(DeleteBehavior.Cascade);
+        participant.HasOne(x => x.User)
+            .WithMany()
+            .HasForeignKey(x => x.UserId)
+            .OnDelete(DeleteBehavior.NoAction);
     }
 
     private static void ConfigureConversationMembers(ModelBuilder modelBuilder)

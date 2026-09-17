@@ -1,18 +1,32 @@
-import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, LoaderCircle, Plus, UserRound, X } from "lucide-react";
+import { CalendarDays, CalendarX2, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, LoaderCircle, MessageCircle, Pencil, Plus, UserRound, Video, X } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import "./CalendarView.css";
 
 type Person = { id: string; displayName: string; username: string };
-type DraftMeeting = {
+type CalendarMeeting = {
   id: string;
   title: string;
   description: string;
-  date: string;
-  start: string;
-  end: string;
+  startDate: string;
+  endDate: string;
+  allDay: boolean;
+  start: string | null;
+  end: string | null;
+  status: "scheduled" | "cancelled";
+  organizerDisplayName: string;
+  organizerUsername: string;
+  canEdit: boolean;
   people: Person[];
 };
-type MeetingForm = Omit<DraftMeeting, "id">;
+type MeetingForm = Pick<CalendarMeeting, "title" | "description" | "startDate" | "endDate" | "allDay" | "people"> & { start: string; end: string };
+
+async function readResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(body?.message || `Request failed (${response.status}).`);
+  }
+  return response.json() as Promise<T>;
+}
 
 const FIRST_HOUR = 7;
 const LAST_HOUR = 22;
@@ -115,11 +129,13 @@ function minutesFromTime(value: string) {
   return hours * 60 + minutes;
 }
 
-function newForm(date: string, start: string): MeetingForm {
+function newForm(date: string, start: string, allDay = false): MeetingForm {
   return {
     title: "",
     description: "",
-    date,
+    startDate: date,
+    endDate: date,
+    allDay,
     start,
     end: timeValue(Math.min(minutesFromTime(start) + 60, 23 * 60 + 59)),
     people: [],
@@ -130,19 +146,32 @@ export function CalendarView({
   apiUrl,
   currentUsername,
   onBack,
+  onOpenConversation,
   hidden,
 }: {
   apiUrl: string;
   currentUsername: string;
   onBack: () => void;
+  onOpenConversation: (conversationId: string, action: "chat" | "join") => Promise<void>;
   hidden: boolean;
 }) {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [miniMonth, setMiniMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [pickerMonth, setPickerMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [isWeekPickerOpen, setIsWeekPickerOpen] = useState(false);
-  const [meetings, setMeetings] = useState<DraftMeeting[]>([]);
+  const [meetings, setMeetings] = useState<CalendarMeeting[]>([]);
+  const [calendarError, setCalendarError] = useState("");
+  const [isLoadingMeetings, setIsLoadingMeetings] = useState(false);
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const [form, setForm] = useState<MeetingForm | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [selectedMeeting, setSelectedMeeting] = useState<CalendarMeeting | null>(null);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [detailError, setDetailError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [isOpeningConversation, setIsOpeningConversation] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [personQuery, setPersonQuery] = useState("");
   const [userResults, setUserResults] = useState<Person[]>([]);
   const [isSearchingUsers, setIsSearchingUsers] = useState(false);
@@ -151,6 +180,7 @@ export function CalendarView({
   const [activePersonIndex, setActivePersonIndex] = useState(0);
   const [formError, setFormError] = useState("");
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const detailRequestRef = useRef(0);
   const personInputRef = useRef<HTMLInputElement>(null);
   const peoplePickerRef = useRef<HTMLDivElement>(null);
   const weekPickerRef = useRef<HTMLDivElement>(null);
@@ -168,14 +198,42 @@ export function CalendarView({
   const suggestions = userResults.filter((person) => !form?.people.some((selected) => selected.id === person.id));
 
   useEffect(() => {
+    if (hidden) return;
+    const controller = new AbortController();
+    setIsLoadingMeetings(true);
+    setCalendarError("");
+    const from = dateKey(weekStart);
+    const to = dateKey(addDays(weekStart, 6));
+    fetch(`${apiUrl}/api/meetings?username=${encodeURIComponent(currentUsername)}&from=${from}&to=${to}`, { signal: controller.signal })
+      .then((response) => readResponse<CalendarMeeting[]>(response))
+      .then(setMeetings)
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setMeetings([]);
+        setCalendarError(error instanceof Error ? error.message : "Could not load meetings.");
+      })
+      .finally(() => { if (!controller.signal.aborted) setIsLoadingMeetings(false); });
+    return () => controller.abort();
+  }, [apiUrl, currentUsername, hidden, weekStart, refreshVersion]);
+
+  useEffect(() => {
     if (!isFormOpen) return;
     titleInputRef.current?.focus();
     const onEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setForm(null);
+      if (event.key === "Escape" && !isSaving) setForm(null);
     };
     document.addEventListener("keydown", onEscape);
     return () => document.removeEventListener("keydown", onEscape);
-  }, [isFormOpen]);
+  }, [isFormOpen, isSaving]);
+
+  useEffect(() => {
+    if (!selectedMeeting) return;
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !isCancelling && !isOpeningConversation) closeDetails();
+    };
+    document.addEventListener("keydown", onEscape);
+    return () => document.removeEventListener("keydown", onEscape);
+  }, [selectedMeeting, isCancelling, isOpeningConversation]);
 
   useEffect(() => {
     if (!isFormOpen || !isPeopleOpen) return;
@@ -240,12 +298,92 @@ export function CalendarView({
     setIsWeekPickerOpen(false);
   }
 
-  function openForm(date: string, start: string) {
-    setForm(newForm(date, start));
+  function openForm(date: string, start: string, allDay = false) {
+    detailRequestRef.current += 1;
+    setSelectedMeeting(null);
+    setEditingId(null);
+    setForm(newForm(date, start, allDay));
     setPersonQuery("");
     setUserResults([]);
     setIsPeopleOpen(false);
     setFormError("");
+  }
+
+  async function openDetails(meeting: CalendarMeeting) {
+    const requestId = ++detailRequestRef.current;
+    setForm(null);
+    setSelectedMeeting(meeting);
+    setDetailError("");
+    setConfirmCancel(false);
+    setIsLoadingDetail(true);
+    try {
+      const response = await fetch(`${apiUrl}/api/meetings/${meeting.id}?username=${encodeURIComponent(currentUsername)}`);
+      const current = await readResponse<CalendarMeeting>(response);
+      if (detailRequestRef.current === requestId) setSelectedMeeting(current);
+    } catch (error) {
+      if (detailRequestRef.current === requestId) setDetailError(error instanceof Error ? error.message : "Could not load meeting details.");
+    } finally {
+      if (detailRequestRef.current === requestId) setIsLoadingDetail(false);
+    }
+  }
+
+  function closeDetails() {
+    detailRequestRef.current += 1;
+    setSelectedMeeting(null);
+  }
+
+  function editMeeting(meeting: CalendarMeeting) {
+    if (!meeting.canEdit || meeting.status === "cancelled") return;
+    setEditingId(meeting.id);
+    setForm({
+      title: meeting.title,
+      description: meeting.description,
+      startDate: meeting.startDate,
+      endDate: meeting.endDate,
+      allDay: meeting.allDay,
+      start: meeting.start ?? "09:00",
+      end: meeting.end ?? "10:00",
+      people: meeting.people,
+    });
+    closeDetails();
+    setPersonQuery("");
+    setUserResults([]);
+    setIsPeopleOpen(false);
+    setFormError("");
+  }
+
+  async function cancelMeeting() {
+    if (!selectedMeeting?.canEdit || selectedMeeting.status === "cancelled") return;
+    setIsCancelling(true);
+    setDetailError("");
+    try {
+      const response = await fetch(`${apiUrl}/api/meetings/${selectedMeeting.id}/cancel?username=${encodeURIComponent(currentUsername)}`, { method: "POST" });
+      const updated = await readResponse<CalendarMeeting>(response);
+      setSelectedMeeting(updated);
+      setMeetings((current) => current.map((meeting) => meeting.id === updated.id ? updated : meeting));
+      setConfirmCancel(false);
+      setRefreshVersion((version) => version + 1);
+    } catch (error) {
+      setDetailError(error instanceof Error ? error.message : "Could not cancel meeting.");
+    } finally {
+      setIsCancelling(false);
+    }
+  }
+
+  async function openMeetingConversation(action: "chat" | "join") {
+    if (!selectedMeeting || isOpeningConversation) return;
+    setIsOpeningConversation(true);
+    setDetailError("");
+    try {
+      const response = await fetch(`${apiUrl}/api/meetings/${selectedMeeting.id}/conversation?username=${encodeURIComponent(currentUsername)}`, { method: "POST" });
+      const result = await readResponse<{ conversationId: string }>(response);
+      await onOpenConversation(result.conversationId, action);
+      closeDetails();
+    } catch (error) {
+      setDetailError(error instanceof Error ? error.message : action === "join" ? "Could not join the meeting." : "Could not open the meeting conversation.");
+    } finally {
+      setIsOpeningConversation(false);
+    }
   }
 
   function addPerson(person: Person) {
@@ -257,14 +395,18 @@ export function CalendarView({
     personInputRef.current?.focus();
   }
 
-  function createMeeting(event: FormEvent<HTMLFormElement>) {
+  async function saveMeeting(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!form) return;
-    if (!form.title.trim()) {
-      setFormError("Add a meeting title.");
+    if (form.title.trim().length < 2) {
+      setFormError("Add a meeting title with at least two characters.");
       return;
     }
-    if (minutesFromTime(form.end) <= minutesFromTime(form.start)) {
+    if (!form.startDate || !form.endDate || form.endDate < form.startDate) {
+      setFormError("End date must be on or after start date.");
+      return;
+    }
+    if (!form.allDay && form.endDate === form.startDate && minutesFromTime(form.end) <= minutesFromTime(form.start)) {
       setFormError("End time must be after start time.");
       return;
     }
@@ -273,15 +415,25 @@ export function CalendarView({
       personInputRef.current?.focus();
       return;
     }
-    const next = {
-      ...form,
-      title: form.title.trim(),
-      description: form.description.trim(),
-      id: crypto.randomUUID(),
-    };
-    setMeetings((current) => [...current, next]);
-    goToWeek(localDate(next.date));
-    setForm(null);
+    setIsSaving(true);
+    setFormError("");
+    try {
+      const response = await fetch(`${apiUrl}/api/meetings${editingId ? `/${editingId}` : ""}?username=${encodeURIComponent(currentUsername)}`, {
+        method: editingId ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, title: form.title.trim(), description: form.description.trim(), start: form.allDay ? null : form.start, end: form.allDay ? null : form.end, people: form.people.map((person) => person.id) }),
+      });
+      const saved = await readResponse<CalendarMeeting>(response);
+      setForm(null);
+      setEditingId(null);
+      setSelectedMeeting(saved);
+      goToWeek(localDate(saved.startDate));
+      setRefreshVersion((version) => version + 1);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Could not save meeting.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   return (
@@ -290,10 +442,10 @@ export function CalendarView({
         <div>
           <p className="eyebrow">Your schedule</p>
           <h1>Calendar</h1>
-          <p className="calendar-intro">Plan a time together. Meetings here are a preview until scheduling is connected.</p>
+          <p className="calendar-intro">Plan a time together and keep your meetings in one place.</p>
         </div>
         <div className="calendar-toolbar-actions">
-          <button className="calendar-back" type="button" onClick={onBack}>Back to chat</button>
+          <button className="calendar-back" type="button" onClick={() => { setForm(null); closeDetails(); onBack(); }}>Back to chat</button>
           <button className="calendar-create" type="button" onClick={() => openForm(today, "09:00")}>
             <Plus size={17} /> New meeting
           </button>
@@ -364,9 +516,11 @@ export function CalendarView({
           <button type="button" onClick={() => goToWeek(new Date())}>Today</button>
           <button type="button" aria-label="Previous week" onClick={() => goToWeek(addDays(weekStart, -7))}><ChevronLeft size={18} /></button>
           <button type="button" aria-label="Next week" onClick={() => goToWeek(addDays(weekStart, 7))}><ChevronRight size={18} /></button>
+          <button type="button" onClick={() => setRefreshVersion((version) => version + 1)}>Refresh</button>
         </div>
       </div>
       <div className="calendar-grid-scroll">
+        {(isLoadingMeetings || calendarError) && <div className={`calendar-load-state ${calendarError ? "error" : ""}`} role={calendarError ? "alert" : "status"}>{calendarError || "Loading meetings…"}{calendarError && <button type="button" onClick={() => setRefreshVersion((version) => version + 1)}>Retry</button>}</div>}
         <div className="calendar-grid">
           <div className="calendar-time-heading" aria-hidden="true">GMT{new Date().getTimezoneOffset() <= 0 ? "+" : "-"}{Math.abs(new Date().getTimezoneOffset() / 60)}</div>
           {weekDays.map((date) => {
@@ -378,35 +532,60 @@ export function CalendarView({
               </div>
             );
           })}
+          <div className="calendar-all-day-label">All day</div>
+          {weekDays.map((date) => {
+            const key = dateKey(date);
+            const spanningMeetings = meetings.filter((meeting) =>
+              (meeting.allDay || meeting.startDate !== meeting.endDate || (meeting.start !== null && (minutesFromTime(meeting.start) < FIRST_HOUR * 60 || minutesFromTime(meeting.start) >= LAST_HOUR * 60))) &&
+              meeting.startDate <= key && key <= meeting.endDate,
+            );
+            return (
+              <div
+                className="calendar-day-events"
+                key={key}
+              >
+                <button className="calendar-day-events-create" type="button" aria-label={`${new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric" }).format(date)}. Create all-day meeting`} onClick={() => openForm(key, "09:00", true)} />
+                {spanningMeetings.map((meeting) => (
+                  <button
+                    type="button"
+                    className={`calendar-spanning-meeting ${meeting.status === "cancelled" ? "cancelled" : ""}`}
+                    key={meeting.id}
+                    title={`${meeting.title} · ${meeting.status === "cancelled" ? "Cancelled · " : ""}${meeting.allDay ? "All day" : `${meeting.start}–${meeting.end}`} · ${meeting.startDate}–${meeting.endDate}`}
+                    onClick={() => void openDetails(meeting)}
+                  >
+                    {!meeting.allDay && <Clock3 size={11} aria-hidden="true" />}
+                    <span>{meeting.title}</span>
+                  </button>
+                ))}
+              </div>
+            );
+          })}
           <div className="calendar-time-column">
             {slots.map((minutes) => <div key={minutes}>{minutes % 60 === 0 ? timeLabel(minutes) : ""}</div>)}
           </div>
           {weekDays.map((date) => {
             const key = dateKey(date);
-            const dayMeetings = meetings.filter((meeting) => meeting.date === key);
+            const dayMeetings = meetings.filter((meeting) => !meeting.allDay && meeting.startDate === key && meeting.endDate === key);
             return (
               <div className={`calendar-day-column ${key === today ? "today" : ""}`} key={key}>
                 {slots.map((minutes) => {
                   const slotMeetings = dayMeetings.filter((meeting) => {
-                    const start = minutesFromTime(meeting.start);
+                    const start = minutesFromTime(meeting.start ?? "00:00");
                     return start >= minutes && start < minutes + SLOT_MINUTES;
                   });
                   return (
-                    <button
+                    <div
                       className={`calendar-slot ${slotMeetings.length > 0 ? "has-meeting" : ""}`}
                       key={minutes}
-                      type="button"
-                      aria-label={`${new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric" }).format(date)}, ${timeLabel(minutes)}. Create meeting`}
-                      onClick={() => openForm(key, timeValue(minutes))}
                     >
-                      {slotMeetings.slice(0, 1).map((meeting) => (
-                        <span className="calendar-meeting" key={meeting.id} title={`${meeting.title} · ${meeting.start}–${meeting.end}${meeting.description ? `\n${meeting.description}` : ""}`}>
+                      <button className="calendar-slot-create" type="button" aria-label={`${new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric" }).format(date)}, ${timeLabel(minutes)}. Create meeting`} onClick={() => openForm(key, timeValue(minutes))} />
+                      {slotMeetings.map((meeting, index) => (
+                        <button type="button" className={`calendar-meeting ${meeting.status === "cancelled" ? "cancelled" : ""}`} style={{ left: `${index * 100 / slotMeetings.length}%`, width: `${100 / slotMeetings.length}%`, right: "auto" }} key={meeting.id} title={`${meeting.title} · ${meeting.status === "cancelled" ? "Cancelled · " : ""}${meeting.start}–${meeting.end}`} onClick={() => void openDetails(meeting)}>
                           <strong>{meeting.title}</strong>
                           <small>{meeting.start}–{meeting.end}</small>
-                        </span>
+                        </button>
                       ))}
-                      {slotMeetings.length > 1 && <span className="calendar-more">+{slotMeetings.length - 1}</span>}
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -414,24 +593,42 @@ export function CalendarView({
           })}
         </div>
       </div>
-      <div className="calendar-footnote">Preview only · Meetings are visible in this tab until you reload the page.</div>
+      <div className="calendar-footnote">Meetings are saved and visible to their organizer and participants. Cancelled meetings remain in the calendar.</div>
         </div>
       </div>
 
       {form && (
-        <div className="calendar-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setForm(null); }}>
-          <form className="calendar-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-dialog-title" onSubmit={createMeeting}>
+        <div className="calendar-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !isSaving) setForm(null); }}>
+          <form className="calendar-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-dialog-title" onSubmit={(event) => void saveMeeting(event)}>
             <div className="calendar-dialog-heading">
-              <div><p className="eyebrow">Schedule together</p><h2 id="calendar-dialog-title">New meeting</h2></div>
-              <button type="button" aria-label="Close meeting form" onClick={() => setForm(null)}><X size={19} /></button>
+              <div><p className="eyebrow">Schedule together</p><h2 id="calendar-dialog-title">{editingId ? "Edit meeting" : "New meeting"}</h2></div>
+              <button type="button" aria-label="Close meeting form" disabled={isSaving} onClick={() => setForm(null)}><X size={19} /></button>
             </div>
             <label htmlFor="calendar-title">Title</label>
             <input id="calendar-title" ref={titleInputRef} placeholder="What are you meeting about?" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} />
-            <div className="calendar-date-time">
-              <div><label htmlFor="calendar-date">Date</label><input id="calendar-date" type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></div>
-              <div><label htmlFor="calendar-start">Start</label><input id="calendar-start" type="time" required value={form.start} onChange={(event) => setForm({ ...form, start: event.target.value })} /></div>
-              <div><label htmlFor="calendar-end">End</label><input id="calendar-end" type="time" required value={form.end} onChange={(event) => setForm({ ...form, end: event.target.value })} /></div>
+            <label className="calendar-all-day-toggle">
+              <input type="checkbox" checked={form.allDay} onChange={(event) => setForm({ ...form, allDay: event.target.checked })} />
+              <span>All day</span>
+            </label>
+            <div className="calendar-date-range">
+              <div>
+                <label htmlFor="calendar-start-date">Start date</label>
+                <input id="calendar-start-date" type="date" required value={form.startDate} onChange={(event) => {
+                  const startDate = event.target.value;
+                  setForm({ ...form, startDate, endDate: form.endDate < startDate ? startDate : form.endDate });
+                }} />
+              </div>
+              <div>
+                <label htmlFor="calendar-end-date">End date</label>
+                <input id="calendar-end-date" type="date" required min={form.startDate} value={form.endDate} onChange={(event) => setForm({ ...form, endDate: event.target.value })} />
+              </div>
             </div>
+            {!form.allDay && (
+              <div className="calendar-time-range">
+                <div><label htmlFor="calendar-start">Start time</label><input id="calendar-start" type="time" required value={form.start} onChange={(event) => setForm({ ...form, start: event.target.value })} /></div>
+                <div><label htmlFor="calendar-end">End time</label><input id="calendar-end" type="time" required value={form.end} onChange={(event) => setForm({ ...form, end: event.target.value })} /></div>
+              </div>
+            )}
             <label htmlFor="calendar-person">People</label>
             <div className="calendar-people-picker" ref={peoplePickerRef}>
               <div className="calendar-people-input">
@@ -514,13 +711,49 @@ export function CalendarView({
               value={form.description}
               onChange={(event) => setForm({ ...form, description: event.target.value })}
             />
-            <p className="calendar-form-note"><Clock3 size={15} /> This is a UI preview. No invitations will be sent.</p>
+            <p className="calendar-form-note"><Clock3 size={15} /> Participants can see this meeting in their calendar. No email invitations are sent.</p>
             {formError && <p className="calendar-form-error" role="alert">{formError}</p>}
             <div className="calendar-dialog-actions">
-              <button type="button" onClick={() => setForm(null)}>Cancel</button>
-              <button type="submit"><Check size={16} /> Add preview meeting</button>
+              <button type="button" disabled={isSaving} onClick={() => setForm(null)}>Close</button>
+              <button type="submit" disabled={isSaving}>{isSaving ? <LoaderCircle className="spin" size={16} /> : <Check size={16} />} {editingId ? "Save changes" : "Create meeting"}</button>
             </div>
           </form>
+        </div>
+      )}
+
+      {selectedMeeting && !form && (
+        <div className="calendar-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !isCancelling && !isOpeningConversation) closeDetails(); }}>
+          <div className="calendar-dialog calendar-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-detail-title">
+            <div className="calendar-dialog-heading">
+              <div><p className="eyebrow">Meeting details</p><h2 id="calendar-detail-title">{selectedMeeting.title}</h2></div>
+              <button type="button" aria-label="Close meeting details" disabled={isCancelling || isOpeningConversation} onClick={closeDetails}><X size={19} /></button>
+            </div>
+            {selectedMeeting.status === "cancelled" && <p className="calendar-cancelled-badge">Cancelled</p>}
+            <p className="calendar-detail-line"><CalendarDays size={16} /> {new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(localDate(selectedMeeting.startDate))}{selectedMeeting.endDate !== selectedMeeting.startDate ? ` – ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(localDate(selectedMeeting.endDate))}` : ""}</p>
+            <p className="calendar-detail-line"><Clock3 size={16} /> {selectedMeeting.allDay ? "All day" : `${selectedMeeting.start} – ${selectedMeeting.end}`}</p>
+            <div className="calendar-detail-section"><strong>Organizer</strong><p>{selectedMeeting.organizerDisplayName} (@{selectedMeeting.organizerUsername})</p></div>
+            <div className="calendar-detail-section"><strong>People</strong><p>{selectedMeeting.people.length ? selectedMeeting.people.map((person) => `${person.displayName} (@${person.username})`).join(", ") : "Only the organizer"}</p></div>
+            {selectedMeeting.description && <div className="calendar-detail-section"><strong>Description</strong><p className="calendar-detail-description">{selectedMeeting.description}</p></div>}
+            {isLoadingDetail && <p role="status" className="calendar-form-note"><LoaderCircle className="spin" size={15} /> Loading current details…</p>}
+            {detailError && <p role="alert" className="calendar-form-error">{detailError}</p>}
+            {confirmCancel && <p className="calendar-cancel-confirm">Cancel this meeting for everyone? It will remain visible as cancelled.</p>}
+            <div className="calendar-dialog-actions">
+              {!confirmCancel && (
+                <>
+                  <button type="button" disabled={isLoadingDetail || isOpeningConversation || isCancelling} onClick={() => void openMeetingConversation("chat")}><MessageCircle size={14} aria-hidden="true" />{isOpeningConversation ? "Opening…" : "Chat"}</button>
+                  {selectedMeeting.status !== "cancelled" && <button className="calendar-join-button" type="button" disabled={isLoadingDetail || isOpeningConversation || isCancelling} onClick={() => void openMeetingConversation("join")}><Video size={14} aria-hidden="true" />{isOpeningConversation ? "Opening…" : "Join"}</button>}
+                </>
+              )}
+              {selectedMeeting.canEdit && selectedMeeting.status !== "cancelled" && (
+                <>
+                  <button type="button" disabled={isLoadingDetail || isCancelling} onClick={() => confirmCancel ? void cancelMeeting() : setConfirmCancel(true)}><CalendarX2 size={14} aria-hidden="true" />{isCancelling ? "Cancelling…" : confirmCancel ? "Confirm cancellation" : "Cancel meeting"}</button>
+                  {!confirmCancel && <button type="button" disabled={isLoadingDetail} onClick={() => editMeeting(selectedMeeting)}><Pencil size={14} aria-hidden="true" />Edit meeting</button>}
+                  {confirmCancel && <button type="button" disabled={isCancelling} onClick={() => setConfirmCancel(false)}><Check size={14} aria-hidden="true" />Keep meeting</button>}
+                </>
+              )}
+              <button type="button" disabled={isCancelling || isOpeningConversation} onClick={closeDetails}><X size={14} aria-hidden="true" />Close</button>
+            </div>
+          </div>
         </div>
       )}
     </section>

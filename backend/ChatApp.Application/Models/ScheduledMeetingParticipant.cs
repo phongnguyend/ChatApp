@@ -1,0 +1,9 @@
+namespace ChatApp.Application.Models;
+
+public sealed class ScheduledMeetingParticipant
+{
+    public Guid MeetingId { get; set; }
+    public ScheduledMeeting Meeting { get; set; } = null!;
+    public Guid UserId { get; set; }
+    public ChatUser User { get; set; } = null!;
+}

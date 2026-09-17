@@ -4,6 +4,7 @@ using ChatApp.Application.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ChatApp.Api.Data.Migrations
 {
     [DbContext(typeof(ChatDbContext))]
-    partial class ChatDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260917141552_AddScheduledMeetings")]
+    partial class AddScheduledMeetings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -600,9 +603,6 @@ namespace ChatApp.Api.Data.Migrations
                         .HasPrecision(3)
                         .HasColumnType("datetimeoffset(3)");
 
-                    b.Property<Guid?>("ConversationId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasPrecision(3)
                         .HasColumnType("datetimeoffset(3)");
@@ -644,10 +644,6 @@ namespace ChatApp.Api.Data.Migrations
                         .HasColumnType("datetimeoffset(3)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("ConversationId")
-                        .IsUnique()
-                        .HasFilter("[ConversationId] IS NOT NULL");
 
                     b.HasIndex("OrganizerUserId");
 
@@ -1020,18 +1016,11 @@ namespace ChatApp.Api.Data.Migrations
 
             modelBuilder.Entity("ChatApp.Application.Models.ScheduledMeeting", b =>
                 {
-                    b.HasOne("ChatApp.Application.Models.Conversation", "Conversation")
-                        .WithMany()
-                        .HasForeignKey("ConversationId")
-                        .OnDelete(DeleteBehavior.NoAction);
-
                     b.HasOne("ChatApp.Application.Models.ChatUser", "OrganizerUser")
                         .WithMany()
                         .HasForeignKey("OrganizerUserId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
-
-                    b.Navigation("Conversation");
 
                     b.Navigation("OrganizerUser");
                 });
