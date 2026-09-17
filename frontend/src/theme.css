@@ -1,0 +1,348 @@
+.login-panel {
+  position: relative;
+}
+
+.login-panel > .theme-switcher {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+}
+
+.theme-switcher {
+  position: relative;
+  z-index: 15;
+  flex: 0 0 auto;
+}
+
+.theme-trigger {
+  width: 36px;
+  height: 36px;
+  color: var(--ink);
+  background: var(--cream);
+}
+
+.sidebar-brand .theme-switcher {
+  margin-left: auto;
+}
+
+.sidebar-brand .theme-trigger {
+  color: #dfe8e6;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-brand .mobile-close {
+  margin-left: 0;
+}
+
+.theme-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 150px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: 0 14px 36px rgba(5, 17, 19, 0.2);
+}
+
+.theme-menu button {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--ink);
+  background: transparent;
+  font-size: 12px;
+  text-align: left;
+}
+
+.theme-menu button:hover,
+.theme-menu button[aria-checked='true'] {
+  color: var(--coral);
+  background: var(--cream);
+}
+
+.theme-menu button span {
+  flex: 1;
+}
+
+html[data-theme='dark'] {
+  --ink: #e9eeeb;
+  --muted: #a8b4b1;
+  --navy: #111b20;
+  --navy-soft: #29434b;
+  --coral: #f18b73;
+  --cream: #263239;
+  --paper: #1b252b;
+  --line: #36444a;
+  --surface: #222e34;
+  --text: #e9eeeb;
+  color: var(--ink);
+  background: #161f24;
+}
+
+html[data-theme='dark'] .login-panel {
+  background: #161f24;
+}
+
+html[data-theme='dark'] .login-card,
+html[data-theme='dark'] .composer,
+html[data-theme='dark'] .conversation-file-card,
+html[data-theme='dark'] .conversation-media-card,
+html[data-theme='dark'] .conversation-location-card,
+html[data-theme='dark'] .location-message-card,
+html[data-theme='dark'] .people-note,
+html[data-theme='dark'] .conversation-actions-menu,
+html[data-theme='dark'] .member-actions-menu,
+html[data-theme='dark'] .message-actions,
+html[data-theme='dark'] .message-reaction-picker,
+html[data-theme='dark'] .reaction-people,
+html[data-theme='dark'] .live-location-duration-menu {
+  color: var(--ink);
+  background: #222e34;
+  border-color: var(--line);
+}
+
+html[data-theme='dark'] .live-location-message-card,
+html[data-theme='dark'] .message-audio,
+html[data-theme='dark'] .message-file,
+html[data-theme='dark'] .group-meeting-invite {
+  color: var(--ink);
+  background: #222e34;
+  border-color: var(--line);
+}
+
+html[data-theme='dark'] .sidebar {
+  color: #e1eae8;
+}
+
+html[data-theme='dark'] .people-panel {
+  background: #202b31;
+}
+
+html[data-theme='dark'] .conversation-tabs {
+  background: #202b31;
+}
+
+html[data-theme='dark'] .person:hover,
+html[data-theme='dark'] .connection-pill,
+html[data-theme='dark'] .header-group-action:not(.start-meeting-action):not(.stop-meeting-action):not(.group-meeting-action):not(.block-user-action):not(.unblock-user-action):not(.active),
+html[data-theme='dark'] .conversation-tabs button > span,
+html[data-theme='dark'] .conversation-media-meta > a,
+html[data-theme='dark'] .conversation-recording-actions > a,
+html[data-theme='dark'] .conversation-recording-actions > button,
+html[data-theme='dark'] .conversation-location-meta > a,
+html[data-theme='dark'] .conversation-location-meta > button,
+html[data-theme='dark'] .location-message-meta > a,
+html[data-theme='dark'] .location-message-meta > button,
+html[data-theme='dark'] .live-location-message-meta > a,
+html[data-theme='dark'] .live-location-message-meta > button:not(.live-location-stop),
+html[data-theme='dark'] .attachment-button,
+html[data-theme='dark'] .attachment-camera-button,
+html[data-theme='dark'] .attachment-video-button,
+html[data-theme='dark'] .attachment-screen-button,
+html[data-theme='dark'] .attachment-audio-button,
+html[data-theme='dark'] .location-button,
+html[data-theme='dark'] .live-location-button,
+html[data-theme='dark'] .location-preview-heading > button {
+  color: #c8d4d1;
+  background: #303e44;
+}
+
+html[data-theme='dark'] .emoji-picker-button {
+  color: #c8d4d1;
+  background: #303e44;
+}
+
+html[data-theme='dark'] .emoji-picker-popover {
+  color: var(--ink);
+  background: #222e34;
+  border-color: var(--line);
+}
+
+html[data-theme='dark'] .emoji-group-tabs {
+  background: #303e44;
+}
+
+html[data-theme='dark'] .emoji-group-tabs button.active,
+html[data-theme='dark'] .emoji-group-tabs button:hover {
+  background: #405158;
+}
+
+html[data-theme='dark'] .message-reply-reference,
+html[data-theme='dark'] .message-file-icon,
+html[data-theme='dark'] .selected-users button,
+html[data-theme='dark'] .dialog-tabs,
+html[data-theme='dark'] .user-result:hover:not(:disabled) {
+  color: var(--ink);
+  background: #303e44;
+  border-color: var(--line);
+}
+
+html[data-theme='dark'] .dialog-tabs button.active,
+html[data-theme='dark'] .user-result.selected {
+  color: var(--ink);
+  background: #3d5055;
+}
+
+html[data-theme='dark'] .header-channel-icon,
+html[data-theme='dark'] .empty-icon,
+html[data-theme='dark'] .empty-assets > span,
+html[data-theme='dark'] .conversation-file-icon,
+html[data-theme='dark'] .composer-reply-preview,
+html[data-theme='dark'] .pending-attachment {
+  background: #303b41;
+  border-color: var(--line);
+}
+
+html[data-theme='dark'] .login-card label,
+html[data-theme='dark'] .modal-card label,
+html[data-theme='dark'] .message-meta strong,
+html[data-theme='dark'] .message-body p,
+html[data-theme='dark'] .empty-assets h3,
+html[data-theme='dark'] .conversation-location-meta strong,
+html[data-theme='dark'] .online-profile-content > strong {
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .live-location-message-meta strong,
+html[data-theme='dark'] .location-message-meta > span,
+html[data-theme='dark'] .message-audio > span,
+html[data-theme='dark'] .user-result,
+html[data-theme='dark'] .dialog-tabs button,
+html[data-theme='dark'] .composer textarea {
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .login-subtitle,
+html[data-theme='dark'] .login-note,
+html[data-theme='dark'] .conversation-title p,
+html[data-theme='dark'] .conversation-tabs button,
+html[data-theme='dark'] .empty-assets,
+html[data-theme='dark'] .empty-chat,
+html[data-theme='dark'] .empty-chat p,
+html[data-theme='dark'] .center-state,
+html[data-theme='dark'] .date-divider,
+html[data-theme='dark'] .typing-line,
+html[data-theme='dark'] .people-heading,
+html[data-theme='dark'] .people-note,
+html[data-theme='dark'] .conversation-media-meta small,
+html[data-theme='dark'] .conversation-file-copy small,
+html[data-theme='dark'] .conversation-file-copy time,
+html[data-theme='dark'] .conversation-location-meta small,
+html[data-theme='dark'] .message-meta time,
+html[data-theme='dark'] .compact-time {
+  color: var(--muted);
+}
+
+html[data-theme='dark'] .conversation-tabs button[aria-selected='true'] {
+  color: var(--coral);
+}
+
+html[data-theme='dark'] .header-group-action.start-meeting-action {
+  color: white;
+  background: #b9513e;
+}
+
+html[data-theme='dark'] .header-group-action.stop-meeting-action,
+html[data-theme='dark'] .header-group-action.block-user-action {
+  color: #ffc1b3;
+  background: #573535;
+}
+
+html[data-theme='dark'] .header-group-action.group-meeting-action:not(.stop-meeting-action):not(.start-meeting-action),
+html[data-theme='dark'] .header-group-action.unblock-user-action {
+  color: #a9e0ce;
+  background: #29443f;
+}
+
+html[data-theme='dark'] .live-location-message-meta small,
+html[data-theme='dark'] .message-file small,
+html[data-theme='dark'] .user-result small,
+html[data-theme='dark'] .online-profile-content,
+html[data-theme='dark'] .confirmation-dialog > p,
+html[data-theme='dark'] .leave-group-dialog > p {
+  color: var(--muted);
+}
+
+html[data-theme='dark'] .login-card input,
+html[data-theme='dark'] .modal-card input,
+html[data-theme='dark'] .modal-card textarea,
+html[data-theme='dark'] .message-edit-form textarea,
+html[data-theme='dark'] .secondary-button,
+html[data-theme='dark'] .join-link-field a,
+html[data-theme='dark'] .pending-attachment {
+  color: var(--ink);
+  background: #26343a;
+  border-color: var(--line);
+}
+
+html[data-theme='dark'] .composer textarea,
+html[data-theme='dark'] .live-location-duration-menu button,
+html[data-theme='dark'] .conversation-actions-menu button,
+html[data-theme='dark'] .member-actions-menu button,
+html[data-theme='dark'] .message-actions > button,
+html[data-theme='dark'] .message-reaction-item > button {
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .message-reaction-item > button.active {
+  color: #ffc1b3;
+  background: #573535;
+  border-color: #94645b;
+}
+
+html[data-theme='dark'] .message-reaction-item > button {
+  background: #2c3a40;
+  border-color: var(--line);
+}
+
+html[data-theme='dark'] .message.own-message .message-body p {
+  color: #f6faf9;
+}
+
+html[data-theme='dark'] .message-body p a {
+  color: #8ec9f5;
+}
+
+html[data-theme='dark'] .date-divider::before,
+html[data-theme='dark'] .date-divider::after {
+  background: var(--line);
+}
+
+html[data-theme='dark'] .person .presence-dot {
+  border-color: #202b31;
+}
+
+html[data-theme='dark'] .conversation-actions-menu button:hover,
+html[data-theme='dark'] .member-actions-menu button:hover,
+html[data-theme='dark'] .message-actions > button:hover:not(:disabled),
+html[data-theme='dark'] .live-location-duration-menu button:hover:not(:disabled) {
+  color: var(--coral);
+  background: #3a3437;
+}
+
+html[data-theme='dark'] .conversation-file-card,
+html[data-theme='dark'] .conversation-media-card,
+html[data-theme='dark'] .conversation-location-card,
+html[data-theme='dark'] .composer,
+html[data-theme='dark'] .login-card {
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+}
+
+@media (max-width: 480px) {
+  .login-panel > .theme-switcher {
+    top: 14px;
+    right: 14px;
+  }
+
+  .conversation-header {
+    gap: 8px;
+  }
+
+}

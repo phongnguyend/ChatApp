@@ -27,6 +27,8 @@ import {
   Mic,
   MicOff,
   Minimize2,
+  Monitor,
+  Moon,
   Navigation,
   Pencil,
   Phone,
@@ -38,6 +40,7 @@ import {
   Send,
   Search,
   Square,
+  Sun,
   Trash2,
   UserRoundPlus,
   Users,
@@ -49,6 +52,7 @@ import {
 import {
   type FormEvent,
   type KeyboardEvent,
+  type ReactNode,
   lazy,
   Suspense,
   useCallback,
@@ -59,6 +63,13 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import "./App.css";
+import "./theme.css";
+import {
+  applyTheme,
+  getThemePreference,
+  saveThemePreference,
+  type ThemePreference,
+} from "./theme";
 import { AvatarPicker } from "./components/AvatarPicker";
 import {
   type ChatAttachment,
@@ -905,7 +916,82 @@ async function readError(response: Response) {
   }
 }
 
-function LoginScreen({ onLogin }: { onLogin: (user: User) => void }) {
+function ThemeSwitcher({
+  preference,
+  onChange,
+}: {
+  preference: ThemePreference;
+  onChange: (preference: ThemePreference) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const options = [
+    { value: "system", label: "System", Icon: Monitor },
+    { value: "light", label: "Light", Icon: Sun },
+    { value: "dark", label: "Dark", Icon: Moon },
+  ] as const;
+  const CurrentIcon = options.find((option) => option.value === preference)!.Icon;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) setIsOpen(false);
+    };
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setIsOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [isOpen]);
+
+  return (
+    <div className="theme-switcher" ref={containerRef}>
+      <button
+        className="icon-button theme-trigger"
+        type="button"
+        aria-label={`Theme: ${preference}. Choose theme`}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        title="Choose theme"
+        onClick={() => setIsOpen((current) => !current)}
+      >
+        <CurrentIcon size={18} />
+      </button>
+      {isOpen && (
+        <div className="theme-menu" role="menu" aria-label="Theme">
+          {options.map(({ value, label, Icon }) => (
+            <button
+              key={value}
+              type="button"
+              role="menuitemradio"
+              aria-checked={preference === value}
+              onClick={() => {
+                onChange(value);
+                setIsOpen(false);
+              }}
+            >
+              <Icon size={16} />
+              <span>{label}</span>
+              {preference === value && <Check size={15} />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LoginScreen({
+  onLogin,
+  themeControl,
+}: {
+  onLogin: (user: User) => void;
+  themeControl: ReactNode;
+}) {
   const [username, setUsername] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -966,6 +1052,7 @@ function LoginScreen({ onLogin }: { onLogin: (user: User) => void }) {
       </section>
 
       <section className="login-panel">
+        {themeControl}
         <form className="login-card" onSubmit={submit}>
           <div className="mobile-brand brand">
             <span className="brand-mark" aria-hidden="true">
@@ -1021,10 +1108,12 @@ function ChatApp({
   user,
   onLogout,
   onUserUpdated,
+  themeControl,
 }: {
   user: User;
   onLogout: () => void;
   onUserUpdated: (user: User) => void;
+  themeControl: ReactNode;
 }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -3382,6 +3471,7 @@ function ChatApp({
             <MessageCircleMore size={20} strokeWidth={2.5} />
           </span>
           <span>Huddle</span>
+          {themeControl}
           <button
             className="icon-button mobile-close"
             aria-label="Close menu"
@@ -6148,15 +6238,37 @@ function ChatApp({
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
+  const [themePreference, setThemePreference] = useState(getThemePreference);
+
+  useEffect(() => {
+    applyTheme(themePreference);
+    const colorScheme = window.matchMedia("(prefers-color-scheme: dark)");
+    const syncSystemTheme = () => {
+      if (themePreference === "system") applyTheme("system");
+    };
+    colorScheme.addEventListener("change", syncSystemTheme);
+    return () => colorScheme.removeEventListener("change", syncSystemTheme);
+  }, [themePreference]);
+
+  const themeControl = (
+    <ThemeSwitcher
+      preference={themePreference}
+      onChange={(preference) => {
+        setThemePreference(preference);
+        saveThemePreference(preference);
+      }}
+    />
+  );
 
   return user ? (
     <ChatApp
       user={user}
       onLogout={() => setUser(null)}
       onUserUpdated={setUser}
+      themeControl={themeControl}
     />
   ) : (
-    <LoginScreen onLogin={setUser} />
+    <LoginScreen onLogin={setUser} themeControl={themeControl} />
   );
 }
 
