@@ -9,6 +9,7 @@ import {
   Bell,
   Check,
   BellOff,
+  CalendarDays,
   CirclePlay,
   Copy,
   Download,
@@ -71,6 +72,7 @@ import {
   type ThemePreference,
 } from "./theme";
 import { AvatarPicker } from "./components/AvatarPicker";
+import { CalendarView } from "./components/CalendarView";
 import {
   type ChatAttachment,
   MessageAttachmentList,
@@ -1175,6 +1177,7 @@ function ChatApp({
   );
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [isLiveStreamsOpen, setIsLiveStreamsOpen] = useState(false);
   const [requestedLiveStream, setRequestedLiveStream] =
     useState<LiveStream | null>(null);
@@ -3459,7 +3462,7 @@ function ChatApp({
   const isOnline = status === "connected";
 
   return (
-    <main className="chat-shell">
+    <main className={`chat-shell ${isCalendarOpen ? "calendar-open" : ""}`}>
       <button
         className={`mobile-scrim ${isSidebarOpen ? "visible" : ""}`}
         aria-label="Close conversation menu"
@@ -3482,6 +3485,17 @@ function ChatApp({
         </div>
 
         <div className="sidebar-section">
+          <button
+            className={`calendar-nav-button ${isCalendarOpen ? "active" : ""}`}
+            type="button"
+            aria-current={isCalendarOpen ? "page" : undefined}
+            onClick={() => {
+              setIsCalendarOpen(true);
+              setIsSidebarOpen(false);
+            }}
+          >
+            <CalendarDays size={17} /> Calendar
+          </button>
           <button
             className="live-streams-nav-button"
             type="button"
@@ -3512,6 +3526,7 @@ function ChatApp({
                   className="conversation-item"
                   onClick={() => {
                     setActiveId(conversation.id);
+                    setIsCalendarOpen(false);
                     setIsSidebarOpen(false);
                   }}
                 >
@@ -3679,6 +3694,13 @@ function ChatApp({
           </button>
         </div>
       </aside>
+
+      <CalendarView
+        apiUrl={API_URL}
+        currentUsername={user.username}
+        onBack={() => setIsCalendarOpen(false)}
+        hidden={!isCalendarOpen}
+      />
 
       <section
         className={`conversation-panel ${
