@@ -1,11 +1,15 @@
-import { ArrowLeft, ChevronRight, Copy, Download, FileImage, FileText, Folder, FolderOpen, FolderPlus, History, Info, Link2, LoaderCircle, Pencil, QrCode, RotateCcw, Search, Share2, Trash2, Upload, X } from "lucide-react";
+import { ArrowLeft, CheckSquare2, ChevronRight, Copy, Download, FileImage, FileText, Folder, FolderInput, FolderOpen, FolderPlus, History, Info, Link2, LoaderCircle, Pencil, QrCode, RotateCcw, Search, Send, Share2, Trash2, Upload, X } from "lucide-react";
 import { type ChangeEvent, type DragEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { discardDocumentUpload, uploadDocument, type UploadProgress } from "./documentUploads";
 import "./DocumentsView.css";
 
 type Permission = "owner" | "editor" | "viewer";
 type FolderItem = { id: string; parentFolderId: string | null; name: string; createdAt: string; updatedAt: string; deletedAt: string | null; permission: Permission; ownerUsername: string | null };
 type FileItem = { id: string; folderId: string | null; name: string; contentType: string; sizeBytes: number; createdAt: string; updatedAt: string; deletedAt: string | null; permission: Permission; ownerUsername: string | null };
-type Listing = { currentFolder: FolderItem | null; breadcrumbs: FolderItem[]; folders: FolderItem[]; files: FileItem[] };
+type SharingSummary = { peopleCount: number; hasPublicLink: boolean; publicLinkExpired: boolean };
+type Listing = { currentFolder: FolderItem | null; breadcrumbs: FolderItem[]; folders: FolderItem[]; files: FileItem[]; sharingSummaries?: Record<string, SharingSummary> | null; locations?: Record<string, string> | null };
+type Selection = { kind: "folder" | "file"; id: string };
+const documentDragType = "application/x-chatapp-documents";
 type ShareItem = { id: string; username: string; displayName: string; permission: "viewer" | "editor" };
 type PublicLink = { token: string; createdAt: string; expiresAt: string | null };
 type DocumentVersion = { id: string | null; number: number; contentType: string; sizeBytes: number; createdAt: string; isCurrent: boolean };
@@ -51,6 +55,14 @@ function canPreview(file: FileItem) {
   return file.contentType === "application/pdf" || ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.contentType);
 }
 
+function sharingSummary(summary?: SharingSummary) {
+  if (!summary) return "";
+  const parts = [];
+  if (summary.peopleCount) parts.push(`Shared with ${summary.peopleCount} ${summary.peopleCount === 1 ? "person" : "people"}`);
+  if (summary.hasPublicLink) parts.push(summary.publicLinkExpired ? "Public link expired" : "Anyone with the link");
+  return parts.join(" · ");
+}
+
 export function DocumentsView({ apiUrl, currentUsername, onBack, hidden }: {
   apiUrl: string;
   currentUsername: string;
@@ -58,7 +70,7 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, hidden }: {
   hidden: boolean;
 }) {
   const [folderId, setFolderId] = useState<string | null>(null);
-  const [mode, setMode] = useState<"mine" | "shared" | "trash">("mine");
+  const [mode, setMode] = useState<"mine" | "shared" | "outgoing" | "trash">("mine");
   const [listing, setListing] = useState<Listing | null>(null);
   const [version, setVersion] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -66,11 +78,18 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, hidden }: {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<Selection[]>([]);
+  const [destinationAction, setDestinationAction] = useState<"move" | "copy" | null>(null);
+  const [destinationId, setDestinationId] = useState<string | null>(null);
+  const [destinationListing, setDestinationListing] = useState<Listing | null>(null);
+  const [destinationLoading, setDestinationLoading] = useState(false);
+  const [bulkTrashOpen, setBulkTrashOpen] = useState(false);
   const [sort, setSort] = useState<"name" | "updated">("name");
   const [nameDialog, setNameDialog] = useState<NameDialog | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialog | null>(null);
   const [purgeDialog, setPurgeDialog] = useState<DeleteDialog | null>(null);
   const [conflict, setConflict] = useState<UploadConflict | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [preview, setPreview] = useState<FileItem | null>(null);
   const [versionFile, setVersionFile] = useState<FileItem | null>(null);
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
@@ -91,6 +110,9 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, hidden }: {
   const [recipient, setRecipient] = useState<Person | null>(null);
   const [sharePermission, setSharePermission] = useState<"viewer" | "editor">("viewer");
   const [dragging, setDragging] = useState(false);
+  const [draggedItem, setDraggedItem] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const dragItems = useRef<Selection[] | null>(null);
   const uploadInput = useRef<HTMLInputElement>(null);
   const replaceInput = useRef<HTMLInputElement>(null);
   const nameInput = useRef<HTMLInputElement>(null);
@@ -102,10 +124,13 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, hidden }: {
     const controller = new AbortController();
     setLoading(true);
     setError("");
-    const endpoint = mode === "trash" ? `${baseUrl}/trash?${usernameQuery}`
+    const term = query.trim();
+    const endpoint = term ? `${baseUrl}/search?${usernameQuery}&query=${encodeURIComponent(term)}`
+      : mode === "trash" ? `${baseUrl}/trash?${usernameQuery}`
       : mode === "shared" && !folderId ? `${baseUrl}/shared?${usernameQuery}`
+      : mode === "outgoing" && !folderId ? `${baseUrl}/shared-by-me?${usernameQuery}`
       : `${baseUrl}?${usernameQuery}${folderId ? `&folderId=${folderId}` : ""}`;
-    fetch(endpoint, { signal: controller.signal })
+    const timer = window.setTimeout(() => fetch(endpoint, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error(await errorMessage(response));
         return response.json() as Promise<Listing>;
@@ -114,9 +139,24 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, hidden }: {
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load documents.");
       })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); }), term ? 250 : 0);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [baseUrl, usernameQuery, folderId, mode, version, hidden, query]);
+
+  useEffect(() => { setSelected([]); }, [folderId, mode, query]);
+
+  useEffect(() => {
+    if (!destinationAction) return;
+    const controller = new AbortController();
+    setDestinationListing(null);
+    setDestinationLoading(true);
+    fetch(`${baseUrl}?${usernameQuery}${destinationId ? `&folderId=${destinationId}` : ""}`, { signal: controller.signal })
+      .then(async (response) => { if (!response.ok) throw new Error(await errorMessage(response)); return response.json() as Promise<Listing>; })
+      .then((value) => { if (!controller.signal.aborted) setDestinationListing(value); })
+      .catch((reason: unknown) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load destination folders."); })
+      .finally(() => { if (!controller.signal.aborted) setDestinationLoading(false); });
     return () => controller.abort();
-  }, [baseUrl, usernameQuery, folderId, mode, version, hidden]);
+  }, [baseUrl, usernameQuery, destinationAction, destinationId]);
 
   useEffect(() => {
     if (!shareDialog) return;
@@ -198,12 +238,47 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, hidden }: {
   }, [listing, query, sort]);
 
   function refresh() { setVersion((current) => current + 1); window.dispatchEvent(new Event("documents-storage-changed")); }
-  function navigate(id: string | null) { setFolderId(id); setListing(null); setQuery(""); setNotice(""); setPreview(null); }
+  function navigate(id: string | null) { setFolderId(id); setListing(null); setQuery(""); setSelected([]); setNotice(""); setPreview(null); }
   function openProperties(kind: "folder" | "file", id: string) { setPreview(null); setPropertiesTarget({ kind, id }); }
-  function changeMode(next: "mine" | "shared" | "trash") { setMode(next); navigate(null); setError(""); }
-  const canEditCurrent = mode !== "trash" && (folderId ? listing?.currentFolder?.permission !== "viewer" : mode === "mine");
+  function changeMode(next: "mine" | "shared" | "outgoing" | "trash") { setMode(next); navigate(null); setError(""); }
+  const canEditCurrent = !query.trim() && mode !== "trash" && (folderId ? listing?.currentFolder?.permission !== "viewer" : mode === "mine");
+  const isTrashView = mode === "trash" && !query.trim();
   const publicLinkExpired = Boolean(publicLink?.expiresAt && new Date(publicLink.expiresAt).getTime() <= shareNow);
   const publicQrUrl = publicLink ? `${baseUrl}/public/${encodeURIComponent(publicLink.token)}/qr-code?origin=${encodeURIComponent(window.location.origin)}` : "";
+
+  function toggleSelected(item: Selection) {
+    setSelected((current) => current.some((entry) => entry.kind === item.kind && entry.id === item.id)
+      ? current.filter((entry) => entry.kind !== item.kind || entry.id !== item.id)
+      : current.length < 100 ? [...current, item] : current);
+  }
+
+  function selectVisible() {
+    const eligible: Selection[] = [
+      ...visible.folders.filter((item) => item.permission === "owner" && !isTrashView).map((item) => ({ kind: "folder" as const, id: item.id })),
+      ...visible.files.filter((item) => item.permission === "owner" && !isTrashView).map((item) => ({ kind: "file" as const, id: item.id })),
+    ];
+    setSelected(eligible.slice(0, 100));
+    if (eligible.length > 100) setNotice("Selected the first 100 items.");
+  }
+
+  async function runBulk(action: "move" | "copy" | "trash", targetFolderId: string | null = null, items = selected) {
+    if (!items.length || busy) return;
+    setBusy(true); setError("");
+    try {
+      const response = await fetch(`${baseUrl}/bulk?${usernameQuery}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, items, destinationFolderId: action === "trash" ? null : targetFolderId }),
+      });
+      if (!response.ok) throw new Error(await errorMessage(response));
+      const { count } = await response.json() as { count: number };
+      setSelected([]);
+      setDestinationAction(null);
+      setBulkTrashOpen(false);
+      setNotice(`${count} ${count === 1 ? "item" : "items"} ${action === "move" ? "moved" : action === "copy" ? "copied" : "moved to Trash"}.`);
+      refresh();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : `Could not ${action} selected items.`); }
+    finally { setBusy(false); }
+  }
 
   async function saveName(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -313,6 +388,7 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, hidden }: {
       setShareNow(Date.now());
       if (!enabled) setExpiryDate("");
       setNotice(enabled ? publicLink ? "Public link expiry updated." : "Public link enabled." : "Public link removed.");
+      refresh();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not change public access."); }
     finally { setBusy(false); }
   }
@@ -343,11 +419,8 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, hidden }: {
   }
 
   async function postFile(file: File, targetFolderId: string | null, choice: "ask" | "replace" | "keepBoth") {
-    const body = new FormData();
-    body.append("file", file);
-    if (targetFolderId) body.append("folderId", targetFolderId);
-    body.append("conflict", choice);
-    return fetch(`${baseUrl}/files?${usernameQuery}`, { method: "POST", body });
+    return uploadDocument(baseUrl, usernameQuery, currentUsername, file, targetFolderId,
+      choice, setUploadProgress);
   }
 
   async function processUploads(files: File[], targetFolderId: string | null) {
@@ -356,7 +429,6 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, hidden }: {
     setError("");
     try {
       for (let index = 0; index < files.length; index += 1) {
-        if (files[index].size > 50 * 1024 * 1024) throw new Error(`“${files[index].name}” is larger than 50 MB.`);
         const response = await postFile(files[index], targetFolderId, "ask");
         if (response.status === 409) {
           const body = await response.json() as { code?: string; message?: string };
@@ -372,9 +444,9 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, hidden }: {
       setNotice(files.length === 1 ? "File uploaded." : `${files.length} files uploaded.`);
       refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not upload files.");
+      setError(`${reason instanceof Error ? reason.message : "Could not upload files."} Select the same file again to resume.`);
       refresh();
-    } finally { setBusy(false); }
+    } finally { setBusy(false); setUploadProgress(null); }
   }
 
   async function resolveConflict(choice: "replace" | "keepBoth" | "skip") {
@@ -383,18 +455,20 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, hidden }: {
     setBusy(true);
     setError("");
     try {
-      if (choice !== "skip") {
+      if (choice === "skip") await discardDocumentUpload(baseUrl, usernameQuery,
+        currentUsername, pending.file, pending.folderId);
+      else {
         const response = await postFile(pending.file, pending.folderId, choice);
         if (!response.ok) throw new Error(await errorMessage(response));
       }
       setConflict(null);
       refresh();
-      setBusy(false);
+      setBusy(false); setUploadProgress(null);
       if (pending.remaining.length) await processUploads(pending.remaining, pending.folderId);
       else setNotice(choice === "skip" ? "Upload skipped." : choice === "replace" ? "File replaced." : "Both files kept.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not finish the upload.");
-      setBusy(false);
+      setBusy(false); setUploadProgress(null);
     }
   }
 
@@ -406,7 +480,54 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, hidden }: {
   function dropFiles(event: DragEvent<HTMLElement>) {
     event.preventDefault();
     setDragging(false);
+    if (event.dataTransfer.types.includes(documentDragType) || dragItems.current) {
+      clearDocumentDrag();
+      return;
+    }
     if (canEditCurrent) void processUploads(Array.from(event.dataTransfer.files), folderId);
+  }
+
+  function clearDocumentDrag() {
+    dragItems.current = null;
+    setDraggedItem(null);
+    setDropTarget(null);
+  }
+
+  function startDocumentDrag(event: DragEvent<HTMLDivElement>, item: Selection) {
+    if (busy || (event.target as HTMLElement).closest(".documents-row-actions, input")) {
+      event.preventDefault();
+      return;
+    }
+    const items = selected.some((entry) => entry.kind === item.kind && entry.id === item.id)
+      ? selected : [item];
+    dragItems.current = items;
+    setDraggedItem(`${item.kind}:${item.id}`);
+    setDragging(false);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData(documentDragType, "move");
+  }
+
+  function canDropDocument(event: DragEvent<HTMLElement>, targetId: string | null) {
+    const items = dragItems.current;
+    if (!items?.length || !event.dataTransfer.types.includes(documentDragType) || busy) return false;
+    return !items.some((item) => item.kind === "folder" && item.id === targetId);
+  }
+
+  function hoverDocumentFolder(event: DragEvent<HTMLElement>, targetId: string | null) {
+    if (!canDropDocument(event, targetId)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+    setDropTarget(targetId ?? "root");
+  }
+
+  function dropDocumentInto(event: DragEvent<HTMLElement>, targetId: string | null) {
+    if (!canDropDocument(event, targetId)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const items = dragItems.current!;
+    clearDocumentDrag();
+    void runBulk("move", targetId, items);
   }
 
   function contentUrl(file: FileItem, download: boolean) {
@@ -434,16 +555,14 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, hidden }: {
     const selected = event.target.files?.[0];
     event.target.value = "";
     if (!selected || !preview || preview.permission === "viewer" || busy) return;
-    if (selected.size > 50 * 1024 * 1024) { setError("Files must be 50 MB or smaller."); return; }
     setBusy(true); setError("");
     try {
-      const body = new FormData();
-      body.append("file", selected);
-      const response = await fetch(`${baseUrl}/files/${preview.id}/content?${usernameQuery}`, { method: "PUT", body });
+      const response = await uploadDocument(baseUrl, usernameQuery, currentUsername, selected,
+        preview.folderId, "replace", setUploadProgress, preview.id);
       if (!response.ok) throw new Error(await errorMessage(response));
       setPreview(null); setNotice("File content replaced."); refresh();
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not replace file content."); }
-    finally { setBusy(false); }
+    } catch (reason) { setError(`${reason instanceof Error ? reason.message : "Could not replace file content."} Select the same file again to resume.`); }
+    finally { setBusy(false); setUploadProgress(null); }
   }
 
   async function downloadVersion(item: DocumentVersion) {
@@ -496,8 +615,8 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, hidden }: {
 
   return (
     <section className="documents-view" aria-label="My Documents" hidden={hidden}
-      onDragEnter={(event) => { event.preventDefault(); if (canEditCurrent) setDragging(true); }}
-      onDragOver={(event) => event.preventDefault()}
+      onDragEnter={(event) => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); if (canEditCurrent) setDragging(true); } }}
+      onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }}
       onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragging(false); }}
       onDrop={dropFiles}>
       <header className="documents-header">
@@ -507,6 +626,7 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, hidden }: {
       <div className="documents-tabs" role="tablist" aria-label="Document sections">
         <button type="button" role="tab" aria-selected={mode === "mine"} onClick={() => changeMode("mine")}><FolderOpen size={15} aria-hidden="true" /> My Documents</button>
         <button type="button" role="tab" aria-selected={mode === "shared"} onClick={() => changeMode("shared")}><Share2 size={15} aria-hidden="true" /> Shared with me</button>
+        <button type="button" role="tab" aria-selected={mode === "outgoing"} onClick={() => changeMode("outgoing")}><Send size={15} aria-hidden="true" /> Shared by me</button>
         <button type="button" role="tab" aria-selected={mode === "trash"} onClick={() => changeMode("trash")}><Trash2 size={15} aria-hidden="true" /> Trash</button>
       </div>
       <div className="documents-toolbar">
@@ -514,35 +634,53 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, hidden }: {
           {canEditCurrent && <><button type="button" onClick={() => setNameDialog({ kind: "create", name: "" })} disabled={busy}><FolderPlus size={17} /> New folder</button>
           <button type="button" className="documents-upload-button" onClick={() => uploadInput.current?.click()} disabled={busy}><Upload size={17} /> Upload files</button></>}
           <input ref={uploadInput} type="file" multiple hidden onChange={chooseFiles} aria-label="Choose files to upload" />
+          {!isTrashView && (visible.folders.some((item) => item.permission === "owner") || visible.files.some((item) => item.permission === "owner")) && <button type="button" onClick={selected.length ? () => setSelected([]) : selectVisible} disabled={busy}><CheckSquare2 size={16} /> {selected.length ? "Clear selection" : "Select all"}</button>}
         </div>
         <div className="documents-tools">
-          <label className="documents-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search this folder" aria-label="Search this folder" /></label>
+          <label className="documents-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search all documents" aria-label="Search all documents" /></label>
           <select aria-label="Sort documents" value={sort} onChange={(event) => setSort(event.target.value as "name" | "updated")}><option value="name">Name</option><option value="updated">Last modified</option></select>
         </div>
       </div>
+      {selected.length > 0 && <div className="documents-selection-bar"><strong>{selected.length} selected</strong><button type="button" onClick={() => { setDestinationId(null); setDestinationAction("move"); setError(""); }} disabled={busy}><FolderInput size={15} /> Move</button><button type="button" onClick={() => { setDestinationId(null); setDestinationAction("copy"); setError(""); }} disabled={busy}><Copy size={15} /> Copy</button><button type="button" onClick={() => { setBulkTrashOpen(true); setError(""); }} disabled={busy}><Trash2 size={15} /> Move to Trash</button></div>}
       <nav className="documents-breadcrumbs" aria-label="Folder path">
-        <button type="button" onClick={() => navigate(null)} aria-current={folderId === null ? "page" : undefined}>{mode === "mine" ? "My Documents" : mode === "shared" ? "Shared with me" : "Trash"}</button>
-        {listing?.breadcrumbs.map((folder) => <span key={folder.id}><ChevronRight size={14} /><button type="button" onClick={() => navigate(folder.id)} aria-current={folder.id === folderId ? "page" : undefined}>{folder.name}</button></span>)}
+        {query.trim() ? <span>Search results across My Documents and Shared with me</span> : <><button type="button" className={dropTarget === "root" ? "documents-drop-target" : undefined} onClick={() => navigate(null)} onDragOver={mode === "mine" ? (event) => hoverDocumentFolder(event, null) : undefined} onDragLeave={() => setDropTarget(null)} onDrop={mode === "mine" ? (event) => dropDocumentInto(event, null) : undefined} aria-current={folderId === null ? "page" : undefined}>{mode === "mine" ? "My Documents" : mode === "shared" ? "Shared with me" : mode === "outgoing" ? "Shared by me" : "Trash"}</button>
+        {listing?.breadcrumbs.map((folder) => <span key={folder.id}><ChevronRight size={14} /><button type="button" className={dropTarget === folder.id ? "documents-drop-target" : undefined} onClick={() => navigate(folder.id)} onDragOver={folder.permission === "owner" ? (event) => hoverDocumentFolder(event, folder.id) : undefined} onDragLeave={() => setDropTarget(null)} onDrop={folder.permission === "owner" ? (event) => dropDocumentInto(event, folder.id) : undefined} aria-current={folder.id === folderId ? "page" : undefined}>{folder.name}</button></span>)}</>}
       </nav>
       {error && <div className="documents-message error" role="alert">{error}<button type="button" onClick={() => setError("")} aria-label="Dismiss error"><X size={14} /></button></div>}
+      {uploadProgress && <div className="documents-upload-progress" role="status"><span>Uploading {uploadProgress.name}: {Math.round(uploadProgress.uploadedBytes / uploadProgress.totalBytes * 100)}%</span><progress value={uploadProgress.uploadedBytes} max={uploadProgress.totalBytes} /></div>}
       {notice && <div className="documents-message" role="status">{notice}<button type="button" onClick={() => setNotice("")} aria-label="Dismiss message"><X size={14} /></button></div>}
       <div className={`documents-list ${dragging ? "dragging" : ""}`}>
         <div className="documents-list-heading"><span>Name</span><span>Modified</span><span>Size</span><span>Actions</span></div>
         {loading && <p className="documents-state"><LoaderCircle className="spin" size={18} /> Loading documents…</p>}
-        {!loading && !error && visible.folders.length === 0 && visible.files.length === 0 && <div className="documents-empty"><Folder size={33} /><strong>{query ? "No matching items" : mode === "trash" ? "Trash is empty" : mode === "shared" && !folderId ? "Nothing shared with you yet" : "This folder is empty"}</strong><p>{query ? "Try another search." : mode === "mine" ? "Create a folder or upload files to get started." : "Items will appear here when available."}</p></div>}
-        {!loading && visible.folders.map((folder) => <div className="documents-row" key={folder.id}>
-          <button className="documents-item-name" type="button" disabled={mode === "trash"} onClick={() => navigate(folder.id)}><span className="documents-item-icon folder"><Folder size={20} /></span><span title={folder.name}>{folder.name}{folder.ownerUsername && <small>Shared by @{folder.ownerUsername}</small>}</span></button>
+        {!loading && !error && visible.folders.length === 0 && visible.files.length === 0 && <div className="documents-empty"><Folder size={33} /><strong>{query ? "No matching items" : mode === "trash" ? "Trash is empty" : mode === "shared" && !folderId ? "Nothing shared with you yet" : mode === "outgoing" && !folderId ? "Nothing shared by you yet" : "This folder is empty"}</strong><p>{query ? "Try another search." : mode === "mine" ? "Create a folder or upload files to get started." : mode === "outgoing" && !folderId ? "Share a file or folder to see it here." : "Items will appear here when available."}</p></div>}
+        {!loading && visible.folders.map((folder) => <div className={`documents-row ${dropTarget === folder.id ? "documents-drop-target" : ""} ${draggedItem === `folder:${folder.id}` ? "documents-drag-source" : ""}`} key={folder.id} draggable={!isTrashView && folder.permission === "owner" && !busy} onDragStart={(event) => startDocumentDrag(event, { kind: "folder", id: folder.id })} onDragEnd={clearDocumentDrag} onDragOver={folder.permission === "owner" && !isTrashView ? (event) => hoverDocumentFolder(event, folder.id) : undefined} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDropTarget(null); }} onDrop={folder.permission === "owner" && !isTrashView ? (event) => dropDocumentInto(event, folder.id) : undefined}>
+          <div className="documents-row-leading">{!isTrashView && folder.permission === "owner" && <input type="checkbox" aria-label={`Select ${folder.name}`} checked={selected.some((item) => item.kind === "folder" && item.id === folder.id)} onChange={() => toggleSelected({ kind: "folder", id: folder.id })} />}<button className="documents-item-name" type="button" disabled={isTrashView} onClick={() => navigate(folder.id)}><span className="documents-item-icon folder"><Folder size={20} /></span><span title={folder.name}>{folder.name}{folder.ownerUsername && <small>Shared by @{folder.ownerUsername}</small>}{mode === "outgoing" && listing?.sharingSummaries?.[folder.id] && <small>{sharingSummary(listing.sharingSummaries[folder.id])}</small>}{query.trim() && listing?.locations?.[folder.id] && <small>{listing.locations[folder.id]}</small>}</span></button></div>
           <span className="documents-row-meta">{formatDate(folder.deletedAt ?? folder.updatedAt)}</span><span className="documents-row-meta">—</span>
-          <div className="documents-row-actions"><button type="button" title="Folder properties" aria-label={`Properties for ${folder.name}`} onClick={() => openProperties("folder", folder.id)}><Info size={16} /></button>{mode === "trash" ? <><button type="button" title="Restore folder" aria-label={`Restore ${folder.name}`} onClick={() => void restoreItem("folder", folder.id)}><RotateCcw size={16} /></button><button type="button" title="Delete folder permanently" aria-label={`Delete ${folder.name} permanently`} onClick={() => setPurgeDialog({ kind: "folder", id: folder.id, name: folder.name })}><Trash2 size={16} /></button></> : <><button type="button" title="Open folder" aria-label={`Open ${folder.name}`} onClick={() => navigate(folder.id)}><ChevronRight size={16} /></button>{folder.permission !== "viewer" && <button type="button" title="Rename folder" aria-label={`Rename ${folder.name}`} onClick={() => setNameDialog({ kind: "folder", id: folder.id, name: folder.name })}><Pencil size={16} /></button>}{folder.permission === "owner" && <><button type="button" title="Share folder" aria-label={`Share ${folder.name}`} onClick={() => setShareDialog({ kind: "folder", id: folder.id, name: folder.name })}><Share2 size={16} /></button><button type="button" title="Move folder to Trash" aria-label={`Move ${folder.name} to Trash`} onClick={() => setDeleteDialog({ kind: "folder", id: folder.id, name: folder.name })}><Trash2 size={16} /></button></>}</>}</div>
+          <div className="documents-row-actions"><button type="button" title="Folder properties" aria-label={`Properties for ${folder.name}`} onClick={() => openProperties("folder", folder.id)}><Info size={16} /></button>{isTrashView ? <><button type="button" title="Restore folder" aria-label={`Restore ${folder.name}`} onClick={() => void restoreItem("folder", folder.id)}><RotateCcw size={16} /></button><button type="button" title="Delete folder permanently" aria-label={`Delete ${folder.name} permanently`} onClick={() => setPurgeDialog({ kind: "folder", id: folder.id, name: folder.name })}><Trash2 size={16} /></button></> : <><button type="button" title="Open folder" aria-label={`Open ${folder.name}`} onClick={() => navigate(folder.id)}><ChevronRight size={16} /></button>{folder.permission !== "viewer" && <button type="button" title="Rename folder" aria-label={`Rename ${folder.name}`} onClick={() => setNameDialog({ kind: "folder", id: folder.id, name: folder.name })}><Pencil size={16} /></button>}{folder.permission === "owner" && <><button type="button" title="Share folder" aria-label={`Share ${folder.name}`} onClick={() => setShareDialog({ kind: "folder", id: folder.id, name: folder.name })}><Share2 size={16} /></button><button type="button" title="Move folder to Trash" aria-label={`Move ${folder.name} to Trash`} onClick={() => setDeleteDialog({ kind: "folder", id: folder.id, name: folder.name })}><Trash2 size={16} /></button></>}</>}</div>
         </div>)}
-        {!loading && visible.files.map((file) => <div className="documents-row" key={file.id}>
-          <button className="documents-item-name" type="button" disabled={mode === "trash"} onClick={() => setPreview(file)}><span className="documents-item-icon file">{file.contentType.startsWith("image/") ? <FileImage size={20} /> : <FileText size={20} />}</span><span title={file.name}>{file.name}{file.ownerUsername && <small>Shared by @{file.ownerUsername}</small>}</span></button>
+        {!loading && visible.files.map((file) => <div className={`documents-row ${draggedItem === `file:${file.id}` ? "documents-drag-source" : ""}`} key={file.id} draggable={!isTrashView && file.permission === "owner" && !busy} onDragStart={(event) => startDocumentDrag(event, { kind: "file", id: file.id })} onDragEnd={clearDocumentDrag}>
+          <div className="documents-row-leading">{!isTrashView && file.permission === "owner" && <input type="checkbox" aria-label={`Select ${file.name}`} checked={selected.some((item) => item.kind === "file" && item.id === file.id)} onChange={() => toggleSelected({ kind: "file", id: file.id })} />}<button className="documents-item-name" type="button" disabled={isTrashView} onClick={() => setPreview(file)}><span className="documents-item-icon file">{file.contentType.startsWith("image/") ? <FileImage size={20} /> : <FileText size={20} />}</span><span title={file.name}>{file.name}{file.ownerUsername && <small>Shared by @{file.ownerUsername}</small>}{mode === "outgoing" && listing?.sharingSummaries?.[file.id] && <small>{sharingSummary(listing.sharingSummaries[file.id])}</small>}{query.trim() && listing?.locations?.[file.id] && <small>{listing.locations[file.id]}</small>}</span></button></div>
           <span className="documents-row-meta">{formatDate(file.deletedAt ?? file.updatedAt)}</span><span className="documents-row-meta">{formatSize(file.sizeBytes)}</span>
-          <div className="documents-row-actions"><button type="button" title="File properties" aria-label={`Properties for ${file.name}`} onClick={() => openProperties("file", file.id)}><Info size={16} /></button>{mode === "trash" ? <><button type="button" title="Restore file" aria-label={`Restore ${file.name}`} onClick={() => void restoreItem("file", file.id)}><RotateCcw size={16} /></button><button type="button" title="Delete file permanently" aria-label={`Delete ${file.name} permanently`} onClick={() => setPurgeDialog({ kind: "file", id: file.id, name: file.name })}><Trash2 size={16} /></button></> : <><button type="button" title="Version history" aria-label={`Version history for ${file.name}`} onClick={() => { setVersionFile(file); setVersions([]); setVersionToDelete(null); }}><History size={16} /></button><button type="button" title="Download file" aria-label={`Download ${file.name}`} onClick={() => void downloadFile(file)}><Download size={16} /></button>{file.permission !== "viewer" && <button type="button" title="Rename file" aria-label={`Rename ${file.name}`} onClick={() => setNameDialog({ kind: "file", id: file.id, name: file.name })}><Pencil size={16} /></button>}{file.permission === "owner" && <><button type="button" title="Share file" aria-label={`Share ${file.name}`} onClick={() => setShareDialog({ kind: "file", id: file.id, name: file.name })}><Share2 size={16} /></button><button type="button" title="Move file to Trash" aria-label={`Move ${file.name} to Trash`} onClick={() => setDeleteDialog({ kind: "file", id: file.id, name: file.name })}><Trash2 size={16} /></button></>}</>}</div>
+          <div className="documents-row-actions"><button type="button" title="File properties" aria-label={`Properties for ${file.name}`} onClick={() => openProperties("file", file.id)}><Info size={16} /></button>{isTrashView ? <><button type="button" title="Restore file" aria-label={`Restore ${file.name}`} onClick={() => void restoreItem("file", file.id)}><RotateCcw size={16} /></button><button type="button" title="Delete file permanently" aria-label={`Delete ${file.name} permanently`} onClick={() => setPurgeDialog({ kind: "file", id: file.id, name: file.name })}><Trash2 size={16} /></button></> : <><button type="button" title="Version history" aria-label={`Version history for ${file.name}`} onClick={() => { setVersionFile(file); setVersions([]); setVersionToDelete(null); }}><History size={16} /></button><button type="button" title="Download file" aria-label={`Download ${file.name}`} onClick={() => void downloadFile(file)}><Download size={16} /></button>{file.permission !== "viewer" && <button type="button" title="Rename file" aria-label={`Rename ${file.name}`} onClick={() => setNameDialog({ kind: "file", id: file.id, name: file.name })}><Pencil size={16} /></button>}{file.permission === "owner" && <><button type="button" title="Share file" aria-label={`Share ${file.name}`} onClick={() => setShareDialog({ kind: "file", id: file.id, name: file.name })}><Share2 size={16} /></button><button type="button" title="Move file to Trash" aria-label={`Move ${file.name} to Trash`} onClick={() => setDeleteDialog({ kind: "file", id: file.id, name: file.name })}><Trash2 size={16} /></button></>}</>}</div>
         </div>)}
       </div>
       {busy && <p className="documents-busy" role="status"><LoaderCircle className="spin" size={16} /> Working…</p>}
       {dragging && <div className="documents-drop-hint">Drop files to upload to {listing?.currentFolder?.name ?? "My Documents"}</div>}
+
+      {destinationAction && <div className="documents-modal-backdrop"><div className="documents-modal documents-destination" role="dialog" aria-modal="true" aria-labelledby="documents-destination-title">
+        <div className="documents-modal-heading"><h2 id="documents-destination-title">{destinationAction === "move" ? "Move" : "Copy"} {selected.length} {selected.length === 1 ? "item" : "items"}</h2><button type="button" aria-label="Close destination picker" onClick={() => setDestinationAction(null)} disabled={busy}><X size={18} /></button></div>
+        <p>Choose a folder in My Documents.</p>
+        <nav className="documents-destination-path" aria-label="Destination path"><button type="button" onClick={() => setDestinationId(null)}>My Documents</button>{destinationListing?.breadcrumbs.map((folder) => <span key={folder.id}><ChevronRight size={13} /><button type="button" onClick={() => setDestinationId(folder.id)}>{folder.name}</button></span>)}</nav>
+        <div className="documents-destination-list">{destinationLoading ? <p className="documents-state"><LoaderCircle className="spin" size={16} /> Loading folders…</p> : destinationListing?.folders.length ? destinationListing.folders.map((folder) => <button type="button" key={folder.id} onClick={() => setDestinationId(folder.id)}><Folder size={17} /> {folder.name}<ChevronRight size={15} /></button>) : <p>No folders here.</p>}</div>
+        {error && <p className="documents-modal-error" role="alert">{error}</p>}
+        <div className="documents-modal-actions"><button type="button" onClick={() => setDestinationAction(null)} disabled={busy}>Cancel</button><button type="button" onClick={() => void runBulk(destinationAction, destinationId)} disabled={busy || destinationLoading || !destinationListing}>{destinationAction === "move" ? "Move here" : "Copy here"}</button></div>
+      </div></div>}
+      {bulkTrashOpen && <div className="documents-modal-backdrop"><div className="documents-modal" role="dialog" aria-modal="true" aria-labelledby="documents-bulk-trash-title">
+        <div className="documents-modal-heading"><h2 id="documents-bulk-trash-title">Move {selected.length} items to Trash?</h2><button type="button" aria-label="Close" onClick={() => setBulkTrashOpen(false)} disabled={busy}><X size={18} /></button></div>
+        <p>Selected folders will move with everything inside. You can restore them later.</p>
+        {error && <p className="documents-modal-error" role="alert">{error}</p>}
+        <div className="documents-modal-actions"><button type="button" onClick={() => setBulkTrashOpen(false)} disabled={busy}>Cancel</button><button type="button" className="danger" onClick={() => void runBulk("trash")} disabled={busy}>Move to Trash</button></div>
+      </div></div>}
 
       {nameDialog && <div className="documents-modal-backdrop"><form className="documents-modal" role="dialog" aria-modal="true" aria-labelledby="documents-name-title" onSubmit={(event) => void saveName(event)}>
         <div className="documents-modal-heading"><h2 id="documents-name-title">{nameDialog.kind === "create" ? "New folder" : `Rename ${nameDialog.kind}`}</h2><button type="button" aria-label="Close" onClick={() => setNameDialog(null)} disabled={busy}><X size={18} /></button></div>

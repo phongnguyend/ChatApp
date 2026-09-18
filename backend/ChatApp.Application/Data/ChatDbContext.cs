@@ -31,6 +31,8 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
     public DbSet<DocumentShare> DocumentShares => Set<DocumentShare>();
     public DbSet<DocumentPublicLink> DocumentPublicLinks => Set<DocumentPublicLink>();
     public DbSet<DocumentVersion> DocumentVersions => Set<DocumentVersion>();
+    public DbSet<DocumentUploadSession> DocumentUploadSessions => Set<DocumentUploadSession>();
+    public DbSet<DocumentUploadChunk> DocumentUploadChunks => Set<DocumentUploadChunk>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -141,6 +143,26 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         version.HasIndex(x => new { x.DocumentId, x.Number }).IsUnique();
         version.HasOne(x => x.Document).WithMany()
             .HasForeignKey(x => x.DocumentId).OnDelete(DeleteBehavior.Cascade);
+
+        var upload = modelBuilder.Entity<DocumentUploadSession>();
+        upload.ToTable("DocumentUploadSessions");
+        upload.HasKey(x => x.Id);
+        upload.Property(x => x.Name).HasMaxLength(255).IsRequired();
+        upload.Property(x => x.NormalizedName).HasMaxLength(255).IsRequired();
+        upload.Property(x => x.ContentType).HasMaxLength(255).IsRequired();
+        upload.Property(x => x.Fingerprint).HasMaxLength(64).IsRequired();
+        upload.Property(x => x.CreatedAt).HasPrecision(3);
+        upload.Property(x => x.ExpiresAt).HasPrecision(3);
+        upload.Property(x => x.CompletedAt).HasPrecision(3);
+        upload.HasIndex(x => new { x.OwnerUserId, x.ExpiresAt });
+
+        var uploadChunk = modelBuilder.Entity<DocumentUploadChunk>();
+        uploadChunk.ToTable("DocumentUploadChunks");
+        uploadChunk.HasKey(x => new { x.SessionId, x.Index });
+        uploadChunk.Property(x => x.StorageKey).HasMaxLength(400).IsRequired();
+        uploadChunk.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
+        uploadChunk.HasOne(x => x.Session).WithMany(x => x.Chunks)
+            .HasForeignKey(x => x.SessionId).OnDelete(DeleteBehavior.Cascade);
     }
 
     private static void ConfigureUsers(ModelBuilder modelBuilder)

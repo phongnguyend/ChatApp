@@ -14,4 +14,9 @@ public interface IUploadObjectStorage
     Task DeleteAsync(
         string key,
         CancellationToken cancellationToken);
+
+    Task WriteFromPartsAsync(
+        string key,
+        IReadOnlyList<string> partKeys,
+        CancellationToken cancellationToken);
 }

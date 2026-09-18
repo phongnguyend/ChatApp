@@ -12,7 +12,7 @@ namespace ChatApp.Api.Controllers;
 
 [ApiController]
 [Route("api/documents")]
-public sealed class DocumentsController(
+public sealed partial class DocumentsController(
     ChatDbContext db,
     IUploadObjectStorage storage,
     IConfiguration configuration,
@@ -200,7 +200,7 @@ public sealed class DocumentsController(
             name = await NextAvailableName(libraryOwnerId, folderId, name, cancellationToken);
 
         var usedBytes = await UsedStorage(libraryOwnerId, cancellationToken);
-        if (usedBytes + file.Length > StorageLimitBytes())
+        if (usedBytes + await ReservedStorage(libraryOwnerId, cancellationToken) + file.Length > StorageLimitBytes())
             return StatusCode(StatusCodes.Status413PayloadTooLarge,
                 new { code = "storage_limit", message = "This upload would exceed the owner's storage limit." });
 
@@ -294,7 +294,7 @@ public sealed class DocumentsController(
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await LockLibrary(document.OwnerUserId, cancellationToken);
         var usedBytes = await UsedStorage(document.OwnerUserId, cancellationToken);
-        if (usedBytes + file.Length > StorageLimitBytes())
+        if (usedBytes + await ReservedStorage(document.OwnerUserId, cancellationToken) + file.Length > StorageLimitBytes())
             return StatusCode(StatusCodes.Status413PayloadTooLarge,
                 new { code = "storage_limit", message = "This upload would exceed the owner's storage limit." });
         var key = $"documents/{document.OwnerUserId:N}/{Guid.NewGuid():N}";
@@ -664,6 +664,58 @@ public sealed class DocumentsController(
         return Ok(new DocumentListingDto(null, [], folders, files));
     }
 
+    [HttpGet("shared-by-me")]
+    public async Task<IActionResult> SharedByMe([FromQuery] string username,
+        CancellationToken cancellationToken)
+    {
+        var actor = await FindOwner(username, cancellationToken);
+        if (actor is null) return NotFound();
+        var peopleShares = await db.DocumentShares.AsNoTracking()
+            .Where(x => x.OwnerUserId == actor.Id && x.GranteeUser.Status == "active")
+            .Select(x => new { x.FolderId, x.FileId }).ToListAsync(cancellationToken);
+        var publicLinks = await db.DocumentPublicLinks.AsNoTracking()
+            .Where(x => x.OwnerUserId == actor.Id)
+            .Select(x => new { x.FolderId, x.FileId, x.ExpiresAt })
+            .ToListAsync(cancellationToken);
+        var folderIds = peopleShares.Where(x => x.FolderId != null).Select(x => x.FolderId!.Value)
+            .Concat(publicLinks.Where(x => x.FolderId != null).Select(x => x.FolderId!.Value))
+            .Distinct().ToArray();
+        var fileIds = peopleShares.Where(x => x.FileId != null).Select(x => x.FileId!.Value)
+            .Concat(publicLinks.Where(x => x.FileId != null).Select(x => x.FileId!.Value))
+            .Distinct().ToArray();
+        var folderCandidates = await db.DocumentFolders.AsNoTracking()
+            .Where(x => x.OwnerUserId == actor.Id && folderIds.Contains(x.Id) && x.DeletedAt == null)
+            .ToListAsync(cancellationToken);
+        var fileCandidates = await db.StoredDocuments.AsNoTracking()
+            .Where(x => x.OwnerUserId == actor.Id && fileIds.Contains(x.Id) && x.DeletedAt == null)
+            .ToListAsync(cancellationToken);
+        var folders = new List<DocumentFolderDto>();
+        var files = new List<StoredDocumentDto>();
+        var summaries = new Dictionary<Guid, DocumentSharingSummaryDto>();
+        foreach (var folder in folderCandidates)
+        {
+            if (await FolderPermission(folder, actor.Id, cancellationToken) is null) continue;
+            folders.Add(ToDto(folder));
+            var link = publicLinks.SingleOrDefault(x => x.FolderId == folder.Id);
+            summaries[folder.Id] = new DocumentSharingSummaryDto(
+                peopleShares.Count(x => x.FolderId == folder.Id), link is not null,
+                link?.ExpiresAt is { } expiry && expiry <= DateTimeOffset.UtcNow);
+        }
+        foreach (var file in fileCandidates)
+        {
+            if (await FilePermission(file, actor.Id, cancellationToken) is null) continue;
+            files.Add(ToDto(file));
+            var link = publicLinks.SingleOrDefault(x => x.FileId == file.Id);
+            summaries[file.Id] = new DocumentSharingSummaryDto(
+                peopleShares.Count(x => x.FileId == file.Id), link is not null,
+                link?.ExpiresAt is { } expiry && expiry <= DateTimeOffset.UtcNow);
+        }
+        return Ok(new DocumentListingDto(null, [], folders, files)
+        {
+            SharingSummaries = summaries,
+        });
+    }
+
     [HttpGet("shares")]
     public async Task<IActionResult> GetShares([FromQuery] string username,
         [FromQuery] string kind, [FromQuery] Guid id, CancellationToken cancellationToken)
@@ -921,6 +973,11 @@ public sealed class DocumentsController(
         return currentBytes + versionBytes;
     }
 
+    private async Task<long> ReservedStorage(Guid ownerId, CancellationToken ct) =>
+        await db.DocumentUploadSessions.Where(x => x.OwnerUserId == ownerId &&
+            x.CompletedAt == null && x.ExpiresAt > DateTimeOffset.UtcNow)
+            .SumAsync(x => (long?)x.SizeBytes, ct) ?? 0;
+
     private static DocumentVersion PreviousVersion(StoredDocument document) => new()
     {
         DocumentId = document.Id,
@@ -1119,4 +1176,10 @@ public sealed record DocumentPropertiesDto(string Kind, Guid Id, string Name,
 public sealed record DocumentListingDto(DocumentFolderDto? CurrentFolder,
     IReadOnlyList<DocumentFolderDto> Breadcrumbs,
     IReadOnlyList<DocumentFolderDto> Folders,
-    IReadOnlyList<StoredDocumentDto> Files);
+    IReadOnlyList<StoredDocumentDto> Files)
+{
+    public IReadOnlyDictionary<Guid, DocumentSharingSummaryDto>? SharingSummaries { get; init; }
+    public IReadOnlyDictionary<Guid, string>? Locations { get; init; }
+}
+public sealed record DocumentSharingSummaryDto(int PeopleCount, bool HasPublicLink,
+    bool PublicLinkExpired);

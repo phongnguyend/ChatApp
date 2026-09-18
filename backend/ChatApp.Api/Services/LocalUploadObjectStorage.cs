@@ -85,6 +85,29 @@ public sealed class LocalUploadObjectStorage(
         return Task.CompletedTask;
     }
 
+    public async Task WriteFromPartsAsync(string key,
+        IReadOnlyList<string> partKeys, CancellationToken cancellationToken)
+    {
+        var filePath = GetFullPath(key);
+        Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
+        try
+        {
+            await using var destination = new FileStream(filePath, FileMode.CreateNew,
+                FileAccess.Write, FileShare.None, 81920, useAsync: true);
+            foreach (var partKey in partKeys)
+            {
+                await using var source = new FileStream(GetFullPath(partKey), FileMode.Open,
+                    FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+                await source.CopyToAsync(destination, cancellationToken);
+            }
+        }
+        catch
+        {
+            File.Delete(filePath);
+            throw;
+        }
+    }
+
     private string GetFullPath(string key)
     {
         var normalizedKey = key

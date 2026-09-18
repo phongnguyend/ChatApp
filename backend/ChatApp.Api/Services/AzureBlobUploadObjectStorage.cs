@@ -1,6 +1,8 @@
 using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using Azure.Storage.Blobs.Specialized;
+using System.Text;
 using Microsoft.Extensions.Options;
 
 namespace ChatApp.Api.Services;
@@ -126,6 +128,25 @@ public sealed class AzureBlobUploadObjectStorage : IUploadObjectStorage
         {
             keyLock.Release();
         }
+    }
+
+    public async Task WriteFromPartsAsync(string key,
+        IReadOnlyList<string> partKeys, CancellationToken cancellationToken)
+    {
+        var blockBlob = container.GetBlockBlobClient(GetBlobName(NormalizeKey(key)));
+        var blockIds = new List<string>(partKeys.Count);
+        for (var index = 0; index < partKeys.Count; index++)
+        {
+            var part = await OpenReadAsync(partKeys[index], cancellationToken)
+                ?? throw new FileNotFoundException("An upload chunk is missing.");
+            await using (part)
+            {
+                var blockId = Convert.ToBase64String(Encoding.ASCII.GetBytes(index.ToString("D8")));
+                await blockBlob.StageBlockAsync(blockId, part, cancellationToken: cancellationToken);
+                blockIds.Add(blockId);
+            }
+        }
+        await blockBlob.CommitBlockListAsync(blockIds, cancellationToken: cancellationToken);
     }
 
     private SemaphoreSlim GetKeyLock(string key) =>
