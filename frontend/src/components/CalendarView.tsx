@@ -1,4 +1,4 @@
-import { CalendarDays, CalendarX2, Check, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Clock3, LoaderCircle, MessageCircle, Pencil, Plus, UserRound, Video, X } from "lucide-react";
+import { AlarmClock, CalendarDays, CalendarX2, Check, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Clock3, LoaderCircle, MessageCircle, Pencil, Plus, RefreshCw, UserRound, Video, X } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import "./CalendarView.css";
 
@@ -31,6 +31,16 @@ type CalendarTask = {
   permission: "owner" | "viewer" | "editor";
   assigneeDisplayName: string | null;
 };
+type CalendarReminder = {
+  id: string;
+  title: string;
+  description: string | null;
+  reminderDate: string;
+  reminderTime: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+type ReminderForm = { title: string; description: string; reminderDate: string; reminderTime: string; allDay: boolean };
 type MeetingForm = Pick<CalendarMeeting, "title" | "description" | "startDate" | "endDate" | "allDay" | "people"> & { start: string; end: string };
 
 async function readResponse<T>(response: Response): Promise<T> {
@@ -161,6 +171,7 @@ export function CalendarView({
   onBack,
   onOpenConversation,
   onOpenTasks,
+  onOpenReminders,
   hidden,
 }: {
   apiUrl: string;
@@ -168,6 +179,7 @@ export function CalendarView({
   onBack: () => void;
   onOpenConversation: (conversationId: string, action: "chat" | "join") => Promise<void>;
   onOpenTasks: () => void;
+  onOpenReminders: () => void;
   hidden: boolean;
 }) {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
@@ -176,11 +188,18 @@ export function CalendarView({
   const [isWeekPickerOpen, setIsWeekPickerOpen] = useState(false);
   const [meetings, setMeetings] = useState<CalendarMeeting[]>([]);
   const [tasks, setTasks] = useState<CalendarTask[]>([]);
+  const [reminders, setReminders] = useState<CalendarReminder[]>([]);
   const [calendarError, setCalendarError] = useState("");
   const [isLoadingMeetings, setIsLoadingMeetings] = useState(false);
   const [taskError, setTaskError] = useState("");
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
   const [selectedTask, setSelectedTask] = useState<CalendarTask | null>(null);
+  const [selectedReminder, setSelectedReminder] = useState<CalendarReminder | null>(null);
+  const [reminderForm, setReminderForm] = useState<ReminderForm | null>(null);
+  const [reminderFormError, setReminderFormError] = useState("");
+  const [isSavingReminder, setIsSavingReminder] = useState(false);
+  const [reminderError, setReminderError] = useState("");
+  const [isLoadingReminders, setIsLoadingReminders] = useState(false);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [form, setForm] = useState<MeetingForm | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -238,6 +257,25 @@ export function CalendarView({
   useEffect(() => {
     if (hidden) return;
     const controller = new AbortController();
+    setIsLoadingReminders(true);
+    setReminderError("");
+    const from = dateKey(weekStart);
+    const to = dateKey(addDays(weekStart, 6));
+    fetch(`${apiUrl}/api/user-reminders?username=${encodeURIComponent(currentUsername)}&from=${from}&to=${to}`, { signal: controller.signal })
+      .then((response) => readResponse<CalendarReminder[]>(response))
+      .then((items) => { if (!controller.signal.aborted) setReminders(items); })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setReminders([]);
+        setReminderError(error instanceof Error ? error.message : "Could not load reminders.");
+      })
+      .finally(() => { if (!controller.signal.aborted) setIsLoadingReminders(false); });
+    return () => controller.abort();
+  }, [apiUrl, currentUsername, hidden, weekStart, refreshVersion]);
+
+  useEffect(() => {
+    if (hidden) return;
+    const controller = new AbortController();
     setIsLoadingTasks(true);
     setTaskError("");
     const from = dateKey(weekStart);
@@ -281,6 +319,24 @@ export function CalendarView({
     document.addEventListener("keydown", onEscape);
     return () => document.removeEventListener("keydown", onEscape);
   }, [selectedTask]);
+
+  useEffect(() => {
+    if (!selectedReminder) return;
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedReminder(null);
+    };
+    document.addEventListener("keydown", onEscape);
+    return () => document.removeEventListener("keydown", onEscape);
+  }, [selectedReminder]);
+
+  useEffect(() => {
+    if (!reminderForm) return;
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !isSavingReminder) setReminderForm(null);
+    };
+    document.addEventListener("keydown", onEscape);
+    return () => document.removeEventListener("keydown", onEscape);
+  }, [reminderForm, isSavingReminder]);
 
   useEffect(() => {
     if (!isFormOpen || !isPeopleOpen) return;
@@ -347,6 +403,7 @@ export function CalendarView({
   }
 
   function openForm(date: string, start: string, allDay = false) {
+    setReminderForm(null);
     detailRequestRef.current += 1;
     setSelectedMeeting(null);
     setSelectedTask(null);
@@ -356,6 +413,47 @@ export function CalendarView({
     setUserResults([]);
     setIsPeopleOpen(false);
     setFormError("");
+  }
+
+  function openReminderForm(date: string) {
+    detailRequestRef.current += 1;
+    setForm(null);
+    setSelectedMeeting(null);
+    setSelectedTask(null);
+    setSelectedReminder(null);
+    setReminderForm({ title: "", description: "", reminderDate: date, reminderTime: "09:00", allDay: false });
+    setReminderFormError("");
+  }
+
+  async function saveReminder(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!reminderForm || isSavingReminder) return;
+    if (!reminderForm.title.trim() || !reminderForm.reminderDate || (!reminderForm.allDay && !reminderForm.reminderTime)) {
+      setReminderFormError("Enter a title, date, and time.");
+      return;
+    }
+    setIsSavingReminder(true);
+    setReminderFormError("");
+    try {
+      const response = await fetch(`${apiUrl}/api/user-reminders?username=${encodeURIComponent(currentUsername)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: reminderForm.title.trim(),
+          description: reminderForm.description.trim() || null,
+          reminderDate: reminderForm.reminderDate,
+          reminderTime: reminderForm.allDay ? null : `${reminderForm.reminderTime}:00`,
+        }),
+      });
+      const saved = await readResponse<CalendarReminder>(response);
+      setReminders((current) => [...current, saved]);
+      setReminderForm(null);
+      goToWeek(localDate(saved.reminderDate));
+      setSelectedReminder(saved);
+      setRefreshVersion((version) => version + 1);
+    } catch (error) {
+      setReminderFormError(error instanceof Error ? error.message : "Could not create reminder.");
+    } finally { setIsSavingReminder(false); }
   }
 
   async function openDetails(meeting: CalendarMeeting) {
@@ -492,10 +590,13 @@ export function CalendarView({
         <div>
           <p className="eyebrow">Your schedule</p>
           <h1>Calendar</h1>
-          <p className="calendar-intro">See meetings and tasks due this week.</p>
+          <p className="calendar-intro">See meetings, tasks, and reminders this week.</p>
         </div>
         <div className="calendar-toolbar-actions">
-          <button className="calendar-back" type="button" onClick={() => { setForm(null); closeDetails(); onBack(); }}>Back to chat</button>
+          <button className="calendar-back" type="button" onClick={() => { setForm(null); setReminderForm(null); setSelectedReminder(null); closeDetails(); onBack(); }}>Back to chat</button>
+          <button className="calendar-reminder-create" type="button" onClick={() => openReminderForm(today >= dateKey(weekStart) && today <= dateKey(weekEnd) ? today : dateKey(weekStart))}>
+            <AlarmClock size={17} /> New reminder
+          </button>
           <button className="calendar-create" type="button" onClick={() => openForm(today, "09:00")}>
             <Plus size={17} /> New meeting
           </button>
@@ -563,15 +664,16 @@ export function CalendarView({
           )}
         </div>
         <div className="calendar-week-actions">
-          <button type="button" onClick={() => goToWeek(new Date())}>Today</button>
+          <button type="button" onClick={() => goToWeek(new Date())}><CalendarDays size={15} aria-hidden="true" /> Today</button>
           <button type="button" aria-label="Previous week" onClick={() => goToWeek(addDays(weekStart, -7))}><ChevronLeft size={18} /></button>
           <button type="button" aria-label="Next week" onClick={() => goToWeek(addDays(weekStart, 7))}><ChevronRight size={18} /></button>
-          <button type="button" onClick={() => setRefreshVersion((version) => version + 1)}>Refresh</button>
+          <button type="button" onClick={() => setRefreshVersion((version) => version + 1)}><RefreshCw size={15} aria-hidden="true" /> Refresh</button>
         </div>
       </div>
       <div className="calendar-grid-scroll">
         {(isLoadingMeetings || calendarError) && <div className={`calendar-load-state ${calendarError ? "error" : ""}`} role={calendarError ? "alert" : "status"}>{calendarError || "Loading meetings…"}{calendarError && <button type="button" onClick={() => setRefreshVersion((version) => version + 1)}>Retry</button>}</div>}
         {(isLoadingTasks || taskError) && <div className={`calendar-load-state ${taskError ? "error" : ""}`} role={taskError ? "alert" : "status"}>{taskError || "Loading tasks…"}{taskError && <button type="button" onClick={() => setRefreshVersion((version) => version + 1)}>Retry</button>}</div>}
+        {(isLoadingReminders || reminderError) && <div className={`calendar-load-state ${reminderError ? "error" : ""}`} role={reminderError ? "alert" : "status"}>{reminderError || "Loading reminders…"}{reminderError && <button type="button" onClick={() => setRefreshVersion((version) => version + 1)}>Retry</button>}</div>}
         <div className="calendar-grid">
           <div className="calendar-time-heading" aria-hidden="true">GMT{new Date().getTimezoneOffset() <= 0 ? "+" : "-"}{Math.abs(new Date().getTimezoneOffset() / 60)}</div>
           {weekDays.map((date) => {
@@ -580,6 +682,7 @@ export function CalendarView({
               <div className={`calendar-day-heading ${key === today ? "today" : ""}`} key={key}>
                 <span>{new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(date)}</span>
                 <strong>{date.getDate()}</strong>
+                <button className="calendar-day-reminder-create" type="button" title={`Create reminder on ${key}`} aria-label={`Create reminder on ${key}`} onClick={() => openReminderForm(key)}><AlarmClock size={14} /></button>
               </div>
             );
           })}
@@ -621,6 +724,10 @@ export function CalendarView({
                     <span>{task.title}</span>
                   </button>
                 ))}
+                {reminders.filter((reminder) => reminder.reminderDate === key &&
+                  (reminder.reminderTime === null || minutesFromTime(reminder.reminderTime) < FIRST_HOUR * 60 || minutesFromTime(reminder.reminderTime) >= LAST_HOUR * 60)).map((reminder) => (
+                  <button type="button" className="calendar-reminder" key={reminder.id} title={`${reminder.title} · ${reminder.reminderTime ? reminder.reminderTime.slice(0, 5) : "All day"}`} onClick={() => setSelectedReminder(reminder)}><AlarmClock size={12} aria-hidden="true" /><span>{reminder.title}</span></button>
+                ))}
               </div>
             );
           })}
@@ -637,6 +744,9 @@ export function CalendarView({
                     const start = minutesFromTime(meeting.start ?? "00:00");
                     return start >= minutes && start < minutes + SLOT_MINUTES;
                   });
+                  const slotReminders = reminders.filter((reminder) => reminder.reminderDate === key && reminder.reminderTime !== null &&
+                    minutesFromTime(reminder.reminderTime) >= minutes && minutesFromTime(reminder.reminderTime) < minutes + SLOT_MINUTES);
+                  const slotItemCount = slotMeetings.length + slotReminders.length;
                   return (
                     <div
                       className={`calendar-slot ${slotMeetings.length > 0 ? "has-meeting" : ""}`}
@@ -644,11 +754,12 @@ export function CalendarView({
                     >
                       <button className="calendar-slot-create" type="button" aria-label={`${new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric" }).format(date)}, ${timeLabel(minutes)}. Create meeting`} onClick={() => openForm(key, timeValue(minutes))} />
                       {slotMeetings.map((meeting, index) => (
-                        <button type="button" className={`calendar-meeting ${meeting.status === "cancelled" ? "cancelled" : ""}`} style={{ left: `${index * 100 / slotMeetings.length}%`, width: `${100 / slotMeetings.length}%`, right: "auto" }} key={meeting.id} title={`${meeting.title} · ${meeting.status === "cancelled" ? "Cancelled · " : ""}${meeting.start}–${meeting.end}`} onClick={() => void openDetails(meeting)}>
+                        <button type="button" className={`calendar-meeting ${meeting.status === "cancelled" ? "cancelled" : ""}`} style={{ left: `${index * 100 / slotItemCount}%`, width: `${100 / slotItemCount}%`, right: "auto" }} key={meeting.id} title={`${meeting.title} · ${meeting.status === "cancelled" ? "Cancelled · " : ""}${meeting.start}–${meeting.end}`} onClick={() => void openDetails(meeting)}>
                           <strong>{meeting.title}</strong>
                           <small>{meeting.start}–{meeting.end}</small>
                         </button>
                       ))}
+                      {slotReminders.map((reminder, index) => <button type="button" className="calendar-timed-reminder" style={{ left: `${(slotMeetings.length + index) * 100 / slotItemCount}%`, width: `${100 / slotItemCount}%` }} key={reminder.id} title={`${reminder.title} · ${reminder.reminderTime?.slice(0, 5)}`} onClick={() => setSelectedReminder(reminder)}><strong><AlarmClock size={10} aria-hidden="true" /> {reminder.title}</strong><small>{reminder.reminderTime?.slice(0, 5)}</small></button>)}
                     </div>
                   );
                 })}
@@ -657,9 +768,28 @@ export function CalendarView({
           })}
         </div>
       </div>
-      <div className="calendar-footnote">Meetings and tasks with due dates appear here. Cancelled meetings remain in the calendar.</div>
+      <div className="calendar-footnote">Meetings, tasks with due dates, and reminders appear here. Cancelled meetings remain in the calendar.</div>
         </div>
       </div>
+
+      {reminderForm && (
+        <div className="calendar-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !isSavingReminder) setReminderForm(null); }}>
+          <form className="calendar-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-reminder-form-title" onSubmit={(event) => void saveReminder(event)}>
+            <div className="calendar-dialog-heading"><div><p className="eyebrow">Your schedule</p><h2 id="calendar-reminder-form-title">New reminder</h2></div><button type="button" aria-label="Close reminder form" disabled={isSavingReminder} onClick={() => setReminderForm(null)}><X size={19} /></button></div>
+            <label htmlFor="calendar-reminder-title">Title</label>
+            <input id="calendar-reminder-title" autoFocus required maxLength={200} placeholder="What do you need to remember?" value={reminderForm.title} onChange={(event) => setReminderForm({ ...reminderForm, title: event.target.value })} />
+            <div className="calendar-reminder-fields">
+              <div><label htmlFor="calendar-reminder-date">Date</label><input id="calendar-reminder-date" type="date" required value={reminderForm.reminderDate} onChange={(event) => setReminderForm({ ...reminderForm, reminderDate: event.target.value })} /></div>
+              <div><label htmlFor="calendar-reminder-time">Time</label><input id="calendar-reminder-time" type="time" required={!reminderForm.allDay} disabled={reminderForm.allDay} value={reminderForm.reminderTime} onChange={(event) => setReminderForm({ ...reminderForm, reminderTime: event.target.value })} /></div>
+            </div>
+            <label className="calendar-all-day-toggle"><input type="checkbox" checked={reminderForm.allDay} onChange={(event) => setReminderForm({ ...reminderForm, allDay: event.target.checked })} /><span>All day</span></label>
+            <label htmlFor="calendar-reminder-description">Description <span className="calendar-optional">Optional</span></label>
+            <textarea id="calendar-reminder-description" rows={4} maxLength={4000} placeholder="Add details about this reminder" value={reminderForm.description} onChange={(event) => setReminderForm({ ...reminderForm, description: event.target.value })} />
+            {reminderFormError && <p className="calendar-form-error" role="alert">{reminderFormError}</p>}
+            <div className="calendar-dialog-actions"><button type="button" disabled={isSavingReminder} onClick={() => setReminderForm(null)}>Cancel</button><button type="submit" disabled={isSavingReminder}>{isSavingReminder ? <LoaderCircle className="spin" size={16} /> : <AlarmClock size={16} />} {isSavingReminder ? "Creating..." : "Create reminder"}</button></div>
+          </form>
+        </div>
+      )}
 
       {form && (
         <div className="calendar-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !isSaving) setForm(null); }}>
@@ -839,6 +969,16 @@ export function CalendarView({
               <button type="button" onClick={() => { setSelectedTask(null); onOpenTasks(); }}><ClipboardList size={14} aria-hidden="true" />Open tasks</button>
               <button type="button" onClick={() => setSelectedTask(null)}><X size={14} aria-hidden="true" />Close</button>
             </div>
+          </div>
+        </div>
+      )}
+      {selectedReminder && !form && !selectedMeeting && !selectedTask && (
+        <div className="calendar-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedReminder(null); }}>
+          <div className="calendar-dialog calendar-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-reminder-detail-title">
+            <div className="calendar-dialog-heading"><div><p className="eyebrow">Reminder</p><h2 id="calendar-reminder-detail-title">{selectedReminder.title}</h2></div><button type="button" aria-label="Close reminder details" onClick={() => setSelectedReminder(null)}><X size={19} /></button></div>
+            <p className="calendar-detail-line"><CalendarDays size={16} /> {new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(localDate(selectedReminder.reminderDate))} <Clock3 size={16} /> {selectedReminder.reminderTime ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(2000, 0, 1, Number(selectedReminder.reminderTime.slice(0, 2)), Number(selectedReminder.reminderTime.slice(3, 5)))) : "All day"}</p>
+            {selectedReminder.description && <div className="calendar-detail-section"><strong>Description</strong><p className="calendar-detail-description">{selectedReminder.description}</p></div>}
+            <div className="calendar-dialog-actions"><button type="button" onClick={() => { setSelectedReminder(null); onOpenReminders(); }}><AlarmClock size={14} aria-hidden="true" />Open reminders</button><button type="button" onClick={() => setSelectedReminder(null)}><X size={14} aria-hidden="true" />Close</button></div>
           </div>
         </div>
       )}

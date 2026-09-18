@@ -175,6 +175,9 @@ html[data-theme='dark'] .mini-month-days button.selected-week.week-end { border-
   margin-bottom: 5px;
 }
 
+.calendar-toolbar-actions { justify-content: flex-end; flex-wrap: wrap; }
+.calendar-toolbar-actions .calendar-reminder-create { display: inline-flex; align-items: center; gap: 6px; }
+
 .calendar-toolbar h1 {
   margin: 0;
   font-family: 'Manrope', sans-serif;
@@ -303,8 +306,10 @@ html[data-theme='dark'] .calendar-month-grid button.active {
 .calendar-week-actions button {
   min-width: 34px;
   padding: 0 8px;
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
 }
 
 .calendar-toolbar-actions button:hover,
@@ -370,6 +375,8 @@ html[data-theme='dark'] .calendar-month-grid button.active {
   color: white;
   background: #ca5b47;
 }
+.calendar-day-reminder-create { width: 24px; height: 24px; margin-left: auto; padding: 0; border: 0; border-radius: 6px; display: grid; place-items: center; color: var(--muted); background: transparent; cursor: pointer; }
+.calendar-day-reminder-create:hover, .calendar-day-reminder-create:focus-visible { color: #aa7a26; background: color-mix(in srgb, #d5a449 20%, var(--paper)); }
 
 .calendar-all-day-label,
 .calendar-day-events {
@@ -468,6 +475,27 @@ html[data-theme='dark'] .calendar-month-grid button.active {
 .calendar-due-task > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .calendar-due-task:hover, .calendar-due-task:focus-visible { outline: 2px solid #5683b8; outline-offset: -2px; }
 .calendar-due-task.completed { opacity: .62; text-decoration: line-through; }
+
+.calendar-reminder {
+  position: relative;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 0;
+  border-left: 3px solid #aa7a26;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink);
+  background: color-mix(in srgb, #d5a449 22%, var(--paper));
+  font-size: 10px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.calendar-reminder > svg { flex: 0 0 auto; }
+.calendar-reminder > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-reminder:hover, .calendar-reminder:focus-visible { outline: 2px solid #aa7a26; outline-offset: -2px; }
 
 .calendar-time-column {
   position: sticky;
@@ -568,6 +596,28 @@ html[data-theme='dark'] .calendar-month-grid button.active {
 
 .calendar-meeting strong { font-size: 10px; }
 .calendar-meeting small { font-size: 8px; }
+
+.calendar-timed-reminder {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  padding: 3px 6px;
+  border: 0;
+  border-left: 3px solid #aa7a26;
+  border-radius: 5px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--ink);
+  background: color-mix(in srgb, #d5a449 24%, var(--paper));
+  text-align: left;
+  cursor: pointer;
+}
+.calendar-timed-reminder strong,
+.calendar-timed-reminder small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-timed-reminder strong { display: flex; align-items: center; gap: 2px; font-size: 10px; }
+.calendar-timed-reminder small { font-size: 8px; }
+.calendar-timed-reminder:hover, .calendar-timed-reminder:focus-visible { outline: 2px solid #aa7a26; outline-offset: -2px; }
 
 .calendar-more {
   position: absolute;
@@ -696,6 +746,8 @@ html[data-theme='dark'] .calendar-month-grid button.active {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 9px;
 }
+.calendar-reminder-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-bottom: 16px; }
+.calendar-reminder-fields input { width: 100%; }
 
 .calendar-dialog .calendar-all-day-toggle {
   margin: 0 0 17px;
@@ -921,5 +973,6 @@ html[data-theme='dark'] .calendar-month-grid button.active {
   .calendar-month-jump { padding: 10px 0 0; border-left: 0; border-top: 1px solid var(--line); }
   .calendar-intro { line-height: 1.4; }
   .calendar-date-range,
-  .calendar-time-range { grid-template-columns: 1fr; }
+  .calendar-time-range,
+  .calendar-reminder-fields { grid-template-columns: 1fr; }
 }

@@ -27,6 +27,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
     public DbSet<ScheduledMeetingParticipant> ScheduledMeetingParticipants =>
         Set<ScheduledMeetingParticipant>();
     public DbSet<UserTask> UserTasks => Set<UserTask>();
+    public DbSet<UserReminder> UserReminders => Set<UserReminder>();
     public DbSet<UserTaskShare> UserTaskShares => Set<UserTaskShare>();
     public DbSet<UserNote> UserNotes => Set<UserNote>();
     public DbSet<UserNoteShare> UserNoteShares => Set<UserNoteShare>();
@@ -57,6 +58,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         ConfigureLiveStreams(modelBuilder);
         ConfigureScheduledMeetings(modelBuilder);
         ConfigureUserTasks(modelBuilder);
+        ConfigureUserReminders(modelBuilder);
         ConfigureUserNotes(modelBuilder);
         ConfigureDocuments(modelBuilder);
     }
@@ -86,6 +88,22 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
             .HasForeignKey(x => x.NoteId).OnDelete(DeleteBehavior.Cascade);
         share.HasOne(x => x.GranteeUser).WithMany()
             .HasForeignKey(x => x.GranteeUserId).OnDelete(DeleteBehavior.NoAction);
+    }
+
+    private static void ConfigureUserReminders(ModelBuilder modelBuilder)
+    {
+        var reminder = modelBuilder.Entity<UserReminder>();
+        reminder.ToTable("UserReminders");
+        reminder.HasKey(x => x.Id);
+        reminder.Property(x => x.Title).HasMaxLength(200).IsRequired();
+        reminder.Property(x => x.Description).HasMaxLength(4000);
+        reminder.Property(x => x.ReminderDate).HasColumnType("date");
+        reminder.Property(x => x.ReminderTime).HasColumnType("time(0)");
+        reminder.Property(x => x.CreatedAt).HasPrecision(3);
+        reminder.Property(x => x.UpdatedAt).HasPrecision(3);
+        reminder.HasIndex(x => new { x.UserId, x.ReminderDate, x.ReminderTime });
+        reminder.HasOne(x => x.User).WithMany()
+            .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
     }
 
     private static void ConfigureUserTasks(ModelBuilder modelBuilder)

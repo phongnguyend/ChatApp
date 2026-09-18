@@ -93,7 +93,7 @@
 .documents-breadcrumbs button.documents-drop-target { color: #ca5b47; background: color-mix(in srgb, #ca5b47 16%, var(--paper)); outline: 2px dashed #ca5b47; outline-offset: -2px; }
 .documents-list { min-height: 0; flex: 1; overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
 .documents-list.dragging { outline: 3px dashed var(--coral); outline-offset: -7px; }
-.documents-list-heading, .documents-row { min-width: 754px; display: grid; grid-template-columns: minmax(210px, 1fr) 105px 65px minmax(300px, 390px); align-items: center; column-gap: 12px; }
+.documents-list-heading, .documents-row { min-width: 1100px; display: grid; grid-template-columns: minmax(210px, 1fr) 105px 65px 640px; align-items: center; column-gap: 12px; }
 .documents-list-heading { position: sticky; top: 0; z-index: 1; min-height: 40px; padding: 0 15px; border-bottom: 1px solid var(--line); color: var(--muted); background: var(--paper); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
 .documents-list-heading span:last-child { text-align: right; }
 .documents-row { min-height: 58px; padding: 0 15px; border-bottom: 1px solid var(--line); }
@@ -112,7 +112,7 @@
 .documents-item-icon.folder { color: #b88217; background: color-mix(in srgb, #e7ac42 18%, var(--paper)); }
 .documents-item-icon.file { color: #3570b0; background: color-mix(in srgb, #5e9fe0 18%, var(--paper)); }
 .documents-row-meta { color: var(--muted); font-size: 11px; }
-.documents-row-actions { justify-content: flex-end; flex-wrap: wrap; gap: 4px; padding: 7px 0; }
+.documents-row-actions { justify-content: flex-end; flex-wrap: nowrap; gap: 4px; padding: 7px 0; }
 .documents-row-actions button { min-height: 30px; padding: 0 7px; border: 1px solid var(--line); border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; color: var(--ink); background: transparent; font-size: 10px; font-weight: 700; white-space: nowrap; cursor: pointer; }
 .documents-row-actions button svg { flex: 0 0 auto; }
 .documents-row-actions button:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, var(--paper)); }

@@ -5,6 +5,7 @@ import {
   type HubConnection,
 } from "@microsoft/signalr";
 import {
+  AlarmClock,
   Ban,
   Bell,
   Check,
@@ -83,6 +84,7 @@ import { DocumentsStorageUsage } from "./components/DocumentsStorageUsage";
 import { StorageManagementView } from "./components/StorageManagementView";
 import { TasksView } from "./components/TasksView";
 import { NotesView } from "./components/NotesView";
+import { RemindersView } from "./components/RemindersView";
 import {
   type ChatAttachment,
   MessageAttachmentList,
@@ -1195,6 +1197,7 @@ function ChatApp({
   const [isStorageManagementOpen, setIsStorageManagementOpen] = useState(false);
   const [isTasksOpen, setIsTasksOpen] = useState(false);
   const [isNotesOpen, setIsNotesOpen] = useState(false);
+  const [isRemindersOpen, setIsRemindersOpen] = useState(false);
   const [isLiveStreamsOpen, setIsLiveStreamsOpen] = useState(false);
   const [requestedLiveStream, setRequestedLiveStream] =
     useState<LiveStream | null>(null);
@@ -2943,6 +2946,7 @@ function ChatApp({
       setIsStorageManagementOpen(false);
       setIsTasksOpen(false);
       setIsNotesOpen(false);
+      setIsRemindersOpen(false);
       setNewGroupTitle("");
       setSelectedUsers([]);
       setUserQuery("");
@@ -2990,6 +2994,7 @@ function ChatApp({
       setIsStorageManagementOpen(false);
       setIsTasksOpen(false);
       setIsNotesOpen(false);
+      setIsRemindersOpen(false);
       setConversationTab("chat");
       setConversationDialog(null);
       setUserQuery("");
@@ -3103,6 +3108,7 @@ function ChatApp({
     setIsStorageManagementOpen(false);
     setIsTasksOpen(false);
     setIsNotesOpen(false);
+    setIsRemindersOpen(false);
     setIsSidebarOpen(false);
   }
 
@@ -3205,6 +3211,7 @@ function ChatApp({
       setIsStorageManagementOpen(false);
       setIsTasksOpen(false);
       setIsNotesOpen(false);
+      setIsRemindersOpen(false);
       setConversationTab("chat");
       setConversationDialog(null);
       setNewGroupTitle("");
@@ -3617,7 +3624,7 @@ function ChatApp({
   const isOnline = status === "connected";
 
   return (
-    <main className={`chat-shell ${isCalendarOpen ? "calendar-open" : ""} ${isDocumentsOpen ? "documents-open" : ""} ${isStorageManagementOpen ? "storage-management-open" : ""} ${isTasksOpen ? "tasks-open" : ""} ${isNotesOpen ? "notes-open" : ""}`}>
+    <main className={`chat-shell ${isCalendarOpen ? "calendar-open" : ""} ${isDocumentsOpen ? "documents-open" : ""} ${isStorageManagementOpen ? "storage-management-open" : ""} ${isTasksOpen ? "tasks-open" : ""} ${isNotesOpen ? "notes-open" : ""} ${isRemindersOpen ? "reminders-open" : ""}`}>
       <button
         className={`mobile-scrim ${isSidebarOpen ? "visible" : ""}`}
         aria-label="Close conversation menu"
@@ -3641,17 +3648,18 @@ function ChatApp({
 
         <nav className="sidebar-rail" aria-label="Main sections">
           <button
-            className={`sidebar-rail-button ${!isCalendarOpen && !isDocumentsOpen && !isStorageManagementOpen && !isTasksOpen && !isNotesOpen ? "active" : ""}`}
+            className={`sidebar-rail-button ${!isCalendarOpen && !isDocumentsOpen && !isStorageManagementOpen && !isTasksOpen && !isNotesOpen && !isRemindersOpen ? "active" : ""}`}
             type="button"
             aria-label="Chat"
             title="Chat"
-            aria-current={!isCalendarOpen && !isDocumentsOpen && !isStorageManagementOpen && !isTasksOpen && !isNotesOpen ? "page" : undefined}
+            aria-current={!isCalendarOpen && !isDocumentsOpen && !isStorageManagementOpen && !isTasksOpen && !isNotesOpen && !isRemindersOpen ? "page" : undefined}
             onClick={() => {
               setIsCalendarOpen(false);
               setIsDocumentsOpen(false);
               setIsStorageManagementOpen(false);
               setIsTasksOpen(false);
               setIsNotesOpen(false);
+              setIsRemindersOpen(false);
               setIsSidebarOpen(false);
             }}
           ><MessageCircleMore size={21} /></button>
@@ -3667,6 +3675,7 @@ function ChatApp({
               setIsStorageManagementOpen(false);
               setIsTasksOpen(false);
               setIsNotesOpen(false);
+              setIsRemindersOpen(false);
               setIsSidebarOpen(false);
             }}
           ><CalendarDays size={21} /></button>
@@ -3682,6 +3691,7 @@ function ChatApp({
               setIsStorageManagementOpen(false);
               setIsTasksOpen(false);
               setIsNotesOpen(false);
+              setIsRemindersOpen(false);
               setIsSidebarOpen(false);
             }}
           ><FolderOpen size={21} /></button>
@@ -3697,9 +3707,26 @@ function ChatApp({
               setIsDocumentsOpen(false);
               setIsStorageManagementOpen(false);
               setIsNotesOpen(false);
+              setIsRemindersOpen(false);
               setIsSidebarOpen(false);
             }}
           ><ClipboardList size={21} /></button>
+          <button
+            className={`sidebar-rail-button ${isRemindersOpen ? "active" : ""}`}
+            type="button"
+            aria-label="Reminders"
+            title="Reminders"
+            aria-current={isRemindersOpen ? "page" : undefined}
+            onClick={() => {
+              setIsRemindersOpen(true);
+              setIsCalendarOpen(false);
+              setIsDocumentsOpen(false);
+              setIsStorageManagementOpen(false);
+              setIsTasksOpen(false);
+              setIsNotesOpen(false);
+              setIsSidebarOpen(false);
+            }}
+          ><AlarmClock size={21} /></button>
           <button
             className={`sidebar-rail-button ${isNotesOpen ? "active" : ""}`}
             type="button"
@@ -3712,6 +3739,7 @@ function ChatApp({
               setIsDocumentsOpen(false);
               setIsTasksOpen(false);
               setIsStorageManagementOpen(false);
+              setIsRemindersOpen(false);
               setIsSidebarOpen(false);
             }}
           ><NotebookPen size={21} /></button>
@@ -3727,6 +3755,7 @@ function ChatApp({
               setIsDocumentsOpen(false);
               setIsTasksOpen(false);
               setIsNotesOpen(false);
+              setIsRemindersOpen(false);
               setIsSidebarOpen(false);
             }}
           ><HardDrive size={21} /></button>
@@ -3771,6 +3800,7 @@ function ChatApp({
                     setIsStorageManagementOpen(false);
                     setIsTasksOpen(false);
                     setIsNotesOpen(false);
+                    setIsRemindersOpen(false);
                     setIsSidebarOpen(false);
                   }}
                 >
@@ -3945,7 +3975,8 @@ function ChatApp({
         currentUsername={user.username}
         onBack={() => setIsCalendarOpen(false)}
         onOpenConversation={openCalendarConversation}
-        onOpenTasks={() => { setIsCalendarOpen(false); setIsNotesOpen(false); setIsTasksOpen(true); }}
+        onOpenTasks={() => { setIsCalendarOpen(false); setIsNotesOpen(false); setIsRemindersOpen(false); setIsTasksOpen(true); }}
+        onOpenReminders={() => { setIsCalendarOpen(false); setIsTasksOpen(false); setIsNotesOpen(false); setIsRemindersOpen(true); }}
         hidden={!isCalendarOpen}
       />
       <DocumentsView
@@ -3967,6 +3998,7 @@ function ChatApp({
           setIsStorageManagementOpen(false);
           setIsTasksOpen(false);
           setIsNotesOpen(false);
+          setIsRemindersOpen(false);
           setIsSidebarOpen(false);
         }}
         hidden={!isDocumentsOpen}
@@ -3988,6 +4020,12 @@ function ChatApp({
         currentUsername={user.username}
         onBack={() => setIsNotesOpen(false)}
         hidden={!isNotesOpen}
+      />
+      <RemindersView
+        apiUrl={API_URL}
+        currentUsername={user.username}
+        onBack={() => setIsRemindersOpen(false)}
+        hidden={!isRemindersOpen}
       />
 
       <section
@@ -6548,6 +6586,7 @@ function ChatApp({
           setIsStorageManagementOpen(false);
           setIsTasksOpen(false);
           setIsNotesOpen(false);
+          setIsRemindersOpen(false);
           setIsSidebarOpen(false);
         }}
       />
