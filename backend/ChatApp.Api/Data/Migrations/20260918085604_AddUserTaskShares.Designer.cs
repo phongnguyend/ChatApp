@@ -4,6 +4,7 @@ using ChatApp.Application.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ChatApp.Api.Data.Migrations
 {
     [DbContext(typeof(ChatDbContext))]
-    partial class ChatDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260918085604_AddUserTaskShares")]
+    partial class AddUserTaskShares
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1196,9 +1199,6 @@ namespace ChatApp.Api.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid?>("AssigneeUserId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasPrecision(3)
                         .HasColumnType("datetimeoffset(3)");
@@ -1235,8 +1235,6 @@ namespace ChatApp.Api.Data.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("AssigneeUserId");
 
                     b.HasIndex("UserId", "IsCompleted", "DueDate");
 
@@ -1749,18 +1747,11 @@ namespace ChatApp.Api.Data.Migrations
 
             modelBuilder.Entity("ChatApp.Application.Models.UserTask", b =>
                 {
-                    b.HasOne("ChatApp.Application.Models.ChatUser", "AssigneeUser")
-                        .WithMany()
-                        .HasForeignKey("AssigneeUserId")
-                        .OnDelete(DeleteBehavior.NoAction);
-
                     b.HasOne("ChatApp.Application.Models.ChatUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("AssigneeUser");
 
                     b.Navigation("User");
                 });

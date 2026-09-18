@@ -27,6 +27,9 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
     public DbSet<ScheduledMeetingParticipant> ScheduledMeetingParticipants =>
         Set<ScheduledMeetingParticipant>();
     public DbSet<UserTask> UserTasks => Set<UserTask>();
+    public DbSet<UserTaskShare> UserTaskShares => Set<UserTaskShare>();
+    public DbSet<UserNote> UserNotes => Set<UserNote>();
+    public DbSet<UserNoteShare> UserNoteShares => Set<UserNoteShare>();
     public DbSet<DocumentFolder> DocumentFolders => Set<DocumentFolder>();
     public DbSet<StoredDocument> StoredDocuments => Set<StoredDocument>();
     public DbSet<DocumentShare> DocumentShares => Set<DocumentShare>();
@@ -54,7 +57,35 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         ConfigureLiveStreams(modelBuilder);
         ConfigureScheduledMeetings(modelBuilder);
         ConfigureUserTasks(modelBuilder);
+        ConfigureUserNotes(modelBuilder);
         ConfigureDocuments(modelBuilder);
+    }
+
+    private static void ConfigureUserNotes(ModelBuilder modelBuilder)
+    {
+        var note = modelBuilder.Entity<UserNote>();
+        note.ToTable("UserNotes");
+        note.HasKey(x => x.Id);
+        note.Property(x => x.Title).HasMaxLength(200).IsRequired();
+        note.Property(x => x.Content).HasMaxLength(20000).IsRequired();
+        note.Property(x => x.CreatedAt).HasPrecision(3);
+        note.Property(x => x.UpdatedAt).HasPrecision(3);
+        note.HasIndex(x => new { x.UserId, x.IsPinned, x.UpdatedAt });
+        note.HasOne(x => x.User).WithMany()
+            .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+
+        var share = modelBuilder.Entity<UserNoteShare>();
+        share.ToTable("UserNoteShares", table => table.HasCheckConstraint(
+            "CK_UserNoteShares_Permission", "[Permission] IN ('viewer', 'editor')"));
+        share.HasKey(x => x.Id);
+        share.Property(x => x.Permission).HasMaxLength(10).IsRequired();
+        share.Property(x => x.CreatedAt).HasPrecision(3);
+        share.HasIndex(x => new { x.NoteId, x.GranteeUserId }).IsUnique();
+        share.HasIndex(x => x.GranteeUserId);
+        share.HasOne(x => x.Note).WithMany(x => x.Shares)
+            .HasForeignKey(x => x.NoteId).OnDelete(DeleteBehavior.Cascade);
+        share.HasOne(x => x.GranteeUser).WithMany()
+            .HasForeignKey(x => x.GranteeUserId).OnDelete(DeleteBehavior.NoAction);
     }
 
     private static void ConfigureUserTasks(ModelBuilder modelBuilder)
@@ -72,6 +103,21 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         task.HasIndex(x => new { x.UserId, x.IsCompleted, x.DueDate });
         task.HasOne(x => x.User).WithMany()
             .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        task.HasOne(x => x.AssigneeUser).WithMany()
+            .HasForeignKey(x => x.AssigneeUserId).OnDelete(DeleteBehavior.NoAction);
+
+        var share = modelBuilder.Entity<UserTaskShare>();
+        share.ToTable("UserTaskShares", table => table.HasCheckConstraint(
+            "CK_UserTaskShares_Permission", "[Permission] IN ('viewer', 'editor')"));
+        share.HasKey(x => x.Id);
+        share.Property(x => x.Permission).HasMaxLength(10).IsRequired();
+        share.Property(x => x.CreatedAt).HasPrecision(3);
+        share.HasIndex(x => new { x.TaskId, x.GranteeUserId }).IsUnique();
+        share.HasIndex(x => x.GranteeUserId);
+        share.HasOne(x => x.Task).WithMany(x => x.Shares)
+            .HasForeignKey(x => x.TaskId).OnDelete(DeleteBehavior.Cascade);
+        share.HasOne(x => x.GranteeUser).WithMany()
+            .HasForeignKey(x => x.GranteeUserId).OnDelete(DeleteBehavior.NoAction);
     }
 
     private static void ConfigureDocuments(ModelBuilder modelBuilder)

@@ -34,6 +34,7 @@ import {
   Monitor,
   Moon,
   Navigation,
+  NotebookPen,
   Pencil,
   Phone,
   PhoneOff,
@@ -81,6 +82,7 @@ import { PublicDocumentsView } from "./components/PublicDocumentsView";
 import { DocumentsStorageUsage } from "./components/DocumentsStorageUsage";
 import { StorageManagementView } from "./components/StorageManagementView";
 import { TasksView } from "./components/TasksView";
+import { NotesView } from "./components/NotesView";
 import {
   type ChatAttachment,
   MessageAttachmentList,
@@ -1192,6 +1194,7 @@ function ChatApp({
   const [isDocumentsOpen, setIsDocumentsOpen] = useState(false);
   const [isStorageManagementOpen, setIsStorageManagementOpen] = useState(false);
   const [isTasksOpen, setIsTasksOpen] = useState(false);
+  const [isNotesOpen, setIsNotesOpen] = useState(false);
   const [isLiveStreamsOpen, setIsLiveStreamsOpen] = useState(false);
   const [requestedLiveStream, setRequestedLiveStream] =
     useState<LiveStream | null>(null);
@@ -2939,6 +2942,7 @@ function ChatApp({
       setActiveId(conversation.id);
       setIsStorageManagementOpen(false);
       setIsTasksOpen(false);
+      setIsNotesOpen(false);
       setNewGroupTitle("");
       setSelectedUsers([]);
       setUserQuery("");
@@ -2985,6 +2989,7 @@ function ChatApp({
       setActiveId(conversation.id);
       setIsStorageManagementOpen(false);
       setIsTasksOpen(false);
+      setIsNotesOpen(false);
       setConversationTab("chat");
       setConversationDialog(null);
       setUserQuery("");
@@ -3097,6 +3102,7 @@ function ChatApp({
     setIsCalendarOpen(false);
     setIsStorageManagementOpen(false);
     setIsTasksOpen(false);
+    setIsNotesOpen(false);
     setIsSidebarOpen(false);
   }
 
@@ -3198,6 +3204,7 @@ function ChatApp({
       setActiveId(created.conversationId);
       setIsStorageManagementOpen(false);
       setIsTasksOpen(false);
+      setIsNotesOpen(false);
       setConversationTab("chat");
       setConversationDialog(null);
       setNewGroupTitle("");
@@ -3610,7 +3617,7 @@ function ChatApp({
   const isOnline = status === "connected";
 
   return (
-    <main className={`chat-shell ${isCalendarOpen ? "calendar-open" : ""} ${isDocumentsOpen ? "documents-open" : ""} ${isStorageManagementOpen ? "storage-management-open" : ""} ${isTasksOpen ? "tasks-open" : ""}`}>
+    <main className={`chat-shell ${isCalendarOpen ? "calendar-open" : ""} ${isDocumentsOpen ? "documents-open" : ""} ${isStorageManagementOpen ? "storage-management-open" : ""} ${isTasksOpen ? "tasks-open" : ""} ${isNotesOpen ? "notes-open" : ""}`}>
       <button
         className={`mobile-scrim ${isSidebarOpen ? "visible" : ""}`}
         aria-label="Close conversation menu"
@@ -3634,16 +3641,17 @@ function ChatApp({
 
         <nav className="sidebar-rail" aria-label="Main sections">
           <button
-            className={`sidebar-rail-button ${!isCalendarOpen && !isDocumentsOpen && !isStorageManagementOpen && !isTasksOpen ? "active" : ""}`}
+            className={`sidebar-rail-button ${!isCalendarOpen && !isDocumentsOpen && !isStorageManagementOpen && !isTasksOpen && !isNotesOpen ? "active" : ""}`}
             type="button"
             aria-label="Chat"
             title="Chat"
-            aria-current={!isCalendarOpen && !isDocumentsOpen && !isStorageManagementOpen && !isTasksOpen ? "page" : undefined}
+            aria-current={!isCalendarOpen && !isDocumentsOpen && !isStorageManagementOpen && !isTasksOpen && !isNotesOpen ? "page" : undefined}
             onClick={() => {
               setIsCalendarOpen(false);
               setIsDocumentsOpen(false);
               setIsStorageManagementOpen(false);
               setIsTasksOpen(false);
+              setIsNotesOpen(false);
               setIsSidebarOpen(false);
             }}
           ><MessageCircleMore size={21} /></button>
@@ -3658,6 +3666,7 @@ function ChatApp({
               setIsDocumentsOpen(false);
               setIsStorageManagementOpen(false);
               setIsTasksOpen(false);
+              setIsNotesOpen(false);
               setIsSidebarOpen(false);
             }}
           ><CalendarDays size={21} /></button>
@@ -3672,6 +3681,7 @@ function ChatApp({
               setIsCalendarOpen(false);
               setIsStorageManagementOpen(false);
               setIsTasksOpen(false);
+              setIsNotesOpen(false);
               setIsSidebarOpen(false);
             }}
           ><FolderOpen size={21} /></button>
@@ -3686,9 +3696,25 @@ function ChatApp({
               setIsCalendarOpen(false);
               setIsDocumentsOpen(false);
               setIsStorageManagementOpen(false);
+              setIsNotesOpen(false);
               setIsSidebarOpen(false);
             }}
           ><ClipboardList size={21} /></button>
+          <button
+            className={`sidebar-rail-button ${isNotesOpen ? "active" : ""}`}
+            type="button"
+            aria-label="Notes"
+            title="Notes"
+            aria-current={isNotesOpen ? "page" : undefined}
+            onClick={() => {
+              setIsNotesOpen(true);
+              setIsCalendarOpen(false);
+              setIsDocumentsOpen(false);
+              setIsTasksOpen(false);
+              setIsStorageManagementOpen(false);
+              setIsSidebarOpen(false);
+            }}
+          ><NotebookPen size={21} /></button>
           <button
             className={`sidebar-rail-button ${isStorageManagementOpen ? "active" : ""}`}
             type="button"
@@ -3700,6 +3726,7 @@ function ChatApp({
               setIsCalendarOpen(false);
               setIsDocumentsOpen(false);
               setIsTasksOpen(false);
+              setIsNotesOpen(false);
               setIsSidebarOpen(false);
             }}
           ><HardDrive size={21} /></button>
@@ -3743,6 +3770,7 @@ function ChatApp({
                     setIsDocumentsOpen(false);
                     setIsStorageManagementOpen(false);
                     setIsTasksOpen(false);
+                    setIsNotesOpen(false);
                     setIsSidebarOpen(false);
                   }}
                 >
@@ -3917,7 +3945,7 @@ function ChatApp({
         currentUsername={user.username}
         onBack={() => setIsCalendarOpen(false)}
         onOpenConversation={openCalendarConversation}
-        onOpenTasks={() => { setIsCalendarOpen(false); setIsTasksOpen(true); }}
+        onOpenTasks={() => { setIsCalendarOpen(false); setIsNotesOpen(false); setIsTasksOpen(true); }}
         hidden={!isCalendarOpen}
       />
       <DocumentsView
@@ -3938,6 +3966,7 @@ function ChatApp({
           setIsCalendarOpen(false);
           setIsStorageManagementOpen(false);
           setIsTasksOpen(false);
+          setIsNotesOpen(false);
           setIsSidebarOpen(false);
         }}
         hidden={!isDocumentsOpen}
@@ -3953,6 +3982,12 @@ function ChatApp({
         currentUsername={user.username}
         onBack={() => setIsTasksOpen(false)}
         hidden={!isTasksOpen}
+      />
+      <NotesView
+        apiUrl={API_URL}
+        currentUsername={user.username}
+        onBack={() => setIsNotesOpen(false)}
+        hidden={!isNotesOpen}
       />
 
       <section
@@ -6512,6 +6547,7 @@ function ChatApp({
           setConversationTab("chat");
           setIsStorageManagementOpen(false);
           setIsTasksOpen(false);
+          setIsNotesOpen(false);
           setIsSidebarOpen(false);
         }}
       />

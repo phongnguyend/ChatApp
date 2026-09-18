@@ -1,4 +1,4 @@
-using ChatApp.Application.Contracts;
+using System.Data;
 using ChatApp.Application.Data;
 using ChatApp.Application.Models;
 using ChatApp.Api.Services;
@@ -15,11 +15,12 @@ public sealed class UserTasksController(ChatDbContext db) : ControllerBase
     public async Task<IActionResult> List([FromQuery] string username,
         [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
     {
-        var userId = await FindUserId(username, ct);
-        if (userId is null) return NotFound();
+        var user = await FindUser(username, ct);
+        if (user is null) return NotFound();
         if (from.HasValue != to.HasValue)
             return BadRequest(new { message = "Choose a valid date range of at most one year." });
-        var query = db.UserTasks.AsNoTracking().Where(x => x.UserId == userId);
+        var query = ReadQuery().Where(x => x.UserId == user.Id ||
+            x.Shares.Any(share => share.GranteeUserId == user.Id));
         if (from is { } start && to is { } end)
         {
             if (end < start || end.DayNumber - start.DayNumber > 366)
@@ -32,20 +33,21 @@ public sealed class UserTasksController(ChatDbContext db) : ControllerBase
             .ThenBy(x => x.DueDate)
             .ThenByDescending(x => x.CreatedAt)
             .ToListAsync(ct);
-        return Ok(tasks.Select(ToDto).ToArray());
+        return Ok(tasks.Select(x => ToDto(x, user.Id)).ToArray());
     }
 
     [HttpPost]
     public async Task<IActionResult> Create([FromQuery] string username,
         SaveUserTaskRequest request, CancellationToken ct)
     {
-        var userId = await FindUserId(username, ct);
-        if (userId is null) return NotFound();
+        var user = await FindUser(username, ct);
+        if (user is null) return NotFound();
         var error = Validate(request);
         if (error is not null) return BadRequest(new { message = error });
         var task = new UserTask
         {
-            UserId = userId.Value,
+            UserId = user.Id,
+            User = user,
             Title = request.Title.Trim(),
             Description = CleanDescription(request.Description),
             DueDate = request.DueDate,
@@ -53,19 +55,21 @@ public sealed class UserTasksController(ChatDbContext db) : ControllerBase
         };
         db.UserTasks.Add(task);
         await db.SaveChangesAsync(ct);
-        return CreatedAtAction(nameof(List), new { username }, ToDto(task));
+        return CreatedAtAction(nameof(List), new { username }, ToDto(task, user.Id));
     }
 
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(Guid id, [FromQuery] string username,
         SaveUserTaskRequest request, CancellationToken ct)
     {
-        var userId = await FindUserId(username, ct);
-        if (userId is null) return NotFound();
+        var user = await FindUser(username, ct);
+        if (user is null) return NotFound();
         var error = Validate(request);
         if (error is not null) return BadRequest(new { message = error });
-        var task = await db.UserTasks.SingleOrDefaultAsync(
-            x => x.Id == id && x.UserId == userId, ct);
+        var task = await WriteQuery().SingleOrDefaultAsync(
+            x => x.Id == id && (x.UserId == user.Id ||
+                x.Shares.Any(share => share.GranteeUserId == user.Id &&
+                    share.Permission == "editor")), ct);
         if (task is null) return NotFound();
         task.Title = request.Title.Trim();
         task.Description = CleanDescription(request.Description);
@@ -73,43 +77,178 @@ public sealed class UserTasksController(ChatDbContext db) : ControllerBase
         task.Priority = request.Priority;
         task.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
-        return Ok(ToDto(task));
+        return Ok(ToDto(task, user.Id));
     }
 
     [HttpPatch("{id:guid}/completion")]
     public async Task<IActionResult> SetCompletion(Guid id, [FromQuery] string username,
         SetUserTaskCompletionRequest request, CancellationToken ct)
     {
-        var userId = await FindUserId(username, ct);
-        if (userId is null) return NotFound();
-        var task = await db.UserTasks.SingleOrDefaultAsync(
-            x => x.Id == id && x.UserId == userId, ct);
+        var user = await FindUser(username, ct);
+        if (user is null) return NotFound();
+        var task = await WriteQuery().SingleOrDefaultAsync(
+            x => x.Id == id && (x.UserId == user.Id ||
+                x.Shares.Any(share => share.GranteeUserId == user.Id &&
+                    (share.Permission == "editor" || x.AssigneeUserId == user.Id))), ct);
         if (task is null) return NotFound();
         task.IsCompleted = request.IsCompleted;
         task.CompletedAt = request.IsCompleted ? DateTimeOffset.UtcNow : null;
         task.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
-        return Ok(ToDto(task));
+        return Ok(ToDto(task, user.Id));
     }
 
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, [FromQuery] string username,
         CancellationToken ct)
     {
-        var userId = await FindUserId(username, ct);
-        if (userId is null) return NotFound();
+        var user = await FindUser(username, ct);
+        if (user is null) return NotFound();
         var task = await db.UserTasks.SingleOrDefaultAsync(
-            x => x.Id == id && x.UserId == userId, ct);
+            x => x.Id == id && x.UserId == user.Id, ct);
         if (task is null) return NotFound();
         db.UserTasks.Remove(task);
         await db.SaveChangesAsync(ct);
         return NoContent();
     }
 
-    private async Task<Guid?> FindUserId(string username, CancellationToken ct) =>
-        await db.Users.Where(x => x.NormalizedUsername == Username.Normalize(username)
-                && x.Status == "active")
-            .Select(x => (Guid?)x.Id).SingleOrDefaultAsync(ct);
+    [HttpPatch("{id:guid}/assignee")]
+    public async Task<IActionResult> SetAssignee(Guid id, [FromQuery] string username,
+        SetUserTaskAssigneeRequest request, CancellationToken ct)
+    {
+        var user = await FindUser(username, ct);
+        if (user is null) return NotFound();
+        await using var transaction = await db.Database.BeginTransactionAsync(
+            IsolationLevel.Serializable, ct);
+        var task = await WriteQuery().SingleOrDefaultAsync(
+            x => x.Id == id && x.UserId == user.Id, ct);
+        if (task is null) return NotFound();
+        if (request.AssigneeUserId is { } assigneeId)
+        {
+            if (assigneeId != user.Id &&
+                !task.Shares.Any(x => x.GranteeUserId == assigneeId))
+                return BadRequest(new { message = "Choose yourself or a person in the task's sharing list." });
+            task.AssigneeUser = assigneeId == user.Id ? user :
+                await db.Users.SingleOrDefaultAsync(x =>
+                    x.Id == assigneeId && x.Status == "active", ct);
+            if (task.AssigneeUser is null)
+                return BadRequest(new { message = "Choose an active person." });
+            task.AssigneeUserId = assigneeId;
+        }
+        else
+        {
+            task.AssigneeUserId = null;
+            task.AssigneeUser = null;
+        }
+        task.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+        return Ok(ToDto(task, user.Id));
+    }
+
+    [HttpGet("{id:guid}/assignees")]
+    public async Task<IActionResult> GetAssignees(Guid id, [FromQuery] string username,
+        CancellationToken ct)
+    {
+        var user = await FindUser(username, ct);
+        if (user is null || !await db.UserTasks.AnyAsync(
+                x => x.Id == id && x.UserId == user.Id, ct)) return NotFound();
+        var shared = await db.UserTaskShares.AsNoTracking()
+            .Where(x => x.TaskId == id && x.GranteeUser.Status == "active")
+            .OrderBy(x => x.GranteeUser.DisplayName)
+            .Select(x => new UserTaskAssigneeCandidateDto(x.GranteeUserId,
+                x.GranteeUser.Username, x.GranteeUser.DisplayName))
+            .ToListAsync(ct);
+        shared.Insert(0, new UserTaskAssigneeCandidateDto(user.Id,
+            user.Username, user.DisplayName));
+        return Ok(shared);
+    }
+
+    [HttpGet("{id:guid}/shares")]
+    public async Task<IActionResult> GetShares(Guid id, [FromQuery] string username,
+        CancellationToken ct)
+    {
+        var user = await FindUser(username, ct);
+        if (user is null || !await db.UserTasks.AnyAsync(
+                x => x.Id == id && x.UserId == user.Id, ct)) return NotFound();
+        var shares = await db.UserTaskShares.AsNoTracking()
+            .Where(x => x.TaskId == id)
+            .OrderBy(x => x.GranteeUser.DisplayName)
+            .Select(x => new UserTaskShareDto(x.Id, x.GranteeUserId, x.GranteeUser.Username,
+                x.GranteeUser.DisplayName, x.Permission))
+            .ToListAsync(ct);
+        return Ok(shares);
+    }
+
+    [HttpPut("{id:guid}/shares")]
+    public async Task<IActionResult> PutShare(Guid id, [FromQuery] string username,
+        SaveUserTaskShareRequest request, CancellationToken ct)
+    {
+        var user = await FindUser(username, ct);
+        if (user is null) return NotFound();
+        if (request.Permission is not ("viewer" or "editor"))
+            return BadRequest(new { message = "Choose Viewer or Editor." });
+        if (!await db.UserTasks.AnyAsync(x => x.Id == id && x.UserId == user.Id, ct))
+            return NotFound();
+        var grantee = await FindUser(request.RecipientUsername, ct);
+        if (grantee is null) return BadRequest(new { message = "Choose an active person." });
+        if (grantee.Id == user.Id)
+            return BadRequest(new { message = "You already own this task." });
+
+        await using var transaction = await db.Database.BeginTransactionAsync(
+            IsolationLevel.Serializable, ct);
+        var share = await db.UserTaskShares.SingleOrDefaultAsync(x =>
+            x.TaskId == id && x.GranteeUserId == grantee.Id, ct);
+        if (share is null)
+        {
+            share = new UserTaskShare
+            {
+                TaskId = id,
+                GranteeUserId = grantee.Id,
+                Permission = request.Permission,
+            };
+            db.UserTaskShares.Add(share);
+        }
+        else share.Permission = request.Permission;
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+        return Ok(new UserTaskShareDto(share.Id, grantee.Id, grantee.Username,
+            grantee.DisplayName, share.Permission));
+    }
+
+    [HttpDelete("{id:guid}/shares/{shareId:guid}")]
+    public async Task<IActionResult> RemoveShare(Guid id, Guid shareId,
+        [FromQuery] string username, CancellationToken ct)
+    {
+        var user = await FindUser(username, ct);
+        if (user is null) return NotFound();
+        await using var transaction = await db.Database.BeginTransactionAsync(
+            IsolationLevel.Serializable, ct);
+        var share = await db.UserTaskShares.SingleOrDefaultAsync(x =>
+            x.Id == shareId && x.TaskId == id && x.Task.UserId == user.Id, ct);
+        if (share is null) return NotFound();
+        var task = await db.UserTasks.SingleAsync(x => x.Id == id, ct);
+        if (task.AssigneeUserId == share.GranteeUserId)
+        {
+            task.AssigneeUserId = null;
+            task.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+        db.UserTaskShares.Remove(share);
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+        return NoContent();
+    }
+
+    private async Task<ChatUser?> FindUser(string? username, CancellationToken ct) =>
+        await db.Users.SingleOrDefaultAsync(x =>
+            x.NormalizedUsername == Username.Normalize(username) &&
+            x.Status == "active", ct);
+
+    private IQueryable<UserTask> ReadQuery() => db.UserTasks.AsNoTracking()
+        .Include(x => x.User).Include(x => x.Shares).Include(x => x.AssigneeUser);
+
+    private IQueryable<UserTask> WriteQuery() => db.UserTasks
+        .Include(x => x.User).Include(x => x.Shares).Include(x => x.AssigneeUser);
 
     private static string? Validate(SaveUserTaskRequest request)
     {
@@ -125,14 +264,30 @@ public sealed class UserTasksController(ChatDbContext db) : ControllerBase
     private static string? CleanDescription(string? description) =>
         string.IsNullOrWhiteSpace(description) ? null : description.Trim();
 
-    private static UserTaskDto ToDto(UserTask task) => new(
+    private static UserTaskDto ToDto(UserTask task, Guid userId) => new(
         task.Id, task.Title, task.Description, task.DueDate, task.Priority,
-        task.IsCompleted, task.CompletedAt, task.CreatedAt, task.UpdatedAt);
+        task.IsCompleted, task.CompletedAt, task.CreatedAt, task.UpdatedAt,
+        task.User.Id, task.User.Username, task.User.DisplayName,
+        task.UserId == userId ? "owner" :
+            task.Shares.Single(x => x.GranteeUserId == userId).Permission,
+        task.UserId == userId ? task.Shares.Count : 0,
+        task.AssigneeUserId, task.AssigneeUser?.Username,
+        task.AssigneeUser?.DisplayName);
 }
 
 public sealed record SaveUserTaskRequest(string Title, string? Description,
     DateOnly? DueDate, string Priority);
 public sealed record SetUserTaskCompletionRequest(bool IsCompleted);
+public sealed record SetUserTaskAssigneeRequest(Guid? AssigneeUserId);
+public sealed record UserTaskAssigneeCandidateDto(Guid UserId, string Username,
+    string DisplayName);
+public sealed record SaveUserTaskShareRequest(string RecipientUsername,
+    string Permission);
+public sealed record UserTaskShareDto(Guid Id, Guid UserId, string Username,
+    string DisplayName, string Permission);
 public sealed record UserTaskDto(Guid Id, string Title, string? Description,
     DateOnly? DueDate, string Priority, bool IsCompleted,
-    DateTimeOffset? CompletedAt, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
+    DateTimeOffset? CompletedAt, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt,
+    Guid OwnerUserId, string OwnerUsername, string OwnerDisplayName, string Permission,
+    int ShareCount, Guid? AssigneeUserId, string? AssigneeUsername,
+    string? AssigneeDisplayName);

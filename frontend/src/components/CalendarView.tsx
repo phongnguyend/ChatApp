@@ -27,6 +27,9 @@ type CalendarTask = {
   isCompleted: boolean;
   createdAt: string;
   updatedAt: string;
+  ownerDisplayName: string;
+  permission: "owner" | "viewer" | "editor";
+  assigneeDisplayName: string | null;
 };
 type MeetingForm = Pick<CalendarMeeting, "title" | "description" | "startDate" | "endDate" | "allDay" | "people"> & { start: string; end: string };
 
@@ -825,6 +828,8 @@ export function CalendarView({
               <button type="button" aria-label="Close task details" onClick={() => setSelectedTask(null)}><X size={19} /></button>
             </div>
             {selectedTask.dueDate && <p className="calendar-detail-line"><CalendarDays size={16} /> {new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(localDate(selectedTask.dueDate))}</p>}
+            {selectedTask.permission !== "owner" && <div className="calendar-detail-section"><strong>Shared by</strong><p>{selectedTask.ownerDisplayName} · {selectedTask.permission === "editor" ? "Can edit" : "Can view"}</p></div>}
+            {selectedTask.assigneeDisplayName && <div className="calendar-detail-section"><strong>Assigned to</strong><p>{selectedTask.assigneeDisplayName}</p></div>}
             <div className="calendar-detail-section"><strong>Status</strong><p>{selectedTask.isCompleted ? "Done" : "Undone"}</p></div>
             <div className="calendar-detail-section"><strong>Priority</strong><p>{selectedTask.priority.charAt(0).toUpperCase() + selectedTask.priority.slice(1)}</p></div>
             <div className="calendar-detail-section"><strong>Created</strong><p><time dateTime={selectedTask.createdAt}>{new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(selectedTask.createdAt))}</time></p></div>

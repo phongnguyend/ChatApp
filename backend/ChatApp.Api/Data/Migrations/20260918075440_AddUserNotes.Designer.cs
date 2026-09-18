@@ -4,6 +4,7 @@ using ChatApp.Application.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ChatApp.Api.Data.Migrations
 {
     [DbContext(typeof(ChatDbContext))]
-    partial class ChatDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260918075440_AddUserNotes")]
+    partial class AddUserNotes
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1156,47 +1159,10 @@ namespace ChatApp.Api.Data.Migrations
                     b.ToTable("UserNotes", (string)null);
                 });
 
-            modelBuilder.Entity("ChatApp.Application.Models.UserNoteShare", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasPrecision(3)
-                        .HasColumnType("datetimeoffset(3)");
-
-                    b.Property<Guid>("GranteeUserId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("NoteId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("Permission")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("nvarchar(10)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("GranteeUserId");
-
-                    b.HasIndex("NoteId", "GranteeUserId")
-                        .IsUnique();
-
-                    b.ToTable("UserNoteShares", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_UserNoteShares_Permission", "[Permission] IN ('viewer', 'editor')");
-                        });
-                });
-
             modelBuilder.Entity("ChatApp.Application.Models.UserTask", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid?>("AssigneeUserId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTimeOffset?>("CompletedAt")
@@ -1236,47 +1202,11 @@ namespace ChatApp.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AssigneeUserId");
-
                     b.HasIndex("UserId", "IsCompleted", "DueDate");
 
                     b.ToTable("UserTasks", null, t =>
                         {
                             t.HasCheckConstraint("CK_UserTasks_Priority", "[Priority] IN ('low', 'normal', 'high')");
-                        });
-                });
-
-            modelBuilder.Entity("ChatApp.Application.Models.UserTaskShare", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasPrecision(3)
-                        .HasColumnType("datetimeoffset(3)");
-
-                    b.Property<Guid>("GranteeUserId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("Permission")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("nvarchar(10)");
-
-                    b.Property<Guid>("TaskId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("GranteeUserId");
-
-                    b.HasIndex("TaskId", "GranteeUserId")
-                        .IsUnique();
-
-                    b.ToTable("UserTaskShares", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_UserTaskShares_Permission", "[Permission] IN ('viewer', 'editor')");
                         });
                 });
 
@@ -1728,60 +1658,15 @@ namespace ChatApp.Api.Data.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("ChatApp.Application.Models.UserNoteShare", b =>
-                {
-                    b.HasOne("ChatApp.Application.Models.ChatUser", "GranteeUser")
-                        .WithMany()
-                        .HasForeignKey("GranteeUserId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
-
-                    b.HasOne("ChatApp.Application.Models.UserNote", "Note")
-                        .WithMany("Shares")
-                        .HasForeignKey("NoteId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("GranteeUser");
-
-                    b.Navigation("Note");
-                });
-
             modelBuilder.Entity("ChatApp.Application.Models.UserTask", b =>
                 {
-                    b.HasOne("ChatApp.Application.Models.ChatUser", "AssigneeUser")
-                        .WithMany()
-                        .HasForeignKey("AssigneeUserId")
-                        .OnDelete(DeleteBehavior.NoAction);
-
                     b.HasOne("ChatApp.Application.Models.ChatUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("AssigneeUser");
-
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("ChatApp.Application.Models.UserTaskShare", b =>
-                {
-                    b.HasOne("ChatApp.Application.Models.ChatUser", "GranteeUser")
-                        .WithMany()
-                        .HasForeignKey("GranteeUserId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
-
-                    b.HasOne("ChatApp.Application.Models.UserTask", "Task")
-                        .WithMany("Shares")
-                        .HasForeignKey("TaskId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("GranteeUser");
-
-                    b.Navigation("Task");
                 });
 
             modelBuilder.Entity("ChatApp.Application.Models.ChatMessage", b =>
@@ -1819,16 +1704,6 @@ namespace ChatApp.Api.Data.Migrations
             modelBuilder.Entity("ChatApp.Application.Models.ScheduledMeeting", b =>
                 {
                     b.Navigation("Participants");
-                });
-
-            modelBuilder.Entity("ChatApp.Application.Models.UserNote", b =>
-                {
-                    b.Navigation("Shares");
-                });
-
-            modelBuilder.Entity("ChatApp.Application.Models.UserTask", b =>
-                {
-                    b.Navigation("Shares");
                 });
 #pragma warning restore 612, 618
         }
