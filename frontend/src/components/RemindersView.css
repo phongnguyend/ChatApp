@@ -9,7 +9,16 @@
 .reminders-header-actions { display: flex; align-items: center; gap: 9px; }
 .reminders-header-actions button, .reminders-dialog footer button { min-height: 36px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 9px; display: inline-flex; align-items: center; gap: 6px; color: var(--ink); background: var(--paper); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
 .reminders-header-actions .reminders-primary, .reminders-dialog footer .reminders-primary { border-color: #c85e4b; color: #fff; background: #c85e4b; }
-.reminders-list { min-height: 0; overflow-y: auto; margin-top: 24px; border-top: 1px solid var(--line); }
+.reminders-filters { margin-top: 24px; padding: 16px 0 18px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.reminders-filter-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; font-size: 12px; }
+.reminders-filter-heading button { padding: 4px 0; border: 0; display: inline-flex; align-items: center; gap: 4px; color: var(--muted); background: transparent; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+.reminders-filter-heading button:hover { color: var(--ink); }
+.reminders-filter-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 10px; }
+.reminders-filter-fields label { min-width: 0; display: flex; flex-direction: column; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.reminders-filter-fields input { width: 100%; min-width: 0; height: 36px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--paper); font: inherit; font-size: 12px; font-weight: 400; }
+.reminders-filter-fields input:focus-visible { outline: 2px solid #c85e4b; outline-offset: 1px; }
+.reminders-filters .reminders-error { margin: 9px 0 0; }
+.reminders-list { min-height: 0; overflow-y: auto; }
 .reminders-item { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 13px 4px; border-bottom: 1px solid var(--line); }
 .reminders-item-main { min-width: 0; flex: 1; padding: 0; border: 0; display: flex; align-items: flex-start; gap: 12px; color: var(--ink); background: transparent; text-align: left; cursor: pointer; }
 .reminders-item-main > span:last-child { min-width: 0; display: flex; flex-direction: column; gap: 6px; }

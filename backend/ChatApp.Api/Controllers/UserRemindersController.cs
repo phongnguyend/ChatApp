@@ -12,17 +12,28 @@ public sealed class UserRemindersController(ChatDbContext db) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] string username,
-        [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
+        [FromQuery] DateOnly? from, [FromQuery] DateOnly? to,
+        [FromQuery] string? name, [FromQuery] string? description,
+        CancellationToken ct)
     {
         var userId = await FindUserId(username, ct);
         if (userId is null) return NotFound();
-        if (from.HasValue != to.HasValue ||
-            (from is { } start && to is { } end &&
-                (end < start || end.DayNumber - start.DayNumber > 366)))
-            return BadRequest(new { message = "Choose a valid date range of at most one year." });
+        if (from > to)
+            return BadRequest(new { message = "The end date must be on or after the start date." });
+        name = name?.Trim();
+        description = description?.Trim();
+        if (name?.Length > 200 || description?.Length > 200)
+            return BadRequest(new { message = "A reminder search term is too long." });
         var query = db.UserReminders.AsNoTracking().Where(x => x.UserId == userId);
-        if (from is { } first && to is { } last)
-            query = query.Where(x => x.ReminderDate >= first && x.ReminderDate <= last);
+        if (from is { } first)
+            query = query.Where(x => x.ReminderDate >= first);
+        if (to is { } last)
+            query = query.Where(x => x.ReminderDate <= last);
+        if (!string.IsNullOrEmpty(name))
+            query = query.Where(x => x.Title.Contains(name));
+        if (!string.IsNullOrEmpty(description))
+            query = query.Where(x => x.Description != null &&
+                x.Description.Contains(description));
         var reminders = await query.OrderBy(x => x.ReminderDate)
             .ThenBy(x => x.ReminderTime == null)
             .ThenBy(x => x.ReminderTime)

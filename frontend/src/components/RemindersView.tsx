@@ -18,6 +18,8 @@ type ReminderDraft = {
   reminderTime: string;
   allDay: boolean;
 };
+type ReminderFilters = { from: string; to: string; name: string; description: string };
+const emptyFilters = (): ReminderFilters => ({ from: "", to: "", name: "", description: "" });
 
 function todayKey() {
   const now = new Date();
@@ -53,6 +55,8 @@ export function RemindersView({ apiUrl, currentUsername, onBack, hidden }: {
 }) {
   const endpoint = `${apiUrl}/api/user-reminders?username=${encodeURIComponent(currentUsername)}`;
   const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [filters, setFilters] = useState<ReminderFilters>(emptyFilters);
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -62,22 +66,33 @@ export function RemindersView({ apiUrl, currentUsername, onBack, hidden }: {
   const [editing, setEditing] = useState<Reminder | null>(null);
   const [draft, setDraft] = useState<ReminderDraft | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Reminder | null>(null);
+  const hasFilters = Object.values(filters).some((value) => value.trim() !== "");
+  const filterDateError = filters.from && filters.to && filters.from > filters.to
+    ? "The end date must be on or after the start date." : "";
 
   useEffect(() => {
     if (hidden) return;
+    setError("");
+    if (filterDateError) { setReminders([]); setLoading(false); return; }
     const controller = new AbortController();
     setLoading(true);
-    setError("");
-    fetch(endpoint, { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(await readError(response));
-        return response.json() as Promise<Reminder[]>;
-      })
-      .then((items) => { if (!controller.signal.aborted) setReminders(items); })
-      .catch((reason) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load reminders."); })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
-  }, [endpoint, hidden]);
+    const params = new URLSearchParams();
+    for (const key of ["from", "to", "name", "description"] as const) {
+      const value = filters[key].trim();
+      if (value) params.set(key, value);
+    }
+    const timer = window.setTimeout(() => {
+      fetch(`${endpoint}&${params}`, { signal: controller.signal })
+        .then(async (response) => {
+          if (!response.ok) throw new Error(await readError(response));
+          return response.json() as Promise<Reminder[]>;
+        })
+        .then((items) => { if (!controller.signal.aborted) setReminders(items); })
+        .catch((reason) => { if (!controller.signal.aborted) { setReminders([]); setError(reason instanceof Error ? reason.message : "Could not load reminders."); } })
+        .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    }, 250);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [endpoint, hidden, filters, filterDateError, refreshVersion]);
 
   function openCreate() {
     setViewing(null);
@@ -116,8 +131,7 @@ export function RemindersView({ apiUrl, currentUsername, onBack, hidden }: {
         }),
       });
       if (!response.ok) throw new Error(await readError(response));
-      const updated = await response.json() as Reminder;
-      setReminders((current) => editing ? current.map((item) => item.id === updated.id ? updated : item) : [...current, updated]);
+      setRefreshVersion((value) => value + 1);
       setDraft(null);
       setEditing(null);
     } catch (reason) { setDialogError(reason instanceof Error ? reason.message : "Could not save reminder."); }
@@ -131,24 +145,31 @@ export function RemindersView({ apiUrl, currentUsername, onBack, hidden }: {
     try {
       const response = await fetch(`${apiUrl}/api/user-reminders/${deleteTarget.id}?username=${encodeURIComponent(currentUsername)}`, { method: "DELETE" });
       if (!response.ok) throw new Error(await readError(response));
-      setReminders((current) => current.filter((item) => item.id !== deleteTarget.id));
+      setRefreshVersion((value) => value + 1);
       setDeleteTarget(null);
     } catch (reason) { setDialogError(reason instanceof Error ? reason.message : "Could not delete reminder."); }
     finally { setDeleting(false); }
   }
-
-  const sorted = [...reminders].sort((a, b) => a.reminderDate.localeCompare(b.reminderDate) ||
-    (a.reminderTime ?? "").localeCompare(b.reminderTime ?? "") || a.title.localeCompare(b.title));
 
   return <section className="reminders-view" hidden={hidden} aria-label="Reminders">
     <header className="reminders-header">
       <div><p className="eyebrow">YOUR WORK</p><h1>Reminders</h1><p>Keep track of things you need to remember.</p></div>
       <div className="reminders-header-actions"><button type="button" onClick={onBack}><ArrowLeft size={16} /> Back to chat</button><button className="reminders-primary" type="button" onClick={openCreate}><Plus size={17} /> New reminder</button></div>
     </header>
+    <div className="reminders-filters" role="search" aria-label="Filter reminders">
+      <div className="reminders-filter-heading"><strong>Filters</strong>{hasFilters && <button type="button" onClick={() => setFilters(emptyFilters())}><X size={14} /> Clear filters</button>}</div>
+      <div className="reminders-filter-fields">
+        <label>From date<input type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} /></label>
+        <label>To date<input type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} /></label>
+        <label>Reminder name<input type="search" maxLength={200} placeholder="Search name" value={filters.name} onChange={(event) => setFilters({ ...filters, name: event.target.value })} /></label>
+        <label>Description<input type="search" maxLength={200} placeholder="Search description" value={filters.description} onChange={(event) => setFilters({ ...filters, description: event.target.value })} /></label>
+      </div>
+      {filterDateError && <p className="reminders-error" role="alert">{filterDateError}</p>}
+    </div>
     {error && <p className="reminders-error" role="alert">{error}</p>}
     <div className="reminders-list">
-      {loading ? <div className="reminders-empty"><LoaderCircle className="reminders-spin" size={25} /> Loading reminders...</div> : sorted.length === 0 ? <div className="reminders-empty"><AlarmClock size={35} /><strong>No reminders yet</strong><span>Create a reminder to see it here and on your calendar.</span></div> :
-        sorted.map((reminder) => <article className="reminders-item" key={reminder.id}>
+      {loading ? <div className="reminders-empty"><LoaderCircle className="reminders-spin" size={25} /> Loading reminders...</div> : reminders.length === 0 ? <div className="reminders-empty"><AlarmClock size={35} /><strong>{hasFilters ? "No reminders match your filters" : "No reminders yet"}</strong><span>{hasFilters ? "Try changing or clearing the filters." : "Create a reminder to see it here and on your calendar."}</span></div> :
+        reminders.map((reminder) => <article className="reminders-item" key={reminder.id}>
           <button className="reminders-item-main" type="button" onClick={() => setViewing(reminder)}><span className="reminders-icon"><AlarmClock size={19} /></span><span><strong>{reminder.title}</strong><small><CalendarDays size={13} /> {formatDate(reminder.reminderDate)} <Clock3 size={13} /> {formatTime(reminder.reminderTime)}</small>{reminder.description && <em>{reminder.description}</em>}</span></button>
           <div className="reminders-item-actions"><button type="button" onClick={() => setViewing(reminder)}>View</button><button type="button" onClick={() => openEdit(reminder)}><Pencil size={15} /> Edit</button><button type="button" onClick={() => { setDialogError(""); setDeleteTarget(reminder); }}><Trash2 size={15} /> Delete</button></div>
         </article>)}
