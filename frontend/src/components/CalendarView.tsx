@@ -1,4 +1,4 @@
-import { CalendarDays, CalendarX2, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, LoaderCircle, MessageCircle, Pencil, Plus, UserRound, Video, X } from "lucide-react";
+import { CalendarDays, CalendarX2, Check, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Clock3, LoaderCircle, MessageCircle, Pencil, Plus, UserRound, Video, X } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import "./CalendarView.css";
 
@@ -17,6 +17,16 @@ type CalendarMeeting = {
   organizerUsername: string;
   canEdit: boolean;
   people: Person[];
+};
+type CalendarTask = {
+  id: string;
+  title: string;
+  description: string | null;
+  dueDate: string | null;
+  priority: "low" | "normal" | "high";
+  isCompleted: boolean;
+  createdAt: string;
+  updatedAt: string;
 };
 type MeetingForm = Pick<CalendarMeeting, "title" | "description" | "startDate" | "endDate" | "allDay" | "people"> & { start: string; end: string };
 
@@ -147,12 +157,14 @@ export function CalendarView({
   currentUsername,
   onBack,
   onOpenConversation,
+  onOpenTasks,
   hidden,
 }: {
   apiUrl: string;
   currentUsername: string;
   onBack: () => void;
   onOpenConversation: (conversationId: string, action: "chat" | "join") => Promise<void>;
+  onOpenTasks: () => void;
   hidden: boolean;
 }) {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
@@ -160,8 +172,12 @@ export function CalendarView({
   const [pickerMonth, setPickerMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [isWeekPickerOpen, setIsWeekPickerOpen] = useState(false);
   const [meetings, setMeetings] = useState<CalendarMeeting[]>([]);
+  const [tasks, setTasks] = useState<CalendarTask[]>([]);
   const [calendarError, setCalendarError] = useState("");
   const [isLoadingMeetings, setIsLoadingMeetings] = useState(false);
+  const [taskError, setTaskError] = useState("");
+  const [isLoadingTasks, setIsLoadingTasks] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<CalendarTask | null>(null);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [form, setForm] = useState<MeetingForm | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -217,6 +233,25 @@ export function CalendarView({
   }, [apiUrl, currentUsername, hidden, weekStart, refreshVersion]);
 
   useEffect(() => {
+    if (hidden) return;
+    const controller = new AbortController();
+    setIsLoadingTasks(true);
+    setTaskError("");
+    const from = dateKey(weekStart);
+    const to = dateKey(addDays(weekStart, 6));
+    fetch(`${apiUrl}/api/user-tasks?username=${encodeURIComponent(currentUsername)}&from=${from}&to=${to}`, { signal: controller.signal })
+      .then((response) => readResponse<CalendarTask[]>(response))
+      .then((items) => { if (!controller.signal.aborted) setTasks(items); })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setTasks([]);
+        setTaskError(error instanceof Error ? error.message : "Could not load tasks.");
+      })
+      .finally(() => { if (!controller.signal.aborted) setIsLoadingTasks(false); });
+    return () => controller.abort();
+  }, [apiUrl, currentUsername, hidden, weekStart, refreshVersion]);
+
+  useEffect(() => {
     if (!isFormOpen) return;
     titleInputRef.current?.focus();
     const onEscape = (event: KeyboardEvent) => {
@@ -234,6 +269,15 @@ export function CalendarView({
     document.addEventListener("keydown", onEscape);
     return () => document.removeEventListener("keydown", onEscape);
   }, [selectedMeeting, isCancelling, isOpeningConversation]);
+
+  useEffect(() => {
+    if (!selectedTask) return;
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedTask(null);
+    };
+    document.addEventListener("keydown", onEscape);
+    return () => document.removeEventListener("keydown", onEscape);
+  }, [selectedTask]);
 
   useEffect(() => {
     if (!isFormOpen || !isPeopleOpen) return;
@@ -296,11 +340,13 @@ export function CalendarView({
     setWeekStart(startOfWeek(date));
     setMiniMonth(new Date(date.getFullYear(), date.getMonth(), 1));
     setIsWeekPickerOpen(false);
+    setSelectedTask(null);
   }
 
   function openForm(date: string, start: string, allDay = false) {
     detailRequestRef.current += 1;
     setSelectedMeeting(null);
+    setSelectedTask(null);
     setEditingId(null);
     setForm(newForm(date, start, allDay));
     setPersonQuery("");
@@ -312,6 +358,7 @@ export function CalendarView({
   async function openDetails(meeting: CalendarMeeting) {
     const requestId = ++detailRequestRef.current;
     setForm(null);
+    setSelectedTask(null);
     setSelectedMeeting(meeting);
     setDetailError("");
     setConfirmCancel(false);
@@ -442,7 +489,7 @@ export function CalendarView({
         <div>
           <p className="eyebrow">Your schedule</p>
           <h1>Calendar</h1>
-          <p className="calendar-intro">Plan a time together and keep your meetings in one place.</p>
+          <p className="calendar-intro">See meetings and tasks due this week.</p>
         </div>
         <div className="calendar-toolbar-actions">
           <button className="calendar-back" type="button" onClick={() => { setForm(null); closeDetails(); onBack(); }}>Back to chat</button>
@@ -521,6 +568,7 @@ export function CalendarView({
       </div>
       <div className="calendar-grid-scroll">
         {(isLoadingMeetings || calendarError) && <div className={`calendar-load-state ${calendarError ? "error" : ""}`} role={calendarError ? "alert" : "status"}>{calendarError || "Loading meetings…"}{calendarError && <button type="button" onClick={() => setRefreshVersion((version) => version + 1)}>Retry</button>}</div>}
+        {(isLoadingTasks || taskError) && <div className={`calendar-load-state ${taskError ? "error" : ""}`} role={taskError ? "alert" : "status"}>{taskError || "Loading tasks…"}{taskError && <button type="button" onClick={() => setRefreshVersion((version) => version + 1)}>Retry</button>}</div>}
         <div className="calendar-grid">
           <div className="calendar-time-heading" aria-hidden="true">GMT{new Date().getTimezoneOffset() <= 0 ? "+" : "-"}{Math.abs(new Date().getTimezoneOffset() / 60)}</div>
           {weekDays.map((date) => {
@@ -555,6 +603,19 @@ export function CalendarView({
                   >
                     {!meeting.allDay && <Clock3 size={11} aria-hidden="true" />}
                     <span>{meeting.title}</span>
+                  </button>
+                ))}
+                {tasks.filter((task) => task.dueDate === key).map((task) => (
+                  <button
+                    type="button"
+                    className={`calendar-due-task ${task.isCompleted ? "completed" : ""}`}
+                    key={task.id}
+                    title={`${task.title} · Task due ${key}${task.isCompleted ? " · Done" : ""}`}
+                    aria-label={`Task: ${task.title}, due ${key}${task.isCompleted ? ", done" : ""}`}
+                    onClick={() => setSelectedTask(task)}
+                  >
+                    <ClipboardList size={12} aria-hidden="true" />
+                    <span>{task.title}</span>
                   </button>
                 ))}
               </div>
@@ -593,7 +654,7 @@ export function CalendarView({
           })}
         </div>
       </div>
-      <div className="calendar-footnote">Meetings are saved and visible to their organizer and participants. Cancelled meetings remain in the calendar.</div>
+      <div className="calendar-footnote">Meetings and tasks with due dates appear here. Cancelled meetings remain in the calendar.</div>
         </div>
       </div>
 
@@ -752,6 +813,26 @@ export function CalendarView({
                 </>
               )}
               <button type="button" disabled={isCancelling || isOpeningConversation} onClick={closeDetails}><X size={14} aria-hidden="true" />Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {selectedTask && !form && !selectedMeeting && (
+        <div className="calendar-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedTask(null); }}>
+          <div className="calendar-dialog calendar-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-task-detail-title">
+            <div className="calendar-dialog-heading">
+              <div><p className="eyebrow">Task due</p><h2 id="calendar-task-detail-title">{selectedTask.title}</h2></div>
+              <button type="button" aria-label="Close task details" onClick={() => setSelectedTask(null)}><X size={19} /></button>
+            </div>
+            {selectedTask.dueDate && <p className="calendar-detail-line"><CalendarDays size={16} /> {new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(localDate(selectedTask.dueDate))}</p>}
+            <div className="calendar-detail-section"><strong>Status</strong><p>{selectedTask.isCompleted ? "Done" : "Undone"}</p></div>
+            <div className="calendar-detail-section"><strong>Priority</strong><p>{selectedTask.priority.charAt(0).toUpperCase() + selectedTask.priority.slice(1)}</p></div>
+            <div className="calendar-detail-section"><strong>Created</strong><p><time dateTime={selectedTask.createdAt}>{new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(selectedTask.createdAt))}</time></p></div>
+            <div className="calendar-detail-section"><strong>Updated</strong><p><time dateTime={selectedTask.updatedAt}>{new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(selectedTask.updatedAt))}</time></p></div>
+            {selectedTask.description && <div className="calendar-detail-section"><strong>Notes</strong><p className="calendar-detail-description">{selectedTask.description}</p></div>}
+            <div className="calendar-dialog-actions">
+              <button type="button" onClick={() => { setSelectedTask(null); onOpenTasks(); }}><ClipboardList size={14} aria-hidden="true" />Open tasks</button>
+              <button type="button" onClick={() => setSelectedTask(null)}><X size={14} aria-hidden="true" />Close</button>
             </div>
           </div>
         </div>

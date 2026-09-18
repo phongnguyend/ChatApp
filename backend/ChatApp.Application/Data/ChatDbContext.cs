@@ -26,6 +26,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
     public DbSet<ScheduledMeeting> ScheduledMeetings => Set<ScheduledMeeting>();
     public DbSet<ScheduledMeetingParticipant> ScheduledMeetingParticipants =>
         Set<ScheduledMeetingParticipant>();
+    public DbSet<UserTask> UserTasks => Set<UserTask>();
     public DbSet<DocumentFolder> DocumentFolders => Set<DocumentFolder>();
     public DbSet<StoredDocument> StoredDocuments => Set<StoredDocument>();
     public DbSet<DocumentShare> DocumentShares => Set<DocumentShare>();
@@ -52,7 +53,25 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         ConfigureCallingProviderIdentities(modelBuilder);
         ConfigureLiveStreams(modelBuilder);
         ConfigureScheduledMeetings(modelBuilder);
+        ConfigureUserTasks(modelBuilder);
         ConfigureDocuments(modelBuilder);
+    }
+
+    private static void ConfigureUserTasks(ModelBuilder modelBuilder)
+    {
+        var task = modelBuilder.Entity<UserTask>();
+        task.ToTable("UserTasks", table => table.HasCheckConstraint(
+            "CK_UserTasks_Priority", "[Priority] IN ('low', 'normal', 'high')"));
+        task.HasKey(x => x.Id);
+        task.Property(x => x.Title).HasMaxLength(200).IsRequired();
+        task.Property(x => x.Description).HasMaxLength(4000);
+        task.Property(x => x.Priority).HasMaxLength(10).IsRequired();
+        task.Property(x => x.CreatedAt).HasPrecision(3);
+        task.Property(x => x.UpdatedAt).HasPrecision(3);
+        task.Property(x => x.CompletedAt).HasPrecision(3);
+        task.HasIndex(x => new { x.UserId, x.IsCompleted, x.DueDate });
+        task.HasOne(x => x.User).WithMany()
+            .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
     }
 
     private static void ConfigureDocuments(ModelBuilder modelBuilder)

@@ -110,7 +110,7 @@ export function ConversationFilesPanel({ apiUrl, currentUsername, scope, hidden,
           <button type="button" className="documents-conversation-link" title={`Go to message in ${file.conversationTitle}`} onClick={() => void openConversation(file.conversationId, file.messageId)} disabled={openingId !== null}>{file.conversationTitle}</button>
           <time className="documents-conversation-meta" dateTime={file.sharedAt}>{formatDate(file.sharedAt)}</time>
           <div className="documents-conversation-row-actions">
-            <a href={url} download={file.fileName} aria-label={`Download ${file.fileName}`} title="Download file"><Download size={16} /></a>
+            <a href={url} download={file.fileName} aria-label={`Download ${file.fileName}`} title="Download file"><Download size={16} /> Download</a>
           </div>
         </div>;
       })}

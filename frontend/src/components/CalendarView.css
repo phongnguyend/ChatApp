@@ -446,6 +446,29 @@ html[data-theme='dark'] .calendar-month-grid button.active {
   flex: 0 0 auto;
 }
 
+.calendar-due-task {
+  position: relative;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 0;
+  border-left: 3px solid #5683b8;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink);
+  background: color-mix(in srgb, #5683b8 22%, var(--paper));
+  font-size: 10px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.calendar-due-task > svg { flex: 0 0 auto; }
+.calendar-due-task > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-due-task:hover, .calendar-due-task:focus-visible { outline: 2px solid #5683b8; outline-offset: -2px; }
+.calendar-due-task.completed { opacity: .62; text-decoration: line-through; }
+
 .calendar-time-column {
   position: sticky;
   left: 0;
