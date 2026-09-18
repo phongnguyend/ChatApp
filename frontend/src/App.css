@@ -264,20 +264,23 @@
   min-height: 100vh;
   height: 100vh;
   display: grid;
-  grid-template-columns: 278px minmax(420px, 1fr) 244px;
+  grid-template-columns: 330px minmax(420px, 1fr) 244px;
   overflow: hidden;
   background: var(--paper);
 }
 
 .sidebar {
   min-width: 0;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  grid-template-rows: 76px minmax(0, 1fr) auto 74px;
   color: #dfe8e6;
   background: var(--navy);
 }
 
 .sidebar-brand {
+  grid-column: 1 / -1;
+  grid-row: 1;
   height: 76px;
   padding: 0 22px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
@@ -290,15 +293,15 @@
 }
 
 .sidebar-section {
+  grid-column: 2;
+  grid-row: 2;
   min-height: 0;
-  flex: 1;
-  padding: 26px 12px;
+  padding: 12px 8px 10px;
   overflow-y: auto;
 }
 
 .sidebar-heading {
-  margin-top: 10px;
-  padding: 14px 9px 10px 12px;
+  padding: 12px 5px 10px 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
@@ -308,6 +311,42 @@
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.sidebar-rail {
+  grid-column: 1;
+  grid-row: 2 / 4;
+  min-height: 0;
+  padding: 18px 7px;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background: rgba(8, 25, 29, 0.22);
+}
+
+.sidebar-rail-button {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  color: #9fb6b2;
+  background: transparent;
+  cursor: pointer;
+}
+
+.sidebar-rail-button:hover { color: white; background: rgba(255, 255, 255, 0.08); }
+.sidebar-rail-button.active { color: #ffab96; background: var(--navy-soft); }
+.sidebar-rail-button:focus-visible { outline: 2px solid #ffab96; outline-offset: 2px; }
+
+.sidebar > .documents-storage-usage {
+  grid-column: 2;
+  grid-row: 3;
 }
 
 .icon-button {
@@ -575,6 +614,8 @@
 }
 
 .sidebar-user {
+  grid-column: 1 / -1;
+  grid-row: 4;
   height: 74px;
   padding: 12px 15px;
   border-top: 1px solid rgba(255, 255, 255, 0.07);
@@ -3796,7 +3837,7 @@ input.visually-hidden {
 
 @media (max-width: 1050px) {
   .chat-shell {
-    grid-template-columns: 260px minmax(400px, 1fr);
+    grid-template-columns: 320px minmax(400px, 1fr);
   }
 
   .people-panel {
@@ -3831,7 +3872,7 @@ input.visually-hidden {
     position: fixed;
     z-index: 12;
     inset: 0 auto 0 0;
-    width: min(300px, 86vw);
+    width: min(320px, 90vw);
     transform: translateX(-102%);
     transition: transform 180ms ease;
   }

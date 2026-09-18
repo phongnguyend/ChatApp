@@ -28,7 +28,7 @@ public sealed partial class DocumentsController(
         var actor = await FindOwner(username, cancellationToken);
         if (actor is null) return NotFound();
         var usedBytes = await UsedStorage(actor.Id, cancellationToken);
-        return Ok(new { usedBytes, limitBytes = StorageLimitBytes() });
+        return Ok(new { usedBytes, limitBytes = actor.DocumentStorageLimitBytes ?? DefaultStorageLimitBytes() });
     }
 
     [HttpGet]
@@ -200,7 +200,7 @@ public sealed partial class DocumentsController(
             name = await NextAvailableName(libraryOwnerId, folderId, name, cancellationToken);
 
         var usedBytes = await UsedStorage(libraryOwnerId, cancellationToken);
-        if (usedBytes + await ReservedStorage(libraryOwnerId, cancellationToken) + file.Length > StorageLimitBytes())
+        if (usedBytes + await ReservedStorage(libraryOwnerId, cancellationToken) + file.Length > await StorageLimitBytes(libraryOwnerId, cancellationToken))
             return StatusCode(StatusCodes.Status413PayloadTooLarge,
                 new { code = "storage_limit", message = "This upload would exceed the owner's storage limit." });
 
@@ -294,7 +294,7 @@ public sealed partial class DocumentsController(
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await LockLibrary(document.OwnerUserId, cancellationToken);
         var usedBytes = await UsedStorage(document.OwnerUserId, cancellationToken);
-        if (usedBytes + await ReservedStorage(document.OwnerUserId, cancellationToken) + file.Length > StorageLimitBytes())
+        if (usedBytes + await ReservedStorage(document.OwnerUserId, cancellationToken) + file.Length > await StorageLimitBytes(document.OwnerUserId, cancellationToken))
             return StatusCode(StatusCodes.Status413PayloadTooLarge,
                 new { code = "storage_limit", message = "This upload would exceed the owner's storage limit." });
         var key = $"documents/{document.OwnerUserId:N}/{Guid.NewGuid():N}";
@@ -414,7 +414,9 @@ public sealed partial class DocumentsController(
         var version = await db.DocumentVersions.AsNoTracking().SingleOrDefaultAsync(x =>
             x.Id == versionId && x.DocumentId == id, cancellationToken);
         if (version is null) return NotFound();
-        if (await UsedStorage(document.OwnerUserId, cancellationToken) + version.SizeBytes > StorageLimitBytes())
+        if (await UsedStorage(document.OwnerUserId, cancellationToken) +
+            await ReservedStorage(document.OwnerUserId, cancellationToken) + version.SizeBytes >
+            await StorageLimitBytes(document.OwnerUserId, cancellationToken))
             return StatusCode(StatusCodes.Status413PayloadTooLarge,
                 new { code = "storage_limit", message = "Restoring this version would exceed the owner's storage limit. Delete an older version first." });
         var source = await storage.OpenReadAsync(version.StorageKey, cancellationToken);
@@ -958,11 +960,16 @@ public sealed partial class DocumentsController(
             .Concat(names));
     }
 
-    private long StorageLimitBytes()
+    private long DefaultStorageLimitBytes()
     {
         var configured = configuration.GetValue<long?>("Documents:DefaultStorageLimitBytes");
         return configured is > 0 ? configured.Value : DefaultStorageLimit;
     }
+
+    private async Task<long> StorageLimitBytes(Guid ownerId, CancellationToken ct) =>
+        await db.Users.Where(x => x.Id == ownerId)
+            .Select(x => x.DocumentStorageLimitBytes)
+            .SingleAsync(ct) ?? DefaultStorageLimitBytes();
 
     private async Task<long> UsedStorage(Guid ownerId, CancellationToken ct)
     {

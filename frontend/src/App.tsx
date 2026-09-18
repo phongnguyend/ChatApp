@@ -16,6 +16,7 @@ import {
   ExternalLink,
   FileText,
   FolderOpen,
+  HardDrive,
   Hash,
   Images,
   LoaderCircle,
@@ -77,6 +78,7 @@ import { CalendarView } from "./components/CalendarView";
 import { DocumentsView } from "./components/DocumentsView";
 import { PublicDocumentsView } from "./components/PublicDocumentsView";
 import { DocumentsStorageUsage } from "./components/DocumentsStorageUsage";
+import { StorageManagementView } from "./components/StorageManagementView";
 import {
   type ChatAttachment,
   MessageAttachmentList,
@@ -1186,6 +1188,7 @@ function ChatApp({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [isDocumentsOpen, setIsDocumentsOpen] = useState(false);
+  const [isStorageManagementOpen, setIsStorageManagementOpen] = useState(false);
   const [isLiveStreamsOpen, setIsLiveStreamsOpen] = useState(false);
   const [requestedLiveStream, setRequestedLiveStream] =
     useState<LiveStream | null>(null);
@@ -2931,6 +2934,7 @@ function ChatApp({
         ...current.filter((item) => item.id !== conversation.id),
       ]);
       setActiveId(conversation.id);
+      setIsStorageManagementOpen(false);
       setNewGroupTitle("");
       setSelectedUsers([]);
       setUserQuery("");
@@ -2975,6 +2979,7 @@ function ChatApp({
         ...current.filter((item) => item.id !== conversation.id),
       ]);
       setActiveId(conversation.id);
+      setIsStorageManagementOpen(false);
       setConversationTab("chat");
       setConversationDialog(null);
       setUserQuery("");
@@ -3085,6 +3090,7 @@ function ChatApp({
     setActiveId(conversationId);
     setConversationTab("chat");
     setIsCalendarOpen(false);
+    setIsStorageManagementOpen(false);
     setIsSidebarOpen(false);
   }
 
@@ -3184,6 +3190,7 @@ function ChatApp({
       const created = (await response.json()) as { conversationId: string };
       await loadConversations();
       setActiveId(created.conversationId);
+      setIsStorageManagementOpen(false);
       setConversationTab("chat");
       setConversationDialog(null);
       setNewGroupTitle("");
@@ -3596,7 +3603,7 @@ function ChatApp({
   const isOnline = status === "connected";
 
   return (
-    <main className={`chat-shell ${isCalendarOpen ? "calendar-open" : ""} ${isDocumentsOpen ? "documents-open" : ""}`}>
+    <main className={`chat-shell ${isCalendarOpen ? "calendar-open" : ""} ${isDocumentsOpen ? "documents-open" : ""} ${isStorageManagementOpen ? "storage-management-open" : ""}`}>
       <button
         className={`mobile-scrim ${isSidebarOpen ? "visible" : ""}`}
         aria-label="Close conversation menu"
@@ -3618,31 +3625,62 @@ function ChatApp({
           </button>
         </div>
 
-        <div className="sidebar-section">
+        <nav className="sidebar-rail" aria-label="Main sections">
           <button
-            className={`calendar-nav-button ${isCalendarOpen ? "active" : ""}`}
+            className={`sidebar-rail-button ${!isCalendarOpen && !isDocumentsOpen && !isStorageManagementOpen ? "active" : ""}`}
             type="button"
+            aria-label="Chat"
+            title="Chat"
+            aria-current={!isCalendarOpen && !isDocumentsOpen && !isStorageManagementOpen ? "page" : undefined}
+            onClick={() => {
+              setIsCalendarOpen(false);
+              setIsDocumentsOpen(false);
+              setIsStorageManagementOpen(false);
+              setIsSidebarOpen(false);
+            }}
+          ><MessageCircleMore size={21} /></button>
+          <button
+            className={`sidebar-rail-button ${isCalendarOpen ? "active" : ""}`}
+            type="button"
+            aria-label="Calendar"
+            title="Calendar"
             aria-current={isCalendarOpen ? "page" : undefined}
             onClick={() => {
               setIsCalendarOpen(true);
               setIsDocumentsOpen(false);
+              setIsStorageManagementOpen(false);
               setIsSidebarOpen(false);
             }}
-          >
-            <CalendarDays size={17} /> Calendar
-          </button>
+          ><CalendarDays size={21} /></button>
           <button
-            className={`calendar-nav-button ${isDocumentsOpen ? "active" : ""}`}
+            className={`sidebar-rail-button ${isDocumentsOpen ? "active" : ""}`}
             type="button"
+            aria-label="My Documents"
+            title="My Documents"
             aria-current={isDocumentsOpen ? "page" : undefined}
             onClick={() => {
               setIsDocumentsOpen(true);
               setIsCalendarOpen(false);
+              setIsStorageManagementOpen(false);
               setIsSidebarOpen(false);
             }}
-          >
-            <FolderOpen size={17} /> My Documents
-          </button>
+          ><FolderOpen size={21} /></button>
+          <button
+            className={`sidebar-rail-button ${isStorageManagementOpen ? "active" : ""}`}
+            type="button"
+            aria-label="Storage management"
+            title="Storage management"
+            aria-current={isStorageManagementOpen ? "page" : undefined}
+            onClick={() => {
+              setIsStorageManagementOpen(true);
+              setIsCalendarOpen(false);
+              setIsDocumentsOpen(false);
+              setIsSidebarOpen(false);
+            }}
+          ><HardDrive size={21} /></button>
+        </nav>
+
+        <div className="sidebar-section">
           <div className="sidebar-heading">
             <span>Conversations</span>
             <button
@@ -3678,6 +3716,7 @@ function ChatApp({
                     setActiveId(conversation.id);
                     setIsCalendarOpen(false);
                     setIsDocumentsOpen(false);
+                    setIsStorageManagementOpen(false);
                     setIsSidebarOpen(false);
                   }}
                 >
@@ -3870,9 +3909,16 @@ function ChatApp({
           setConversationTab("chat");
           setIsDocumentsOpen(false);
           setIsCalendarOpen(false);
+          setIsStorageManagementOpen(false);
           setIsSidebarOpen(false);
         }}
         hidden={!isDocumentsOpen}
+      />
+      <StorageManagementView
+        apiUrl={API_URL}
+        currentUsername={user.username}
+        onBack={() => setIsStorageManagementOpen(false)}
+        hidden={!isStorageManagementOpen}
       />
 
       <section
@@ -6430,6 +6476,7 @@ function ChatApp({
           await loadConversations();
           setActiveId(conversationId);
           setConversationTab("chat");
+          setIsStorageManagementOpen(false);
           setIsSidebarOpen(false);
         }}
       />

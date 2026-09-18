@@ -17,7 +17,7 @@ public sealed partial class DocumentsController
     {
         var actor = await FindOwner(username, cancellationToken);
         if (actor is null) return NotFound();
-        if (request.SizeBytes <= 0 || request.SizeBytes > StorageLimitBytes() ||
+        if (request.SizeBytes <= 0 || request.SizeBytes > MaximumStorageLimit ||
             (request.SizeBytes + UploadChunkSize - 1) / UploadChunkSize > MaximumUploadChunks)
             return StatusCode(StatusCodes.Status413PayloadTooLarge,
                 new { code = "storage_limit", message = "The file is larger than the available upload limit." });
@@ -55,6 +55,10 @@ public sealed partial class DocumentsController
             folderId = request.FolderId;
         }
 
+        if (request.SizeBytes > await StorageLimitBytes(ownerId, cancellationToken))
+            return StatusCode(StatusCodes.Status413PayloadTooLarge,
+                new { code = "storage_limit", message = "The file is larger than the owner's storage limit." });
+
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await LockLibrary(ownerId, cancellationToken);
         if (!await FolderExists(ownerId, folderId, cancellationToken)) return NotFound();
@@ -73,7 +77,7 @@ public sealed partial class DocumentsController
         var reserved = await db.DocumentUploadSessions.Where(x => x.OwnerUserId == ownerId &&
             x.CompletedAt == null && x.ExpiresAt > now)
             .SumAsync(x => (long?)x.SizeBytes, cancellationToken) ?? 0;
-        if (await UsedStorage(ownerId, cancellationToken) + reserved + request.SizeBytes > StorageLimitBytes())
+        if (await UsedStorage(ownerId, cancellationToken) + reserved + request.SizeBytes > await StorageLimitBytes(ownerId, cancellationToken))
             return StatusCode(StatusCodes.Status413PayloadTooLarge,
                 new { code = "storage_limit", message = "This upload would exceed the owner's storage limit." });
         var session = new DocumentUploadSession
@@ -239,7 +243,7 @@ public sealed partial class DocumentsController
         var reservedOther = await db.DocumentUploadSessions.Where(x => x.OwnerUserId == session.OwnerUserId &&
             x.Id != id && x.CompletedAt == null && x.ExpiresAt > DateTimeOffset.UtcNow)
             .SumAsync(x => (long?)x.SizeBytes, cancellationToken) ?? 0;
-        if (await UsedStorage(session.OwnerUserId, cancellationToken) + reservedOther + session.SizeBytes > StorageLimitBytes())
+        if (await UsedStorage(session.OwnerUserId, cancellationToken) + reservedOther + session.SizeBytes > await StorageLimitBytes(session.OwnerUserId, cancellationToken))
             return StatusCode(StatusCodes.Status413PayloadTooLarge,
                 new { code = "storage_limit", message = "This upload would exceed the owner's storage limit." });
         var key = $"documents/{session.OwnerUserId:N}/{Guid.NewGuid():N}";

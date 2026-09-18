@@ -3,33 +3,6 @@
   display: none;
 }
 
-.calendar-nav-button {
-  width: calc(100% - 24px);
-  min-height: 42px;
-  margin: 0 12px 8px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  color: #aec0be;
-  background: transparent;
-  font-size: 12px;
-  font-weight: 700;
-  text-align: left;
-}
-
-.calendar-nav-button:hover,
-.calendar-nav-button.active {
-  color: white;
-  background: var(--navy-soft);
-}
-
-.calendar-nav-button.active svg {
-  color: var(--coral);
-}
-
 .calendar-view {
   grid-column: 2 / -1;
   grid-row: 1;

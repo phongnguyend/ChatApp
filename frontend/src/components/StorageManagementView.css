@@ -1,0 +1,62 @@
+.chat-shell.storage-management-open .conversation-panel,
+.chat-shell.storage-management-open .people-panel { display: none; }
+
+.storage-management-view { grid-column: 2 / -1; grid-row: 1; min-width: 0; min-height: 0; padding: 30px 32px 22px; display: flex; flex-direction: column; color: var(--ink); background: var(--paper); }
+.storage-management-view[hidden] { display: none; }
+.storage-management-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+.storage-management-header .eyebrow { margin-bottom: 5px; }
+.storage-management-header h1 { margin: 0; font: 800 29px 'Manrope', sans-serif; letter-spacing: -.04em; }
+.storage-management-header p:not(.eyebrow) { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+.storage-management-header button { min-height: 38px; padding: 0 13px; border: 1px solid var(--line); border-radius: 9px; display: inline-flex; align-items: center; gap: 7px; color: var(--ink); background: var(--paper); font-size: 11px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+.storage-management-header button:hover { background: var(--cream); }
+.storage-management-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 24px; }
+.storage-management-summary > div { min-width: 0; min-height: 82px; padding: 15px; border: 1px solid var(--line); border-radius: 12px; display: flex; align-items: center; gap: 12px; background: var(--cream); }
+.storage-management-summary svg { flex: 0 0 auto; color: #ca5b47; }
+.storage-management-summary small, .storage-management-summary strong { display: block; }
+.storage-management-summary small { margin-bottom: 5px; color: var(--muted); font-size: 11px; }
+.storage-management-summary strong { font-size: 19px; }
+.storage-management-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
+.storage-management-toolbar > strong { font-size: 12px; }
+.storage-management-toolbar label { height: 38px; min-width: 220px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; display: flex; align-items: center; gap: 7px; color: var(--muted); }
+.storage-management-toolbar input { width: 100%; min-width: 0; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 11px; }
+.storage-management-table { min-height: 0; flex: 1; overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
+.storage-management-row { min-width: 840px; min-height: 72px; padding: 10px 15px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: minmax(180px, 1.3fr) minmax(170px, 1.3fr) minmax(110px, .75fr) minmax(135px, 1fr) 95px; align-items: center; gap: 14px; font-size: 11px; }
+.storage-management-row:last-child { border-bottom: 0; }
+.storage-management-row:not(.storage-management-table-header):hover { background: var(--cream); }
+.storage-management-table-header { position: sticky; top: 0; z-index: 1; min-height: 40px; padding-top: 0; padding-bottom: 0; color: var(--muted); background: var(--paper); font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.storage-management-user { min-width: 0; }
+.storage-management-user strong, .storage-management-user small, .storage-management-limit small, .storage-management-used small { display: block; }
+.storage-management-user strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.storage-management-user small, .storage-management-limit small, .storage-management-used small { margin-top: 4px; color: var(--muted); font-size: 10px; }
+.storage-management-used > span small { display: inline; }
+.storage-management-track { height: 6px; margin-top: 7px; overflow: hidden; border-radius: 99px; background: var(--line); }
+.storage-management-track span { height: 100%; display: block; border-radius: inherit; background: #ca5b47; }
+.storage-management-over { color: #c84b3d; font-weight: 800; }
+.storage-management-edit, .storage-management-more { min-height: 34px; padding: 0 9px; border: 1px solid var(--line); border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: var(--ink); background: var(--paper); font-size: 11px; font-weight: 700; cursor: pointer; }
+.storage-management-edit:hover, .storage-management-more:hover { background: var(--cream); }
+.storage-management-more { margin: 12px auto 0; }
+.storage-management-state { padding: 28px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.storage-management-error { margin: 0 0 12px; color: #c84b3d; font-size: 12px; }
+.storage-management-backdrop { position: fixed; z-index: 55; inset: 0; padding: 20px; display: grid; place-items: center; background: rgba(8, 21, 25, .64); backdrop-filter: blur(4px); }
+.storage-management-dialog { width: min(450px, 100%); max-height: calc(100vh - 40px); padding: 24px; border: 1px solid var(--line); border-radius: 16px; overflow: auto; color: var(--ink); background: var(--paper); box-shadow: 0 25px 80px rgba(0,0,0,.28); }
+.storage-management-dialog-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.storage-management-dialog-heading h2 { margin: 0; font: 800 20px 'Manrope', sans-serif; }
+.storage-management-dialog-heading button { width: 30px; height: 30px; flex: 0 0 auto; padding: 0; border: 0; border-radius: 7px; display: grid; place-items: center; color: var(--muted); background: var(--cream); cursor: pointer; }
+.storage-management-dialog > p { margin: 0 0 18px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.storage-management-dialog label { display: block; margin-bottom: 7px; font-size: 11px; font-weight: 800; }
+.storage-management-dialog input { width: 100%; height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--paper); font-size: 12px; }
+.storage-management-dialog .storage-management-warning { margin: 10px 0 0; color: #a34b21; }
+.storage-management-dialog .storage-management-error { margin: 10px 0 0; color: #c84b3d; }
+.storage-management-dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+.storage-management-dialog-actions button { min-height: 38px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--paper); font-size: 11px; font-weight: 800; cursor: pointer; }
+.storage-management-dialog-actions button:first-child:nth-last-child(3) { margin-right: auto; }
+.storage-management-dialog-actions button:last-child { border-color: transparent; color: white; background: #ca5b47; }
+.storage-management-dialog-actions button:disabled { opacity: .5; cursor: default; }
+
+@media (max-width: 700px) {
+  .storage-management-view { padding: 20px 16px; }
+  .storage-management-header { flex-wrap: wrap; }
+  .storage-management-summary { grid-template-columns: 1fr; }
+  .storage-management-summary > div { min-height: 64px; }
+  .storage-management-toolbar label { width: 100%; }
+}

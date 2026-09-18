@@ -40,6 +40,12 @@ container must already exist. Keep connection strings out of `appsettings.json`;
 use
 `UploadStorage__AzureBlob__ConnectionString` or user secrets.
 
+Document storage defaults to `Documents:DefaultStorageLimitBytes` (5 GiB in
+`appsettings.json`). The Storage management screen shows each user's document
+usage, including older versions, and lets any active user set an individual
+limit or restore the default. Access permissions for this screen and API can be
+added later.
+
 ## Project structure
 
 ```text

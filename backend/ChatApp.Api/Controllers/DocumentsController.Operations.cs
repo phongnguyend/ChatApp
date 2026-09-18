@@ -157,7 +157,7 @@ public sealed partial class DocumentsController
         var reservedBytes = await db.DocumentUploadSessions.Where(x => x.OwnerUserId == actor.Id &&
             x.CompletedAt == null && x.ExpiresAt > DateTimeOffset.UtcNow)
             .SumAsync(x => (long?)x.SizeBytes, cancellationToken) ?? 0;
-        if (await UsedStorage(actor.Id, cancellationToken) + reservedBytes + copyBytes > StorageLimitBytes())
+        if (await UsedStorage(actor.Id, cancellationToken) + reservedBytes + copyBytes > await StorageLimitBytes(actor.Id, cancellationToken))
             return StatusCode(StatusCodes.Status413PayloadTooLarge,
                 new { code = "storage_limit", message = "These copies would exceed your storage limit." });
 

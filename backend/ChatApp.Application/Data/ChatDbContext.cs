@@ -169,9 +169,12 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
     {
         var entity = modelBuilder.Entity<ChatUser>();
         entity.ToTable("Users", table =>
-            table.HasCheckConstraint(
-                "CK_Users_Status",
-                "[Status] IN ('active', 'suspended', 'deleted')"));
+        {
+            table.HasCheckConstraint("CK_Users_Status",
+                "[Status] IN ('active', 'suspended', 'deleted')");
+            table.HasCheckConstraint("CK_Users_DocumentStorageLimitBytes",
+                "[DocumentStorageLimitBytes] IS NULL OR [DocumentStorageLimitBytes] > 0");
+        });
         entity.HasKey(x => x.Id);
         entity.Property(x => x.Username).HasMaxLength(50).IsRequired();
         entity.Property(x => x.NormalizedUsername).HasMaxLength(50).IsRequired();

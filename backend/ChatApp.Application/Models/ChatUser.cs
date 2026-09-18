@@ -8,6 +8,7 @@ public sealed class ChatUser
     public required string DisplayName { get; set; }
     public string? AvatarUrl { get; set; }
     public string Status { get; set; } = "active";
+    public long? DocumentStorageLimitBytes { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? LastSeenAt { get; set; }
