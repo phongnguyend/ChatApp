@@ -9,6 +9,21 @@ namespace ChatApp.Api.Controllers;
 [Route("api/user-notifications")]
 public sealed class UserNotificationsController(ChatDbContext db) : ControllerBase
 {
+    [HttpGet("unread-count")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<IActionResult> UnreadCount([FromQuery] string username,
+        CancellationToken ct)
+    {
+        var userId = await FindUserId(username, ct);
+        if (userId is null) return NotFound();
+        // A badge can tolerate a transient dirty count; avoid shared read locks
+        // on the notification table during the frequent polling request.
+        var count = await db.Database.SqlQuery<int>(
+            $"SELECT COUNT(*) AS [Value] FROM [UserNotifications] WITH (NOLOCK) WHERE [UserId] = {userId.Value} AND [ReadAt] IS NULL")
+            .SingleAsync(ct);
+        return Ok(new { unreadCount = count });
+    }
+
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] string username,
         [FromQuery] int page = 0, CancellationToken ct = default)
@@ -26,7 +41,7 @@ public sealed class UserNotificationsController(ChatDbContext db) : ControllerBa
             .ThenByDescending(x => x.Id)
             .Skip(page * pageSize).Take(pageSize + 1)
             .Select(x => new UserNotificationDto(x.Id, x.Type, x.TargetId,
-                x.TargetTitle, x.ActorUser.DisplayName, x.ActorUser.Username,
+                x.TargetTitle, x.Details, x.ActorUser.DisplayName, x.ActorUser.Username,
                 x.CreatedAt, x.ReadAt))
             .ToArrayAsync(ct);
         return Ok(new UserNotificationPageDto(items.Take(pageSize).ToArray(),
@@ -69,7 +84,7 @@ public sealed class UserNotificationsController(ChatDbContext db) : ControllerBa
 }
 
 public sealed record UserNotificationDto(Guid Id, string Type, Guid TargetId,
-    string TargetTitle, string ActorDisplayName, string ActorUsername,
+    string TargetTitle, string? Details, string ActorDisplayName, string ActorUsername,
     DateTimeOffset CreatedAt, DateTimeOffset? ReadAt);
 
 public sealed record UserNotificationPageDto(UserNotificationDto[] Items,

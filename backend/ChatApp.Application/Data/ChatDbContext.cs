@@ -112,10 +112,11 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
     {
         var notification = modelBuilder.Entity<UserNotification>();
         notification.ToTable("UserNotifications", table => table.HasCheckConstraint(
-            "CK_UserNotifications_Type", "[Type] IN ('meeting_invite', 'document_file_share', 'document_folder_share', 'note_share', 'task_share', 'task_assignment')"));
+            "CK_UserNotifications_Type", "[Type] IN ('meeting_invite', 'meeting_rescheduled', 'document_file_share', 'document_folder_share', 'note_share', 'task_share', 'task_assignment')"));
         notification.HasKey(x => x.Id);
         notification.Property(x => x.Type).HasMaxLength(30).IsRequired();
         notification.Property(x => x.TargetTitle).HasMaxLength(255).IsRequired();
+        notification.Property(x => x.Details).HasMaxLength(300);
         notification.Property(x => x.CreatedAt).HasPrecision(3);
         notification.Property(x => x.ReadAt).HasPrecision(3);
         notification.HasIndex(x => new { x.UserId, x.CreatedAt, x.Id });

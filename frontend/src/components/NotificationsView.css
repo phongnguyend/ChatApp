@@ -18,6 +18,7 @@
 .notifications-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 5px; }
 .notifications-copy strong { font-size: 13px; overflow-wrap: anywhere; }
 .notifications-copy span { font-size: 12px; overflow-wrap: anywhere; }
+.notifications-copy .notifications-details { color: var(--muted); font-size: 11px; }
 .notifications-copy small { color: var(--muted); font-size: 11px; }
 .notifications-item-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .notifications-empty { min-height: 290px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; text-align: center; }

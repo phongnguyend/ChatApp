@@ -2,12 +2,13 @@ import { ArrowLeft, Bell, CalendarDays, Check, CheckCheck, ClipboardList, FileTe
 import { useEffect, useState } from "react";
 import "./NotificationsView.css";
 
-type NotificationType = "meeting_invite" | "document_file_share" | "document_folder_share" | "note_share" | "task_share" | "task_assignment";
+type NotificationType = "meeting_invite" | "meeting_rescheduled" | "document_file_share" | "document_folder_share" | "note_share" | "task_share" | "task_assignment";
 type Notification = {
   id: string;
   type: NotificationType;
   targetId: string;
   targetTitle: string;
+  details: string | null;
   actorDisplayName: string;
   actorUsername: string;
   createdAt: string;
@@ -23,6 +24,7 @@ async function readError(response: Response) {
 function activity(type: NotificationType) {
   switch (type) {
     case "meeting_invite": return { action: "invited you to a meeting", icon: CalendarDays };
+    case "meeting_rescheduled": return { action: "changed the meeting date or time", icon: CalendarDays };
     case "document_file_share": return { action: "shared a file with you", icon: FileText };
     case "document_folder_share": return { action: "shared a folder with you", icon: FolderOpen };
     case "note_share": return { action: "shared a note with you", icon: NotebookPen };
@@ -33,10 +35,11 @@ function activity(type: NotificationType) {
 
 const dateTimeFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 
-export function NotificationsView({ apiUrl, currentUsername, onBack, hidden }: {
+export function NotificationsView({ apiUrl, currentUsername, onBack, onUnreadCountChange, hidden }: {
   apiUrl: string;
   currentUsername: string;
   onBack: () => void;
+  onUnreadCountChange: (count: number) => void;
   hidden: boolean;
 }) {
   const endpoint = `${apiUrl}/api/user-notifications?username=${encodeURIComponent(currentUsername)}`;
@@ -65,11 +68,12 @@ export function NotificationsView({ apiUrl, currentUsername, onBack, hidden }: {
         setItems((current) => page === 0 ? result.items : [...current, ...result.items]);
         setHasMore(result.hasMore);
         setUnreadCount(result.unreadCount);
+        onUnreadCountChange(result.unreadCount);
       })
       .catch((reason) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load notifications."); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [endpoint, hidden, page, refreshVersion]);
+  }, [endpoint, hidden, page, refreshVersion, onUnreadCountChange]);
 
   function refresh() {
     setPage(0);
@@ -86,7 +90,9 @@ export function NotificationsView({ apiUrl, currentUsername, onBack, hidden }: {
         if (!response.ok) throw new Error(await readError(response));
         const readAt = new Date().toISOString();
         setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, readAt } : entry));
-        setUnreadCount((current) => Math.max(0, current - 1));
+        const nextUnreadCount = Math.max(0, unreadCount - 1);
+        setUnreadCount(nextUnreadCount);
+        onUnreadCountChange(nextUnreadCount);
       }
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not mark notification as read."); }
     finally { setBusyId(null); }
@@ -102,6 +108,7 @@ export function NotificationsView({ apiUrl, currentUsername, onBack, hidden }: {
       const readAt = new Date().toISOString();
       setItems((current) => current.map((item) => ({ ...item, readAt: item.readAt ?? readAt })));
       setUnreadCount(0);
+      onUnreadCountChange(0);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not mark notifications as read."); }
     finally { setMarkingAll(false); }
   }
@@ -119,7 +126,7 @@ export function NotificationsView({ apiUrl, currentUsername, onBack, hidden }: {
         const Icon = details.icon;
         return <article className={`notifications-item ${item.readAt ? "" : "unread"}`} key={item.id}>
           <span className="notifications-icon"><Icon size={19} /></span>
-          <div className="notifications-copy"><strong>{item.actorDisplayName} {details.action}</strong><span>{item.targetTitle}</span><small>@{item.actorUsername} · {dateTimeFormatter.format(new Date(item.createdAt))}</small></div>
+          <div className="notifications-copy"><strong>{item.actorDisplayName} {details.action}</strong><span>{item.targetTitle}</span>{item.details && <span className="notifications-details">{item.details}</span>}<small>@{item.actorUsername} · {dateTimeFormatter.format(new Date(item.createdAt))}</small></div>
           <div className="notifications-item-actions">{!item.readAt && <button type="button" disabled={busyId === item.id} onClick={() => void markRead(item)}><Check size={15} /> Mark read</button>}</div>
         </article>;
       })}

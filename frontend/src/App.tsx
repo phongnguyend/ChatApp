@@ -1203,7 +1203,32 @@ function ChatApp({
   const [isNotesOpen, setIsNotesOpen] = useState(false);
   const [isRemindersOpen, setIsRemindersOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [notificationUnreadCount, setNotificationUnreadCount] = useState<number | null>(null);
   const [isLiveStreamsOpen, setIsLiveStreamsOpen] = useState(false);
+  useEffect(() => {
+    let activeRequest: AbortController | null = null;
+    setNotificationUnreadCount(null);
+    const checkUnreadCount = async () => {
+      activeRequest?.abort();
+      const controller = new AbortController();
+      activeRequest = controller;
+      try {
+        const response = await fetch(`${API_URL}/api/user-notifications/unread-count?username=${encodeURIComponent(user.username)}`, {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        if (!response.ok) return;
+        const result = await response.json() as { unreadCount: number };
+        if (!controller.signal.aborted && Number.isInteger(result.unreadCount))
+          setNotificationUnreadCount(result.unreadCount);
+      } catch {
+        // Keep the last known count until the next poll.
+      }
+    };
+    void checkUnreadCount();
+    const timer = window.setInterval(() => void checkUnreadCount(), 30_000);
+    return () => { window.clearInterval(timer); activeRequest?.abort(); };
+  }, [user.username]);
   const [requestedLiveStream, setRequestedLiveStream] =
     useState<LiveStream | null>(null);
   const [activeLiveStreamIds, setActiveLiveStreamIds] = useState<Set<string>>(
@@ -3679,8 +3704,8 @@ function ChatApp({
           <button
             className={`sidebar-rail-button ${isNotificationsOpen ? "active" : ""}`}
             type="button"
-            aria-label="Notifications"
-            title="Notifications"
+            aria-label={notificationUnreadCount ? `Notifications, ${notificationUnreadCount} unread` : "Notifications"}
+            title={notificationUnreadCount ? `Notifications (${notificationUnreadCount} unread)` : "Notifications"}
             aria-current={isNotificationsOpen ? "page" : undefined}
             onClick={() => {
               setIsNotificationsOpen(true);
@@ -3693,7 +3718,7 @@ function ChatApp({
               setIsRemindersOpen(false);
               setIsSidebarOpen(false);
             }}
-          ><Bell size={21} /></button>
+          ><Bell size={21} />{notificationUnreadCount !== null && notificationUnreadCount > 0 && <span className="sidebar-rail-unread-badge" aria-hidden="true">{notificationUnreadCount > 99 ? "99+" : notificationUnreadCount}</span>}</button>
           <button
             className={`sidebar-rail-button ${isMeetingsOpen ? "active" : ""}`}
             type="button"
@@ -4102,6 +4127,7 @@ function ChatApp({
         apiUrl={API_URL}
         currentUsername={user.username}
         onBack={() => setIsNotificationsOpen(false)}
+        onUnreadCountChange={setNotificationUnreadCount}
         hidden={!isNotificationsOpen}
       />
 

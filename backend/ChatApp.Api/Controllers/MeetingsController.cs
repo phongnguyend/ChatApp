@@ -210,6 +210,7 @@ public sealed class MeetingsController(
                 Type = "meeting_invite",
                 TargetId = meeting.Id,
                 TargetTitle = meeting.Title,
+                Details = ScheduleSummary(meeting),
             });
         }
         db.ScheduledMeetings.Add(meeting);
@@ -246,6 +247,11 @@ public sealed class MeetingsController(
             return BadRequest(new { message = peopleError });
 
         var values = validation.Values!;
+        var scheduleChanged = meeting.StartDate != values.StartDate ||
+            meeting.EndDate != values.EndDate ||
+            meeting.IsAllDay != values.AllDay ||
+            meeting.StartTime != values.StartTime ||
+            meeting.EndTime != values.EndTime;
         meeting.Title = values.Title;
         meeting.Description = values.Description;
         meeting.StartDate = values.StartDate;
@@ -280,7 +286,22 @@ public sealed class MeetingsController(
                 Type = "meeting_invite",
                 TargetId = meeting.Id,
                 TargetTitle = meeting.Title,
+                Details = ScheduleSummary(meeting),
             });
+        }
+        if (scheduleChanged)
+        {
+            foreach (var participant in meeting.Participants.Where(x =>
+                existingIds.Contains(x.UserId)))
+                db.UserNotifications.Add(new UserNotification
+                {
+                    UserId = participant.UserId,
+                    ActorUserId = user.Id,
+                    Type = "meeting_rescheduled",
+                    TargetId = meeting.Id,
+                    TargetTitle = meeting.Title,
+                    Details = ScheduleSummary(meeting),
+                });
         }
 
         ConversationChanges? conversationChanges = null;
@@ -498,6 +519,16 @@ public sealed class MeetingsController(
         if (people.Length != distinctIds.Length)
             return (null, "Select active users from the people search results.");
         return (people, null);
+    }
+
+    private static string ScheduleSummary(ScheduledMeeting meeting)
+    {
+        var date = meeting.StartDate.ToString("MMM d, yyyy", CultureInfo.InvariantCulture);
+        if (meeting.StartDate != meeting.EndDate)
+            date += " – " + meeting.EndDate.ToString("MMM d, yyyy", CultureInfo.InvariantCulture);
+        return meeting.IsAllDay ? date + " · All day" :
+            date + " · " + meeting.StartTime?.ToString("HH:mm", CultureInfo.InvariantCulture) +
+            "–" + meeting.EndTime?.ToString("HH:mm", CultureInfo.InvariantCulture);
     }
 
     private static ScheduledMeetingDto ToDto(ScheduledMeeting meeting,

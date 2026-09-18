@@ -326,6 +326,7 @@
 }
 
 .sidebar-rail-button {
+  position: relative;
   width: 42px;
   height: 42px;
   flex: 0 0 auto;
@@ -342,6 +343,7 @@
 .sidebar-rail-button:hover { color: white; background: rgba(255, 255, 255, 0.08); }
 .sidebar-rail-button.active { color: #ffab96; background: var(--navy-soft); }
 .sidebar-rail-button:focus-visible { outline: 2px solid #ffab96; outline-offset: 2px; }
+.sidebar-rail-unread-badge { position: absolute; top: -5px; right: -7px; min-width: 18px; height: 18px; padding: 0 4px; border: 2px solid #14242a; border-radius: 999px; display: grid; place-items: center; color: #fff; background: #c85e4b; font-size: 10px; font-weight: 800; line-height: 1; letter-spacing: 0; }
 
 .sidebar > .documents-storage-usage {
   grid-column: 2;

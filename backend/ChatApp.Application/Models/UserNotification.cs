@@ -10,6 +10,7 @@ public sealed class UserNotification
     public required string Type { get; set; }
     public Guid TargetId { get; set; }
     public required string TargetTitle { get; set; }
+    public string? Details { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? ReadAt { get; set; }
 }
