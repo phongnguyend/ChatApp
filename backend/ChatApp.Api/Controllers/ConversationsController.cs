@@ -563,7 +563,6 @@ public sealed class ConversationsController(
         conversation.Title = title;
         conversation.UpdatedAt = now;
         conversation.LastMessage = systemMessage;
-        conversation.LastMessageId = systemMessage.Id;
         conversation.LastMessageAt = now;
         db.Messages.Add(systemMessage);
 
@@ -669,7 +668,6 @@ public sealed class ConversationsController(
         membership.UnreadCount = 0;
         conversation.UpdatedAt = now;
         conversation.LastMessage = systemMessage;
-        conversation.LastMessageId = systemMessage.Id;
         conversation.LastMessageAt = now;
         db.Messages.Add(systemMessage);
 
@@ -942,7 +940,7 @@ public sealed class ConversationsController(
                 });
         }
 
-        var messageId = Guid.NewGuid();
+        var storageScopeId = Guid.NewGuid();
         var storedKeys = new List<string>();
         var attachments = new List<MessageAttachment>();
         try
@@ -951,13 +949,12 @@ public sealed class ConversationsController(
             {
                 var storageKey = await attachmentStorage.SaveAsync(
                     id,
-                    messageId,
+                    storageScopeId,
                     file,
                     cancellationToken);
                 storedKeys.Add(storageKey);
                 attachments.Add(new MessageAttachment
                 {
-                    MessageId = messageId,
                     Message = null!,
                     StorageKey = storageKey,
                     FileName = attachmentStorage.CleanFileName(file.FileName),
@@ -1003,7 +1000,6 @@ public sealed class ConversationsController(
             var now = DateTimeOffset.UtcNow;
             var message = new ChatMessage
             {
-                Id = messageId,
                 Conversation = conversation,
                 SenderUserId = sender.Id,
                 Sender = sender,
@@ -1031,7 +1027,6 @@ public sealed class ConversationsController(
 
             db.Messages.Add(message);
             conversation.LastMessage = message;
-            conversation.LastMessageId = message.Id;
             conversation.LastMessageAt = now;
             conversation.UpdatedAt = now;
             await db.ConversationMembers
@@ -1202,7 +1197,6 @@ public sealed class ConversationsController(
         targetMembership.Role = role;
         conversation.UpdatedAt = now;
         conversation.LastMessage = systemMessage;
-        conversation.LastMessageId = systemMessage.Id;
         conversation.LastMessageAt = now;
         db.Messages.Add(systemMessage);
 
@@ -1324,7 +1318,6 @@ public sealed class ConversationsController(
         targetMembership.UnreadCount = 0;
         conversation.UpdatedAt = now;
         conversation.LastMessage = systemMessage;
-        conversation.LastMessageId = systemMessage.Id;
         conversation.LastMessageAt = now;
         db.Messages.Add(systemMessage);
 
@@ -1504,7 +1497,6 @@ public sealed class ConversationsController(
 
             conversation.UpdatedAt = now;
             conversation.LastMessage = systemMessage;
-            conversation.LastMessageId = systemMessage.Id;
             conversation.LastMessageAt = now;
             db.Messages.Add(systemMessage);
 

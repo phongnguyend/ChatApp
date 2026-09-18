@@ -283,7 +283,6 @@ public sealed class ChatHub(
 
         db.Messages.Add(message);
         conversation.LastMessage = message;
-        conversation.LastMessageId = message.Id;
         conversation.LastMessageAt = message.CreatedAt;
         conversation.UpdatedAt = message.CreatedAt;
 
@@ -418,7 +417,6 @@ public sealed class ChatHub(
         };
         var share = new LiveLocationShare
         {
-            MessageId = message.Id,
             Message = message,
             ConversationId = conversation.Id,
             Conversation = conversation,
@@ -437,7 +435,6 @@ public sealed class ChatHub(
         db.Messages.Add(message);
         db.LiveLocationShares.Add(share);
         conversation.LastMessage = message;
-        conversation.LastMessageId = message.Id;
         conversation.LastMessageAt = now;
         conversation.UpdatedAt = now;
         await db.ConversationMembers
@@ -1454,7 +1451,6 @@ public sealed class ChatHub(
 
         db.Messages.Add(message);
         conversation.LastMessage = message;
-        conversation.LastMessageId = message.Id;
         conversation.LastMessageAt = now;
         conversation.UpdatedAt = now;
 

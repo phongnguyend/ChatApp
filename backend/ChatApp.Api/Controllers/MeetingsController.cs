@@ -142,7 +142,6 @@ public sealed class MeetingsController(
             };
             db.Conversations.Add(conversation);
             meeting.Conversation = conversation;
-            meeting.ConversationId = conversation.Id;
         }
         else
         {
@@ -195,6 +194,10 @@ public sealed class MeetingsController(
             StartTime = values.StartTime,
             EndTime = values.EndTime,
         };
+        await using var transaction = await db.Database.BeginTransactionAsync(
+            cancellationToken);
+        db.ScheduledMeetings.Add(meeting);
+        await db.SaveChangesAsync(cancellationToken);
         foreach (var person in people!)
         {
             meeting.Participants.Add(new ScheduledMeetingParticipant
@@ -213,8 +216,8 @@ public sealed class MeetingsController(
                 Details = ScheduleSummary(meeting),
             });
         }
-        db.ScheduledMeetings.Add(meeting);
         await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return CreatedAtAction(nameof(GetById),
             new { id = meeting.Id, username }, ToDto(meeting, organizer.Id));
     }
@@ -418,7 +421,6 @@ public sealed class MeetingsController(
             {
                 conversation.Members.Add(new ConversationMember
                 {
-                    ConversationId = conversation.Id,
                     Conversation = conversation,
                     UserId = target.Id,
                     User = target,

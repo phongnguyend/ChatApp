@@ -2,7 +2,7 @@ namespace ChatApp.Application.Models;
 
 public sealed class DocumentVersion
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid Id { get; set; }
     public Guid DocumentId { get; set; }
     public StoredDocument Document { get; set; } = null!;
     public int Number { get; set; }

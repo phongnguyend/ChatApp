@@ -75,3 +75,27 @@ test('bulk copy and move files between folders', async ({ page, request }) => {
   await page.getByRole('button', { name: archive, exact: true }).first().click();
   await expect(row).toBeVisible();
 });
+
+test('copy a folder tree with its nested files', async ({ page, request }) => {
+  const owner = await createUser(request, 'treecopy');
+  const parent = uniqueName('Parent');
+  const child = uniqueName('Child');
+  const file = `${uniqueName('nested')}.txt`;
+  await login(page, owner.username);
+  await openSection(page, 'My Documents');
+  for (const name of [parent, child]) {
+    await page.getByRole('button', { name: 'New folder' }).click();
+    await page.getByRole('dialog', { name: 'New folder' }).getByLabel('Name').fill(name);
+    await page.getByRole('dialog', { name: 'New folder' }).getByRole('button', { name: 'Create folder' }).click();
+    await page.getByRole('button', { name, exact: true }).first().click();
+  }
+  await page.getByLabel('Choose files to upload').setInputFiles({ name: file, mimeType: 'text/plain', buffer: Buffer.from('Nested content') });
+  await expect(page.locator('.documents-row').filter({ hasText: file })).toBeVisible();
+  await page.getByRole('navigation', { name: 'Folder path' }).getByRole('button', { name: 'My Documents' }).click();
+  await page.getByRole('checkbox', { name: `Select ${parent}` }).check();
+  await page.locator('.documents-selection-bar').getByRole('button', { name: 'Copy', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Copy 1 item' }).getByRole('button', { name: 'Copy here' }).click();
+  await page.getByRole('button', { name: `${parent} (2)`, exact: true }).first().click();
+  await page.getByRole('button', { name: child, exact: true }).first().click();
+  await expect(page.locator('.documents-row').filter({ hasText: file })).toBeVisible();
+});

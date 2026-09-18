@@ -2,7 +2,7 @@ namespace ChatApp.Application.Models;
 
 public sealed class DocumentShare
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid Id { get; set; }
     public Guid OwnerUserId { get; set; }
     public ChatUser OwnerUser { get; set; } = null!;
     public Guid GranteeUserId { get; set; }

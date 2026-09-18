@@ -2,7 +2,7 @@ namespace ChatApp.Application.Models;
 
 public sealed class ChatMessage
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid Id { get; set; }
     public Guid ConversationId { get; set; }
     public required Conversation Conversation { get; set; }
     public Guid? SenderUserId { get; set; }

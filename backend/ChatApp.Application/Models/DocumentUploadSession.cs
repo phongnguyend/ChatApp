@@ -2,7 +2,7 @@ namespace ChatApp.Application.Models;
 
 public sealed class DocumentUploadSession
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid Id { get; set; }
     public Guid ActorUserId { get; set; }
     public Guid OwnerUserId { get; set; }
     public Guid? FolderId { get; set; }

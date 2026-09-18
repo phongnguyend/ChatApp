@@ -282,10 +282,11 @@ public sealed partial class DocumentsController
                 };
                 db.StoredDocuments.Add(document);
             }
-            session.CompletedFileId = document.Id;
             session.CompletedAt = now;
             session.ExpiresAt = now + UploadSessionLifetime;
             db.DocumentUploadChunks.RemoveRange(chunks);
+            await db.SaveChangesAsync(cancellationToken);
+            session.CompletedFileId = document.Id;
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             await DeleteObjects(chunkKeys);

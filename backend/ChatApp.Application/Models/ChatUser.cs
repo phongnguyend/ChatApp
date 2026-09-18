@@ -2,7 +2,7 @@ namespace ChatApp.Application.Models;
 
 public sealed class ChatUser
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid Id { get; set; }
     public required string Username { get; set; }
     public required string NormalizedUsername { get; set; }
     public required string DisplayName { get; set; }

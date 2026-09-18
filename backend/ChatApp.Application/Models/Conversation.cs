@@ -2,7 +2,7 @@ namespace ChatApp.Application.Models;
 
 public sealed class Conversation
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid Id { get; set; }
     public string Type { get; set; } = "group";
     public string? Title { get; set; }
     public string? AvatarUrl { get; set; }

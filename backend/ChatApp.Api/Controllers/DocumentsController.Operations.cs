@@ -164,19 +164,20 @@ public sealed partial class DocumentsController
         var newKeys = new List<string>();
         try
         {
-            var copiedFolders = new Dictionary<Guid, Guid>();
+            var copiedFolders = new Dictionary<Guid, DocumentFolder>();
             foreach (var (source, parent, topLevel) in folderCopies)
             {
                 var name = topLevel ? AvailableFolderName(source.Name, usedFolderNames) : source.Name;
                 var copy = new DocumentFolder
                 {
                     OwnerUserId = actor.Id,
-                    ParentFolderId = topLevel ? parent : copiedFolders[parent!.Value],
+                    ParentFolderId = topLevel ? parent : null,
+                    ParentFolder = topLevel ? null : copiedFolders[parent!.Value],
                     Name = name,
                     NormalizedName = Normalize(name),
                 };
                 db.DocumentFolders.Add(copy);
-                copiedFolders[source.Id] = copy.Id;
+                copiedFolders[source.Id] = copy;
             }
             foreach (var source in filesToCopy)
             {
@@ -194,7 +195,8 @@ public sealed partial class DocumentsController
                 db.StoredDocuments.Add(new StoredDocument
                 {
                     OwnerUserId = actor.Id,
-                    FolderId = topLevel ? destination : copiedFolders[source.FolderId!.Value],
+                    FolderId = topLevel ? destination : null,
+                    Folder = topLevel ? null : copiedFolders[source.FolderId!.Value],
                     Name = name,
                     NormalizedName = Normalize(name),
                     StorageKey = key,

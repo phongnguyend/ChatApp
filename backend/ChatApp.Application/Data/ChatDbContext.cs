@@ -70,6 +70,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         var note = modelBuilder.Entity<UserNote>();
         note.ToTable("UserNotes");
         note.HasKey(x => x.Id);
+        note.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
         note.Property(x => x.Title).HasMaxLength(200).IsRequired();
         note.Property(x => x.Content).HasMaxLength(20000).IsRequired();
         note.Property(x => x.CreatedAt).HasPrecision(3);
@@ -82,6 +83,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         share.ToTable("UserNoteShares", table => table.HasCheckConstraint(
             "CK_UserNoteShares_Permission", "[Permission] IN ('viewer', 'editor')"));
         share.HasKey(x => x.Id);
+        share.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
         share.Property(x => x.Permission).HasMaxLength(10).IsRequired();
         share.Property(x => x.CreatedAt).HasPrecision(3);
         share.HasIndex(x => new { x.NoteId, x.GranteeUserId }).IsUnique();
@@ -97,6 +99,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         var reminder = modelBuilder.Entity<UserReminder>();
         reminder.ToTable("UserReminders");
         reminder.HasKey(x => x.Id);
+        reminder.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
         reminder.Property(x => x.Title).HasMaxLength(200).IsRequired();
         reminder.Property(x => x.Description).HasMaxLength(4000);
         reminder.Property(x => x.ReminderDate).HasColumnType("date");
@@ -114,6 +117,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         notification.ToTable("UserNotifications", table => table.HasCheckConstraint(
             "CK_UserNotifications_Type", "[Type] IN ('meeting_invite', 'meeting_rescheduled', 'document_file_share', 'document_folder_share', 'note_share', 'task_share', 'task_assignment')"));
         notification.HasKey(x => x.Id);
+        notification.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
         notification.Property(x => x.Type).HasMaxLength(30).IsRequired();
         notification.Property(x => x.TargetTitle).HasMaxLength(255).IsRequired();
         notification.Property(x => x.Details).HasMaxLength(300);
@@ -133,6 +137,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         task.ToTable("UserTasks", table => table.HasCheckConstraint(
             "CK_UserTasks_Priority", "[Priority] IN ('low', 'normal', 'high')"));
         task.HasKey(x => x.Id);
+        task.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
         task.Property(x => x.Title).HasMaxLength(200).IsRequired();
         task.Property(x => x.Description).HasMaxLength(4000);
         task.Property(x => x.Priority).HasMaxLength(10).IsRequired();
@@ -149,6 +154,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         share.ToTable("UserTaskShares", table => table.HasCheckConstraint(
             "CK_UserTaskShares_Permission", "[Permission] IN ('viewer', 'editor')"));
         share.HasKey(x => x.Id);
+        share.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
         share.Property(x => x.Permission).HasMaxLength(10).IsRequired();
         share.Property(x => x.CreatedAt).HasPrecision(3);
         share.HasIndex(x => new { x.TaskId, x.GranteeUserId }).IsUnique();
@@ -164,6 +170,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         var folder = modelBuilder.Entity<DocumentFolder>();
         folder.ToTable("DocumentFolders");
         folder.HasKey(x => x.Id);
+        folder.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
         folder.Property(x => x.Name).HasMaxLength(255).IsRequired();
         folder.Property(x => x.NormalizedName).HasMaxLength(255).IsRequired();
         folder.Property(x => x.CreatedAt).HasPrecision(3);
@@ -179,6 +186,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         var document = modelBuilder.Entity<StoredDocument>();
         document.ToTable("StoredDocuments");
         document.HasKey(x => x.Id);
+        document.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
         document.Property(x => x.Name).HasMaxLength(255).IsRequired();
         document.Property(x => x.NormalizedName).HasMaxLength(255).IsRequired();
         document.Property(x => x.StorageKey).HasMaxLength(400).IsRequired();
@@ -204,6 +212,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
                 "[Permission] IN ('viewer', 'editor')");
         });
         share.HasKey(x => x.Id);
+        share.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
         share.Property(x => x.Permission).HasMaxLength(20).IsRequired();
         share.Property(x => x.CreatedAt).HasPrecision(3);
         share.HasIndex(x => new { x.FolderId, x.GranteeUserId })
@@ -225,6 +234,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
             table.HasCheckConstraint("CK_DocumentPublicLinks_Target",
                 "([FolderId] IS NOT NULL AND [FileId] IS NULL) OR ([FolderId] IS NULL AND [FileId] IS NOT NULL)"));
         publicLink.HasKey(x => x.Id);
+        publicLink.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
         publicLink.Property(x => x.Token).HasMaxLength(64).IsRequired();
         publicLink.Property(x => x.CreatedAt).HasPrecision(3);
         publicLink.Property(x => x.ExpiresAt).HasPrecision(3);
@@ -241,6 +251,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         var version = modelBuilder.Entity<DocumentVersion>();
         version.ToTable("DocumentVersions");
         version.HasKey(x => x.Id);
+        version.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
         version.Property(x => x.StorageKey).HasMaxLength(400).IsRequired();
         version.Property(x => x.ContentType).HasMaxLength(255).IsRequired();
         version.Property(x => x.CreatedAt).HasPrecision(3);
@@ -251,6 +262,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         var upload = modelBuilder.Entity<DocumentUploadSession>();
         upload.ToTable("DocumentUploadSessions");
         upload.HasKey(x => x.Id);
+        upload.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
         upload.Property(x => x.Name).HasMaxLength(255).IsRequired();
         upload.Property(x => x.NormalizedName).HasMaxLength(255).IsRequired();
         upload.Property(x => x.ContentType).HasMaxLength(255).IsRequired();
@@ -280,6 +292,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
                 "[DocumentStorageLimitBytes] IS NULL OR [DocumentStorageLimitBytes] > 0");
         });
         entity.HasKey(x => x.Id);
+        entity.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
         entity.Property(x => x.Username).HasMaxLength(50).IsRequired();
         entity.Property(x => x.NormalizedUsername).HasMaxLength(50).IsRequired();
         entity.HasIndex(x => x.NormalizedUsername).IsUnique();
@@ -299,6 +312,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
                 "CK_Conversations_Type",
                 "[Type] IN ('direct', 'group', 'live_stream')"));
         entity.HasKey(x => x.Id);
+        entity.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
         entity.Property(x => x.Type).HasMaxLength(20).IsRequired();
         entity.Property(x => x.Title).HasMaxLength(200);
         entity.Property(x => x.AvatarUrl).HasColumnType("nvarchar(max)");
@@ -323,6 +337,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         var session = modelBuilder.Entity<LiveStreamSession>();
         session.ToTable("LiveStreamSessions");
         session.HasKey(x => x.Id);
+        session.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
         session.Property(x => x.Provider).HasMaxLength(80).IsRequired();
         session.Property(x => x.ProviderCallId).HasMaxLength(500).IsRequired();
         session.Property(x => x.StartedAt).HasPrecision(3);
@@ -361,6 +376,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
                 "([EndDate] > [StartDate] OR [EndTime] > [StartTime]))");
         });
         meeting.HasKey(x => x.Id);
+        meeting.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
         meeting.Property(x => x.Title).HasMaxLength(200).IsRequired();
         meeting.Property(x => x.Description).HasMaxLength(4000);
         meeting.Property(x => x.StartDate).HasColumnType("date");
@@ -439,6 +455,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
                 "([MessageType] = 'location' AND [Content] IS NULL AND [LocationLatitude] BETWEEN -90 AND 90 AND [LocationLongitude] BETWEEN -180 AND 180) OR ([MessageType] <> 'location' AND [LocationLatitude] IS NULL AND [LocationLongitude] IS NULL)");
         });
         entity.HasKey(x => x.Id);
+        entity.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
         entity.Property(x => x.MessageType).HasMaxLength(20).HasDefaultValue("text");
         entity.Property(x => x.Content).HasColumnType("nvarchar(max)");
         entity.Property(x => x.LocationLatitude).HasPrecision(9, 6);
@@ -479,6 +496,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         var entity = modelBuilder.Entity<MessageAttachment>();
         entity.ToTable("MessageAttachments");
         entity.HasKey(x => x.Id);
+        entity.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
         entity.Property(x => x.StorageKey).HasColumnType("nvarchar(max)").IsRequired();
         entity.Property(x => x.FileName).HasMaxLength(255).IsRequired();
         entity.Property(x => x.ContentType).HasMaxLength(150).IsRequired();
@@ -559,6 +577,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
                 "CK_ConversationInvitations_Status",
                 "[Status] IN ('pending', 'accepted', 'declined', 'cancelled')"));
         entity.HasKey(x => x.Id);
+        entity.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
         entity.Property(x => x.Status).HasMaxLength(20).HasDefaultValue("pending");
         entity.Property(x => x.CreatedAt).HasPrecision(3);
         entity.Property(x => x.RespondedAt).HasPrecision(3);
@@ -582,6 +601,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         var entity = modelBuilder.Entity<MessageVersion>();
         entity.ToTable("MessageVersions");
         entity.HasKey(x => x.Id);
+        entity.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
         entity.Property(x => x.Content).HasColumnType("nvarchar(max)");
         entity.Property(x => x.CreatedAt).HasPrecision(3);
         entity.HasOne(x => x.Message)
@@ -658,6 +678,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
                 "[Status] IN ('requesting-consent', 'recording', 'processing', 'completed', 'cancelled', 'failed')");
         });
         recording.HasKey(x => x.Id);
+        recording.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
         recording.Property(x => x.SessionType).HasMaxLength(20).IsRequired();
         recording.Property(x => x.Status).HasMaxLength(30).IsRequired();
         recording.Property(x => x.Provider).HasMaxLength(80).IsRequired();

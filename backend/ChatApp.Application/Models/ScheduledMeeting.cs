@@ -2,7 +2,7 @@ namespace ChatApp.Application.Models;
 
 public sealed class ScheduledMeeting
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid Id { get; set; }
     public Guid OrganizerUserId { get; set; }
     public ChatUser OrganizerUser { get; set; } = null!;
     public required string Title { get; set; }

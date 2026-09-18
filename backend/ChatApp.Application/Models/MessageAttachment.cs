@@ -2,7 +2,7 @@ namespace ChatApp.Application.Models;
 
 public sealed class MessageAttachment
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid Id { get; set; }
     public Guid MessageId { get; set; }
     public required ChatMessage Message { get; set; }
     public required string StorageKey { get; set; }

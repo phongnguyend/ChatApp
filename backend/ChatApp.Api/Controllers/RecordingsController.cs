@@ -495,7 +495,6 @@ public sealed class RecordingsController(
         };
         db.Messages.Add(message);
         conversation.LastMessage = message;
-        conversation.LastMessageId = message.Id;
         conversation.LastMessageAt = now;
         conversation.UpdatedAt = now;
         await db.ConversationMembers

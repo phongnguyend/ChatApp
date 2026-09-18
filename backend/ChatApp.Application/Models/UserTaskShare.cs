@@ -2,7 +2,7 @@ namespace ChatApp.Application.Models;
 
 public sealed class UserTaskShare
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid Id { get; set; }
     public Guid TaskId { get; set; }
     public UserTask Task { get; set; } = null!;
     public Guid GranteeUserId { get; set; }

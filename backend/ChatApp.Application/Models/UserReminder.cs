@@ -2,7 +2,7 @@ namespace ChatApp.Application.Models;
 
 public sealed class UserReminder
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid Id { get; set; }
     public Guid UserId { get; set; }
     public ChatUser User { get; set; } = null!;
     public required string Title { get; set; }

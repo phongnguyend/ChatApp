@@ -100,7 +100,6 @@ public sealed class RecordingFileStatusUpdatedHandler(
         long durationMilliseconds,
         CancellationToken cancellationToken)
     {
-        var messageId = Guid.NewGuid();
         var attachments = contentLocations
             .Select((location, index) =>
             {
@@ -110,7 +109,6 @@ public sealed class RecordingFileStatusUpdatedHandler(
                 return new MessageAttachment
                 {
                     Message = null!,
-                    MessageId = messageId,
                     StorageKey = location.AbsoluteUri,
                     FileName =
                         $"recording-{recording.StartedAt:yyyyMMdd-HHmmss}{suffix}.mp4",
@@ -126,7 +124,6 @@ public sealed class RecordingFileStatusUpdatedHandler(
         {
             await SaveRecordingMessageAsync(
                 recording,
-                messageId,
                 attachments,
                 durationMilliseconds,
                 cancellationToken);
@@ -143,7 +140,6 @@ public sealed class RecordingFileStatusUpdatedHandler(
 
     private async Task SaveRecordingMessageAsync(
         SessionRecording recording,
-        Guid messageId,
         IReadOnlyCollection<MessageAttachment> attachments,
         long durationMilliseconds,
         CancellationToken cancellationToken)
@@ -161,7 +157,6 @@ public sealed class RecordingFileStatusUpdatedHandler(
         var now = DateTimeOffset.UtcNow;
         var message = new ChatMessage
         {
-            Id = messageId,
             Conversation = conversation,
             ConversationId = conversation.Id,
             MessageType = "system",
@@ -182,7 +177,6 @@ public sealed class RecordingFileStatusUpdatedHandler(
         recording.Status = "completed";
         recording.CompletedAt = now;
         conversation.LastMessage = message;
-        conversation.LastMessageId = message.Id;
         conversation.LastMessageAt = now;
         conversation.UpdatedAt = now;
         await db.ConversationMembers

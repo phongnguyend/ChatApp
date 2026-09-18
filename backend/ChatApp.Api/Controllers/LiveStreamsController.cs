@@ -149,16 +149,14 @@ public sealed class LiveStreamsController(
             return Conflict(new { message = "You already have an active live stream. Stop it before starting another." });
         }
 
-        var sessionId = Guid.NewGuid();
         var session = new LiveStreamSession
         {
-            Id = sessionId,
             Conversation = conversation,
             ConversationId = conversation.Id,
             HostUser = user,
             HostUserId = user.Id,
             Provider = callingProvider.Name,
-            ProviderCallId = sessionId.ToString()
+            ProviderCallId = Guid.NewGuid().ToString()
         };
         db.LiveStreamSessions.Add(session);
         ChatMessage systemMessage;
@@ -495,7 +493,6 @@ public sealed class LiveStreamsController(
         };
         db.Messages.Add(message);
         conversation.LastMessage = message;
-        conversation.LastMessageId = message.Id;
         conversation.LastMessageAt = now;
         conversation.UpdatedAt = now;
 

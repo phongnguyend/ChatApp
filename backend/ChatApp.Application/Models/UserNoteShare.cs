@@ -2,7 +2,7 @@ namespace ChatApp.Application.Models;
 
 public sealed class UserNoteShare
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid Id { get; set; }
     public Guid NoteId { get; set; }
     public UserNote Note { get; set; } = null!;
     public Guid GranteeUserId { get; set; }
