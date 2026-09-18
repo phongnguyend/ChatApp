@@ -4,6 +4,7 @@ using ChatApp.Application.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ChatApp.Api.Data.Migrations
 {
     [DbContext(typeof(ChatDbContext))]
-    partial class ChatDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260918022828_AddPublicDocumentLinks")]
+    partial class AddPublicDocumentLinks
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -416,10 +419,6 @@ namespace ChatApp.Api.Data.Migrations
                         .HasPrecision(3)
                         .HasColumnType("datetimeoffset(3)");
 
-                    b.Property<DateTimeOffset?>("ExpiresAt")
-                        .HasPrecision(3)
-                        .HasColumnType("datetimeoffset(3)");
-
                     b.Property<Guid?>("FileId")
                         .HasColumnType("uniqueidentifier");
 
@@ -502,43 +501,6 @@ namespace ChatApp.Api.Data.Migrations
 
                             t.HasCheckConstraint("CK_DocumentShares_Target", "([FolderId] IS NOT NULL AND [FileId] IS NULL) OR ([FolderId] IS NULL AND [FileId] IS NOT NULL)");
                         });
-                });
-
-            modelBuilder.Entity("ChatApp.Application.Models.DocumentVersion", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("ContentType")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasPrecision(3)
-                        .HasColumnType("datetimeoffset(3)");
-
-                    b.Property<Guid>("DocumentId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int>("Number")
-                        .HasColumnType("int");
-
-                    b.Property<long>("SizeBytes")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("StorageKey")
-                        .IsRequired()
-                        .HasMaxLength(400)
-                        .HasColumnType("nvarchar(400)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("DocumentId", "Number")
-                        .IsUnique();
-
-                    b.ToTable("DocumentVersions", (string)null);
                 });
 
             modelBuilder.Entity("ChatApp.Application.Models.LiveLocationShare", b =>
@@ -945,15 +907,6 @@ namespace ChatApp.Api.Data.Migrations
                         .HasPrecision(3)
                         .HasColumnType("datetimeoffset(3)");
 
-                    b.Property<DateTimeOffset?>("CurrentVersionCreatedAt")
-                        .HasPrecision(3)
-                        .HasColumnType("datetimeoffset(3)");
-
-                    b.Property<int>("CurrentVersionNumber")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(1);
-
                     b.Property<DateTimeOffset?>("DeletedAt")
                         .HasPrecision(3)
                         .HasColumnType("datetimeoffset(3)");
@@ -1226,17 +1179,6 @@ namespace ChatApp.Api.Data.Migrations
                     b.Navigation("GranteeUser");
 
                     b.Navigation("OwnerUser");
-                });
-
-            modelBuilder.Entity("ChatApp.Application.Models.DocumentVersion", b =>
-                {
-                    b.HasOne("ChatApp.Application.Models.StoredDocument", "Document")
-                        .WithMany()
-                        .HasForeignKey("DocumentId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Document");
                 });
 
             modelBuilder.Entity("ChatApp.Application.Models.LiveLocationShare", b =>

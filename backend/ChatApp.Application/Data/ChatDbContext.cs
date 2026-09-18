@@ -26,6 +26,11 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
     public DbSet<ScheduledMeeting> ScheduledMeetings => Set<ScheduledMeeting>();
     public DbSet<ScheduledMeetingParticipant> ScheduledMeetingParticipants =>
         Set<ScheduledMeetingParticipant>();
+    public DbSet<DocumentFolder> DocumentFolders => Set<DocumentFolder>();
+    public DbSet<StoredDocument> StoredDocuments => Set<StoredDocument>();
+    public DbSet<DocumentShare> DocumentShares => Set<DocumentShare>();
+    public DbSet<DocumentPublicLink> DocumentPublicLinks => Set<DocumentPublicLink>();
+    public DbSet<DocumentVersion> DocumentVersions => Set<DocumentVersion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -45,6 +50,97 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         ConfigureCallingProviderIdentities(modelBuilder);
         ConfigureLiveStreams(modelBuilder);
         ConfigureScheduledMeetings(modelBuilder);
+        ConfigureDocuments(modelBuilder);
+    }
+
+    private static void ConfigureDocuments(ModelBuilder modelBuilder)
+    {
+        var folder = modelBuilder.Entity<DocumentFolder>();
+        folder.ToTable("DocumentFolders");
+        folder.HasKey(x => x.Id);
+        folder.Property(x => x.Name).HasMaxLength(255).IsRequired();
+        folder.Property(x => x.NormalizedName).HasMaxLength(255).IsRequired();
+        folder.Property(x => x.CreatedAt).HasPrecision(3);
+        folder.Property(x => x.UpdatedAt).HasPrecision(3);
+        folder.Property(x => x.DeletedAt).HasPrecision(3);
+        folder.HasIndex(x => new { x.OwnerUserId, x.ParentFolderId, x.NormalizedName })
+            .IsUnique().HasFilter("[DeletedAt] IS NULL");
+        folder.HasOne(x => x.OwnerUser).WithMany()
+            .HasForeignKey(x => x.OwnerUserId).OnDelete(DeleteBehavior.NoAction);
+        folder.HasOne(x => x.ParentFolder).WithMany()
+            .HasForeignKey(x => x.ParentFolderId).OnDelete(DeleteBehavior.NoAction);
+
+        var document = modelBuilder.Entity<StoredDocument>();
+        document.ToTable("StoredDocuments");
+        document.HasKey(x => x.Id);
+        document.Property(x => x.Name).HasMaxLength(255).IsRequired();
+        document.Property(x => x.NormalizedName).HasMaxLength(255).IsRequired();
+        document.Property(x => x.StorageKey).HasMaxLength(400).IsRequired();
+        document.Property(x => x.ContentType).HasMaxLength(255).IsRequired();
+        document.Property(x => x.CreatedAt).HasPrecision(3);
+        document.Property(x => x.UpdatedAt).HasPrecision(3);
+        document.Property(x => x.DeletedAt).HasPrecision(3);
+        document.Property(x => x.CurrentVersionNumber).HasDefaultValue(1);
+        document.Property(x => x.CurrentVersionCreatedAt).HasPrecision(3);
+        document.HasIndex(x => new { x.OwnerUserId, x.FolderId, x.NormalizedName })
+            .IsUnique().HasFilter("[DeletedAt] IS NULL");
+        document.HasOne(x => x.OwnerUser).WithMany()
+            .HasForeignKey(x => x.OwnerUserId).OnDelete(DeleteBehavior.NoAction);
+        document.HasOne(x => x.Folder).WithMany()
+            .HasForeignKey(x => x.FolderId).OnDelete(DeleteBehavior.NoAction);
+
+        var share = modelBuilder.Entity<DocumentShare>();
+        share.ToTable("DocumentShares", table =>
+        {
+            table.HasCheckConstraint("CK_DocumentShares_Target",
+                "([FolderId] IS NOT NULL AND [FileId] IS NULL) OR ([FolderId] IS NULL AND [FileId] IS NOT NULL)");
+            table.HasCheckConstraint("CK_DocumentShares_Permission",
+                "[Permission] IN ('viewer', 'editor')");
+        });
+        share.HasKey(x => x.Id);
+        share.Property(x => x.Permission).HasMaxLength(20).IsRequired();
+        share.Property(x => x.CreatedAt).HasPrecision(3);
+        share.HasIndex(x => new { x.FolderId, x.GranteeUserId })
+            .IsUnique().HasFilter("[FolderId] IS NOT NULL");
+        share.HasIndex(x => new { x.FileId, x.GranteeUserId })
+            .IsUnique().HasFilter("[FileId] IS NOT NULL");
+        share.HasIndex(x => x.GranteeUserId);
+        share.HasOne(x => x.OwnerUser).WithMany()
+            .HasForeignKey(x => x.OwnerUserId).OnDelete(DeleteBehavior.NoAction);
+        share.HasOne(x => x.GranteeUser).WithMany()
+            .HasForeignKey(x => x.GranteeUserId).OnDelete(DeleteBehavior.NoAction);
+        share.HasOne(x => x.Folder).WithMany()
+            .HasForeignKey(x => x.FolderId).OnDelete(DeleteBehavior.Cascade);
+        share.HasOne(x => x.File).WithMany()
+            .HasForeignKey(x => x.FileId).OnDelete(DeleteBehavior.Cascade);
+
+        var publicLink = modelBuilder.Entity<DocumentPublicLink>();
+        publicLink.ToTable("DocumentPublicLinks", table =>
+            table.HasCheckConstraint("CK_DocumentPublicLinks_Target",
+                "([FolderId] IS NOT NULL AND [FileId] IS NULL) OR ([FolderId] IS NULL AND [FileId] IS NOT NULL)"));
+        publicLink.HasKey(x => x.Id);
+        publicLink.Property(x => x.Token).HasMaxLength(64).IsRequired();
+        publicLink.Property(x => x.CreatedAt).HasPrecision(3);
+        publicLink.Property(x => x.ExpiresAt).HasPrecision(3);
+        publicLink.HasIndex(x => x.Token).IsUnique();
+        publicLink.HasIndex(x => x.FolderId).IsUnique().HasFilter("[FolderId] IS NOT NULL");
+        publicLink.HasIndex(x => x.FileId).IsUnique().HasFilter("[FileId] IS NOT NULL");
+        publicLink.HasOne(x => x.OwnerUser).WithMany()
+            .HasForeignKey(x => x.OwnerUserId).OnDelete(DeleteBehavior.NoAction);
+        publicLink.HasOne(x => x.Folder).WithMany()
+            .HasForeignKey(x => x.FolderId).OnDelete(DeleteBehavior.Cascade);
+        publicLink.HasOne(x => x.File).WithMany()
+            .HasForeignKey(x => x.FileId).OnDelete(DeleteBehavior.Cascade);
+
+        var version = modelBuilder.Entity<DocumentVersion>();
+        version.ToTable("DocumentVersions");
+        version.HasKey(x => x.Id);
+        version.Property(x => x.StorageKey).HasMaxLength(400).IsRequired();
+        version.Property(x => x.ContentType).HasMaxLength(255).IsRequired();
+        version.Property(x => x.CreatedAt).HasPrecision(3);
+        version.HasIndex(x => new { x.DocumentId, x.Number }).IsUnique();
+        version.HasOne(x => x.Document).WithMany()
+            .HasForeignKey(x => x.DocumentId).OnDelete(DeleteBehavior.Cascade);
     }
 
     private static void ConfigureUsers(ModelBuilder modelBuilder)

@@ -1,0 +1,34 @@
+.public-documents { min-height: 100vh; padding: 0 20px 48px; color: var(--ink); background: var(--cream); }
+.public-documents-header { max-width: 960px; height: 76px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.public-documents-header a, .public-documents-header span { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); text-decoration: none; font-size: 13px; font-weight: 800; }
+.public-documents-header span { color: var(--muted); font-size: 11px; }
+.public-documents-card { max-width: 960px; min-height: 330px; margin: 0 auto; padding: 32px; border: 1px solid var(--line); border-radius: 18px; background: var(--paper); box-shadow: 0 10px 35px rgba(0,0,0,.06); }
+.public-documents-title { display: flex; align-items: center; gap: 16px; }
+.public-documents-icon { width: 52px; height: 52px; flex: 0 0 auto; border-radius: 13px; display: grid; place-items: center; color: #b88217; background: color-mix(in srgb, #e7ac42 18%, var(--paper)); }
+.public-documents-title small { color: #ca5b47; font-size: 10px; font-weight: 900; letter-spacing: .12em; }
+.public-documents-title h1 { margin: 4px 0 3px; overflow-wrap: anywhere; font: 800 23px 'Manrope', sans-serif; }
+.public-documents-title p { margin: 0; color: var(--muted); font-size: 12px; }
+.public-documents-breadcrumbs { display: flex; flex-wrap: wrap; gap: 5px; margin: 28px 0 12px; }
+.public-documents-breadcrumbs span { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
+.public-documents-breadcrumbs button { padding: 5px 7px; border: 0; border-radius: 6px; color: var(--muted); background: transparent; font-size: 12px; cursor: pointer; }
+.public-documents-breadcrumbs button[aria-current='page'] { color: var(--ink); font-weight: 800; }
+.public-documents-list { margin-top: 16px; border: 1px solid var(--line); border-radius: 11px; overflow: hidden; }
+.public-documents-row { width: 100%; min-height: 58px; padding: 10px 16px; border: 0; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 12px; color: var(--ink); background: var(--paper); text-align: left; text-decoration: none; font-size: 13px; font-weight: 700; cursor: pointer; }
+.public-documents-row:last-child { border-bottom: 0; }
+.public-documents-row:hover { background: var(--cream); }
+.public-documents-row > span, .public-documents-file span { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.public-documents-row > a { padding: 8px; color: var(--ink); }
+.public-documents-file { min-width: 0; flex: 1; padding: 0; border: 0; display: flex; align-items: center; gap: 12px; color: var(--ink); background: transparent; text-align: left; font: inherit; cursor: pointer; }
+.public-documents-file small { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; font-weight: 500; }
+.public-documents-state, .public-documents-empty { min-height: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--muted); text-align: center; font-size: 13px; }
+.public-documents-state h1 { margin: 0; color: var(--ink); font-size: 21px; }
+.public-documents-state p { max-width: 360px; margin: 0; }
+.public-documents-overlay { position: fixed; inset: 0; z-index: 80; padding: 20px; display: grid; place-items: center; background: rgba(8,21,25,.7); }
+.public-documents-preview { width: min(860px, 100%); max-height: calc(100vh - 40px); padding: 20px; border-radius: 14px; overflow: auto; color: var(--ink); background: var(--paper); }
+.public-documents-preview-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.public-documents-preview-heading strong { min-width: 0; overflow-wrap: anywhere; }
+.public-documents-preview-heading button { border: 0; color: var(--ink); background: transparent; font-size: 25px; cursor: pointer; }
+.public-documents-preview img, .public-documents-preview iframe { display: block; width: 100%; max-height: 65vh; border: 0; object-fit: contain; background: var(--cream); }
+.public-documents-preview iframe { height: 65vh; }
+.public-documents-preview > a { margin-top: 16px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; display: inline-flex; align-items: center; gap: 7px; color: var(--ink); text-decoration: none; font-size: 12px; font-weight: 800; }
+@media (max-width: 600px) { .public-documents-card { padding: 20px; } .public-documents-title h1 { font-size: 19px; } }

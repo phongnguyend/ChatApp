@@ -15,6 +15,7 @@ import {
   Download,
   ExternalLink,
   FileText,
+  FolderOpen,
   Hash,
   Images,
   LoaderCircle,
@@ -73,6 +74,9 @@ import {
 } from "./theme";
 import { AvatarPicker } from "./components/AvatarPicker";
 import { CalendarView } from "./components/CalendarView";
+import { DocumentsView } from "./components/DocumentsView";
+import { PublicDocumentsView } from "./components/PublicDocumentsView";
+import { DocumentsStorageUsage } from "./components/DocumentsStorageUsage";
 import {
   type ChatAttachment,
   MessageAttachmentList,
@@ -1178,6 +1182,7 @@ function ChatApp({
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [isDocumentsOpen, setIsDocumentsOpen] = useState(false);
   const [isLiveStreamsOpen, setIsLiveStreamsOpen] = useState(false);
   const [requestedLiveStream, setRequestedLiveStream] =
     useState<LiveStream | null>(null);
@@ -3542,7 +3547,7 @@ function ChatApp({
   const isOnline = status === "connected";
 
   return (
-    <main className={`chat-shell ${isCalendarOpen ? "calendar-open" : ""}`}>
+    <main className={`chat-shell ${isCalendarOpen ? "calendar-open" : ""} ${isDocumentsOpen ? "documents-open" : ""}`}>
       <button
         className={`mobile-scrim ${isSidebarOpen ? "visible" : ""}`}
         aria-label="Close conversation menu"
@@ -3571,10 +3576,23 @@ function ChatApp({
             aria-current={isCalendarOpen ? "page" : undefined}
             onClick={() => {
               setIsCalendarOpen(true);
+              setIsDocumentsOpen(false);
               setIsSidebarOpen(false);
             }}
           >
             <CalendarDays size={17} /> Calendar
+          </button>
+          <button
+            className={`calendar-nav-button ${isDocumentsOpen ? "active" : ""}`}
+            type="button"
+            aria-current={isDocumentsOpen ? "page" : undefined}
+            onClick={() => {
+              setIsDocumentsOpen(true);
+              setIsCalendarOpen(false);
+              setIsSidebarOpen(false);
+            }}
+          >
+            <FolderOpen size={17} /> My Documents
           </button>
           <button
             className="live-streams-nav-button"
@@ -3607,6 +3625,7 @@ function ChatApp({
                   onClick={() => {
                     setActiveId(conversation.id);
                     setIsCalendarOpen(false);
+                    setIsDocumentsOpen(false);
                     setIsSidebarOpen(false);
                   }}
                 >
@@ -3735,6 +3754,7 @@ function ChatApp({
           </nav>
         </div>
 
+        <DocumentsStorageUsage apiUrl={API_URL} username={user.username} />
         <div className="sidebar-user">
           <button
             className="avatar avatar-small avatar-edit-trigger"
@@ -3781,6 +3801,12 @@ function ChatApp({
         onBack={() => setIsCalendarOpen(false)}
         onOpenConversation={openCalendarConversation}
         hidden={!isCalendarOpen}
+      />
+      <DocumentsView
+        apiUrl={API_URL}
+        currentUsername={user.username}
+        onBack={() => setIsDocumentsOpen(false)}
+        hidden={!isDocumentsOpen}
       />
 
       <section
@@ -6362,6 +6388,9 @@ function App() {
       }}
     />
   );
+
+  const publicToken = new URLSearchParams(window.location.search).get("publicDocument");
+  if (publicToken) return <PublicDocumentsView apiUrl={API_URL} token={publicToken} />;
 
   return user ? (
     <ChatApp

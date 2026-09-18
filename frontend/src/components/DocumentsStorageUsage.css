@@ -1,0 +1,6 @@
+.documents-storage-usage { padding: 14px 20px 16px; border-top: 1px solid rgba(255,255,255,.08); color: #dfe8e6; }
+.documents-storage-heading { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 10px; font-size: 11px; }
+.documents-storage-heading span, .documents-storage-usage small { color: #9cb4b0; }
+.documents-storage-track { height: 6px; overflow: hidden; border-radius: 99px; background: rgba(255,255,255,.15); }
+.documents-storage-track span { display: block; height: 100%; border-radius: inherit; background: #e27b66; }
+.documents-storage-usage small { display: block; margin-top: 8px; font-size: 10px; }
