@@ -762,6 +762,19 @@ public sealed partial class DocumentsController(
                 Permission = request.Permission,
             };
             db.DocumentShares.Add(share);
+            var targetTitle = request.Kind == "folder"
+                ? await db.DocumentFolders.Where(x => x.Id == request.Id)
+                    .Select(x => x.Name).SingleAsync(cancellationToken)
+                : await db.StoredDocuments.Where(x => x.Id == request.Id)
+                    .Select(x => x.Name).SingleAsync(cancellationToken);
+            db.UserNotifications.Add(new UserNotification
+            {
+                UserId = grantee.Id,
+                ActorUserId = actor.Id,
+                Type = request.Kind == "folder" ? "document_folder_share" : "document_file_share",
+                TargetId = request.Id,
+                TargetTitle = targetTitle,
+            });
         }
         else share.Permission = request.Permission;
         await db.SaveChangesAsync(cancellationToken);

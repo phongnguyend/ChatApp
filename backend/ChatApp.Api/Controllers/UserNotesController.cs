@@ -152,6 +152,16 @@ public sealed class UserNotesController(ChatDbContext db) : ControllerBase
                 Permission = request.Permission,
             };
             db.UserNoteShares.Add(share);
+            var noteTitle = await db.UserNotes.Where(x => x.Id == id)
+                .Select(x => x.Title).SingleAsync(ct);
+            db.UserNotifications.Add(new UserNotification
+            {
+                UserId = grantee.Id,
+                ActorUserId = user.Id,
+                Type = "note_share",
+                TargetId = id,
+                TargetTitle = noteTitle,
+            });
         }
         else share.Permission = request.Permission;
         await db.SaveChangesAsync(ct);

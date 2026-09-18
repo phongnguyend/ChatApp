@@ -123,6 +123,7 @@ public sealed class UserTasksController(ChatDbContext db) : ControllerBase
         var task = await WriteQuery().SingleOrDefaultAsync(
             x => x.Id == id && x.UserId == user.Id, ct);
         if (task is null) return NotFound();
+        var previousAssigneeId = task.AssigneeUserId;
         if (request.AssigneeUserId is { } assigneeId)
         {
             if (assigneeId != user.Id &&
@@ -140,6 +141,16 @@ public sealed class UserTasksController(ChatDbContext db) : ControllerBase
             task.AssigneeUserId = null;
             task.AssigneeUser = null;
         }
+        if (task.AssigneeUserId is { } newAssigneeId &&
+            newAssigneeId != user.Id && newAssigneeId != previousAssigneeId)
+            db.UserNotifications.Add(new UserNotification
+            {
+                UserId = newAssigneeId,
+                ActorUserId = user.Id,
+                Type = "task_assignment",
+                TargetId = task.Id,
+                TargetTitle = task.Title,
+            });
         task.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
@@ -208,6 +219,16 @@ public sealed class UserTasksController(ChatDbContext db) : ControllerBase
                 Permission = request.Permission,
             };
             db.UserTaskShares.Add(share);
+            var taskTitle = await db.UserTasks.Where(x => x.Id == id)
+                .Select(x => x.Title).SingleAsync(ct);
+            db.UserNotifications.Add(new UserNotification
+            {
+                UserId = grantee.Id,
+                ActorUserId = user.Id,
+                Type = "task_share",
+                TargetId = id,
+                TargetTitle = taskTitle,
+            });
         }
         else share.Permission = request.Permission;
         await db.SaveChangesAsync(ct);

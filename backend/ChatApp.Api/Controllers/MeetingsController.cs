@@ -196,12 +196,22 @@ public sealed class MeetingsController(
             EndTime = values.EndTime,
         };
         foreach (var person in people!)
+        {
             meeting.Participants.Add(new ScheduledMeetingParticipant
             {
                 Meeting = meeting,
                 UserId = person.Id,
                 User = person,
             });
+            db.UserNotifications.Add(new UserNotification
+            {
+                UserId = person.Id,
+                ActorUserId = organizer.Id,
+                Type = "meeting_invite",
+                TargetId = meeting.Id,
+                TargetTitle = meeting.Title,
+            });
+        }
         db.ScheduledMeetings.Add(meeting);
         await db.SaveChangesAsync(cancellationToken);
         return CreatedAtAction(nameof(GetById),
@@ -262,6 +272,14 @@ public sealed class MeetingsController(
                 Meeting = meeting,
                 UserId = person.Id,
                 User = person,
+            });
+            db.UserNotifications.Add(new UserNotification
+            {
+                UserId = person.Id,
+                ActorUserId = user.Id,
+                Type = "meeting_invite",
+                TargetId = meeting.Id,
+                TargetTitle = meeting.Title,
             });
         }
 

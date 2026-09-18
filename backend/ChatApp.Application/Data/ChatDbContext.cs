@@ -28,6 +28,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         Set<ScheduledMeetingParticipant>();
     public DbSet<UserTask> UserTasks => Set<UserTask>();
     public DbSet<UserReminder> UserReminders => Set<UserReminder>();
+    public DbSet<UserNotification> UserNotifications => Set<UserNotification>();
     public DbSet<UserTaskShare> UserTaskShares => Set<UserTaskShare>();
     public DbSet<UserNote> UserNotes => Set<UserNote>();
     public DbSet<UserNoteShare> UserNoteShares => Set<UserNoteShare>();
@@ -59,6 +60,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         ConfigureScheduledMeetings(modelBuilder);
         ConfigureUserTasks(modelBuilder);
         ConfigureUserReminders(modelBuilder);
+        ConfigureUserNotifications(modelBuilder);
         ConfigureUserNotes(modelBuilder);
         ConfigureDocuments(modelBuilder);
     }
@@ -104,6 +106,24 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         reminder.HasIndex(x => new { x.UserId, x.ReminderDate, x.ReminderTime });
         reminder.HasOne(x => x.User).WithMany()
             .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+    }
+
+    private static void ConfigureUserNotifications(ModelBuilder modelBuilder)
+    {
+        var notification = modelBuilder.Entity<UserNotification>();
+        notification.ToTable("UserNotifications", table => table.HasCheckConstraint(
+            "CK_UserNotifications_Type", "[Type] IN ('meeting_invite', 'document_file_share', 'document_folder_share', 'note_share', 'task_share', 'task_assignment')"));
+        notification.HasKey(x => x.Id);
+        notification.Property(x => x.Type).HasMaxLength(30).IsRequired();
+        notification.Property(x => x.TargetTitle).HasMaxLength(255).IsRequired();
+        notification.Property(x => x.CreatedAt).HasPrecision(3);
+        notification.Property(x => x.ReadAt).HasPrecision(3);
+        notification.HasIndex(x => new { x.UserId, x.CreatedAt, x.Id });
+        notification.HasIndex(x => new { x.UserId, x.ReadAt });
+        notification.HasOne(x => x.User).WithMany()
+            .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        notification.HasOne(x => x.ActorUser).WithMany()
+            .HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.NoAction);
     }
 
     private static void ConfigureUserTasks(ModelBuilder modelBuilder)
