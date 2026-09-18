@@ -181,7 +181,11 @@ public sealed partial class DocumentsController
             foreach (var source in filesToCopy)
             {
                 var topLevel = selectedFiles.Any(x => x.Id == source.Id);
-                var name = topLevel ? AvailableFileName(source.Name, usedFileNames) : source.Name;
+                var name = topLevel
+                    ? source.FolderId == destination
+                        ? AvailableFileCopyName(source.Name, usedFileNames)
+                        : AvailableFileName(source.Name, usedFileNames)
+                    : source.Name;
                 var key = $"documents/{actor.Id:N}/{Guid.NewGuid():N}";
                 await using var content = await storage.OpenReadAsync(source.StorageKey, cancellationToken);
                 if (content is null) throw new IOException("A source file is unavailable.");
@@ -258,6 +262,21 @@ public sealed partial class DocumentsController
             if (used.Add(Normalize(candidate))) return candidate;
         }
         throw new InvalidOperationException("No available file name was found.");
+    }
+
+    private static string AvailableFileCopyName(string original, HashSet<string> used)
+    {
+        var extension = Path.GetExtension(original);
+        var stem = original[..^extension.Length];
+        for (var number = 1; number <= 10000; number++)
+        {
+            var suffix = number == 1 ? " - Copy" : $" - Copy ({number})";
+            var copyExtension = extension.Length + suffix.Length >= 255 ? "" : extension;
+            var copyStem = copyExtension.Length == 0 ? original : stem;
+            var candidate = $"{copyStem[..Math.Min(copyStem.Length, 255 - suffix.Length - copyExtension.Length)]}{suffix}{copyExtension}";
+            if (used.Add(Normalize(candidate))) return candidate;
+        }
+        throw new InvalidOperationException("No available file copy name was found.");
     }
 }
 

@@ -297,7 +297,9 @@
 }
 
 .sidebar-heading {
-  padding: 0 9px 10px 12px;
+  margin-top: 10px;
+  padding: 14px 9px 10px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1080,6 +1082,22 @@
   scroll-behavior: smooth;
 }
 
+.message-back-to-latest {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: block;
+  margin: 0 auto 16px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--paper);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .conversation-assets {
   grid-area: messages;
   min-height: 0;
@@ -1673,6 +1691,13 @@
 
 .message:focus {
   outline: none;
+}
+
+.message-jump-highlight {
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--coral) 18%, transparent);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--coral) 18%, transparent);
+  transition: background 0.4s ease, box-shadow 0.4s ease;
 }
 
 .message-actions {
@@ -4005,28 +4030,28 @@ input.visually-hidden {
   }
 }
 .live-streams-nav-button {
-  width: calc(100% - 24px);
-  margin: 8px 12px 14px;
-  padding: 11px 12px;
+  width: 100%;
+  margin: 4px 0 10px;
+  padding: 9px;
   border: 1px solid rgba(225, 45, 62, 0.25);
   border-radius: 10px;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
   background: rgba(225, 45, 62, 0.08);
   color: inherit;
   text-align: left;
   cursor: pointer;
 }
 
-.live-streams-nav-button span {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 750;
+.live-streams-nav-button:hover {
+  background: rgba(225, 45, 62, 0.14);
 }
 
-.live-streams-nav-button small {
-  display: block;
-  margin: 3px 0 0 25px;
-  opacity: 0.7;
+.live-streams-nav-icon {
+  color: #ffab96;
+  background: rgba(231, 101, 75, 0.14);
 }
 .live-stream-conversation-icon.is-live {
   color: #fff;

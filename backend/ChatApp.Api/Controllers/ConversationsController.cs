@@ -738,6 +738,7 @@ public sealed class ConversationsController(
         Guid id,
         [FromQuery] string username,
         [FromQuery] int limit = 80,
+        [FromQuery] Guid? aroundMessageId = null,
         CancellationToken cancellationToken = default)
     {
         if (!await IsActiveMember(id, username, cancellationToken))
@@ -747,6 +748,19 @@ public sealed class ConversationsController(
 
         var normalizedUsername = Username.Normalize(username);
         limit = Math.Clamp(limit, 1, 100);
+        var skip = 0;
+        if (aroundMessageId is { } targetId)
+        {
+            var target = await db.Messages.AsNoTracking()
+                .Where(x => x.Id == targetId && x.ConversationId == id && x.DeletedAt == null)
+                .Select(x => new { x.SequenceNumber })
+                .SingleOrDefaultAsync(cancellationToken);
+            if (target is null) return NotFound(new { message = "Message is no longer available." });
+            var newerCount = await db.Messages.AsNoTracking()
+                .CountAsync(x => x.ConversationId == id && x.SequenceNumber > target.SequenceNumber,
+                    cancellationToken);
+            skip = Math.Max(0, newerCount - limit / 2);
+        }
         var messageEntities = await db.Messages
             .AsNoTracking()
             .AsSplitQuery()
@@ -757,6 +771,7 @@ public sealed class ConversationsController(
             .Include(x => x.LiveLocationShare)
             .Where(x => x.ConversationId == id)
             .OrderByDescending(x => x.SequenceNumber)
+            .Skip(skip)
             .Take(limit)
             .ToListAsync(cancellationToken);
 

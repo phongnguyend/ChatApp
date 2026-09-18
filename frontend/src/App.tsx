@@ -1136,6 +1136,9 @@ function ChatApp({
   const [messagesByConversation, setMessagesByConversation] = useState<
     Record<string, Message[]>
   >({});
+  const [messageJumpVersion, setMessageJumpVersion] = useState(0);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [historicalConversationId, setHistoricalConversationId] = useState<string | null>(null);
   const [recordingsByConversation, setRecordingsByConversation] = useState<
     Record<string, SessionRecording[]>
   >({});
@@ -1260,6 +1263,11 @@ function ChatApp({
   const activeIdRef = useRef<string | null>(null);
   const loadedRecordingConversationIdsRef = useRef(new Set<string>());
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const pendingMessageJumpRef = useRef<{
+    conversationId: string;
+    messageId: string;
+    ready: boolean;
+  } | null>(null);
   const draftInputRef = useRef<HTMLTextAreaElement | null>(null);
   const typingTimerRef = useRef<number | null>(null);
   const liveLocationWatchRef = useRef<{
@@ -1560,6 +1568,7 @@ function ChatApp({
     const items = (await response.json()) as Conversation[];
     setConversations(items);
     setActiveId((current) => current ?? items[0]?.id ?? null);
+    return items;
   }, [user.username]);
 
   const loadMembers = useCallback(
@@ -2225,27 +2234,38 @@ function ChatApp({
 
   useEffect(() => {
     if (!activeId) return;
+    if (pendingMessageJumpRef.current?.conversationId !== activeId) {
+      pendingMessageJumpRef.current = null;
+    }
+    const jump = pendingMessageJumpRef.current;
+    const abortController = new AbortController();
     setIsLoadingMessages(true);
-    setConversations((current) =>
-      current.map((item) =>
-        item.id === activeId ? { ...item, unreadCount: 0 } : item,
-      ),
-    );
+    if (!jump) {
+      setConversations((current) =>
+        current.map((item) =>
+          item.id === activeId ? { ...item, unreadCount: 0 } : item,
+        ),
+      );
+    }
 
     fetch(
-      `${API_URL}/api/conversations/${activeId}/messages?username=${encodeURIComponent(user.username)}`,
+      `${API_URL}/api/conversations/${activeId}/messages?username=${encodeURIComponent(user.username)}${jump ? `&aroundMessageId=${encodeURIComponent(jump.messageId)}` : ""}`,
+      { signal: abortController.signal },
     )
       .then(async (response) => {
         if (!response.ok) throw new Error(await readError(response));
         return (await response.json()) as Message[];
       })
       .then((messages) => {
+        if (abortController.signal.aborted) return;
+        if (jump) jump.ready = true;
+        setHistoricalConversationId(jump ? activeId : null);
         setMessagesByConversation((current) => ({
           ...current,
           [activeId]: messages,
         }));
         const lastMessage = messages.at(-1);
-        if (
+        if (!jump &&
           lastMessage &&
           connectionRef.current?.state === HubConnectionState.Connected
         ) {
@@ -2257,14 +2277,19 @@ function ChatApp({
         }
       })
       .catch((requestError) => {
+        if (abortController.signal.aborted) return;
+        if (jump) pendingMessageJumpRef.current = null;
         setError(
           requestError instanceof Error
             ? requestError.message
             : "Could not load messages.",
         );
       })
-      .finally(() => setIsLoadingMessages(false));
-  }, [activeId, user.username]);
+      .finally(() => {
+        if (!abortController.signal.aborted) setIsLoadingMessages(false);
+      });
+    return () => abortController.abort();
+  }, [activeId, user.username, messageJumpVersion]);
 
   useEffect(() => {
     if (!activeId) return;
@@ -2372,10 +2397,34 @@ function ChatApp({
   }, [activeId, loadMembers]);
 
   useEffect(() => {
-    if (conversationTab === "chat") {
+    if (conversationTab === "chat" && pendingMessageJumpRef.current?.conversationId !== activeId && historicalConversationId !== activeId) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [activeMessages.length, activeId, conversationTab]);
+  }, [activeMessages.length, activeId, conversationTab, historicalConversationId]);
+
+  useEffect(() => {
+    const jump = pendingMessageJumpRef.current;
+    if (!jump?.ready || jump.conversationId !== activeId || isLoadingMessages || conversationTab !== "chat") return;
+    if (!activeMessages.some((message) => message.id === jump.messageId)) {
+      pendingMessageJumpRef.current = null;
+      setError("This message is no longer available.");
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      const element = document.getElementById(`message-${jump.messageId}`);
+      element?.scrollIntoView({ behavior: "instant", block: "center" });
+      element?.focus({ preventScroll: true });
+      setHighlightedMessageId(jump.messageId);
+      pendingMessageJumpRef.current = null;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeId, activeMessages, isLoadingMessages, conversationTab]);
+
+  useEffect(() => {
+    if (!highlightedMessageId) return;
+    const timer = window.setTimeout(() => setHighlightedMessageId(null), 3500);
+    return () => window.clearTimeout(timer);
+  }, [highlightedMessageId]);
 
   const groupedMessages = useMemo(() => {
     return activeMessages.map((message, index) => {
@@ -3594,14 +3643,6 @@ function ChatApp({
           >
             <FolderOpen size={17} /> My Documents
           </button>
-          <button
-            className="live-streams-nav-button"
-            type="button"
-            onClick={() => setIsLiveStreamsOpen(true)}
-          >
-            <span><Radio size={17} /> Live streams</span>
-            <small>Browse broadcasts</small>
-          </button>
           <div className="sidebar-heading">
             <span>Conversations</span>
             <button
@@ -3613,6 +3654,17 @@ function ChatApp({
             </button>
           </div>
           <nav aria-label="Conversations">
+            <button
+              className="live-streams-nav-button"
+              type="button"
+              onClick={() => setIsLiveStreamsOpen(true)}
+            >
+              <span className="channel-icon live-streams-nav-icon"><Radio size={17} /></span>
+              <span className="conversation-copy">
+                <strong>Live streams</strong>
+                <small>Browse broadcasts</small>
+              </span>
+            </button>
             {conversations.map((conversation) => (
               <div
                 className={`conversation-row ${
@@ -3806,6 +3858,20 @@ function ChatApp({
         apiUrl={API_URL}
         currentUsername={user.username}
         onBack={() => setIsDocumentsOpen(false)}
+        onOpenConversation={async (conversationId, messageId) => {
+          const items = await loadConversations();
+          if (!items.some((item) => item.id === conversationId)) {
+            throw new Error("This conversation is no longer available.");
+          }
+          pendingMessageJumpRef.current = { conversationId, messageId, ready: false };
+          setHighlightedMessageId(null);
+          setMessageJumpVersion((current) => current + 1);
+          setActiveId(conversationId);
+          setConversationTab("chat");
+          setIsDocumentsOpen(false);
+          setIsCalendarOpen(false);
+          setIsSidebarOpen(false);
+        }}
         hidden={!isDocumentsOpen}
       />
 
@@ -4218,6 +4284,12 @@ function ChatApp({
           aria-live="polite"
           hidden={conversationTab !== "chat"}
         >
+          {historicalConversationId === activeId && !isLoadingMessages && (
+            <button className="message-back-to-latest" type="button" onClick={() => {
+              pendingMessageJumpRef.current = null;
+              setMessageJumpVersion((current) => current + 1);
+            }}>Back to latest messages</button>
+          )}
           {isLoadingMessages ? (
             <div className="center-state">
               <LoaderCircle className="spin" size={24} />
@@ -4283,7 +4355,8 @@ function ChatApp({
                       id={`message-${message.id}`}
                       className={`system-message ${
                         hasSystemAttachments ? "has-attachments" : ""
-                      }`}
+                      } ${highlightedMessageId === message.id ? "message-jump-highlight" : ""}`}
+                      tabIndex={-1}
                     >
                       <p>{message.content}</p>
                       {hasSystemAttachments ? (
@@ -4301,7 +4374,7 @@ function ChatApp({
                       id={`message-${message.id}`}
                       className={`message ${
                         startsGroup ? "group-start" : "compact"
-                      } ${isOwnMessage ? "own-message" : ""}`}
+                      } ${isOwnMessage ? "own-message" : ""} ${highlightedMessageId === message.id ? "message-jump-highlight" : ""}`}
                       tabIndex={0}
                     >
                       {startsGroup && !isOwnMessage ? (
