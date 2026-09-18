@@ -129,6 +129,7 @@
 .documents-drop-hint { position: absolute; inset: 18px; z-index: 8; border: 3px dashed var(--coral); border-radius: 12px; display: grid; place-items: center; color: var(--ink); background: color-mix(in srgb, var(--paper) 92%, transparent); font-size: 16px; font-weight: 800; pointer-events: none; }
 .documents-modal-backdrop { position: fixed; z-index: 55; inset: 0; padding: 20px; display: grid; place-items: center; background: rgba(8, 21, 25, .64); backdrop-filter: blur(4px); }
 .documents-modal { width: min(430px, 100%); max-height: calc(100vh - 40px); padding: 24px; border: 1px solid var(--line); border-radius: 16px; overflow: auto; color: var(--ink); background: var(--paper); box-shadow: 0 25px 80px rgba(0,0,0,.28); }
+.documents-share-modal { width: min(500px, 100%); }
 .documents-modal-heading { justify-content: space-between; gap: 12px; margin-bottom: 20px; }
 .documents-modal-heading h2 { min-width: 0; margin: 0; overflow-wrap: anywhere; font: 800 20px 'Manrope', sans-serif; }
 .documents-modal-heading button { width: 30px; height: 30px; flex: 0 0 auto; padding: 0; border: 0; border-radius: 7px; display: grid; place-items: center; color: var(--muted); background: var(--cream); }
@@ -141,13 +142,17 @@
 .documents-people-results button:hover { background: var(--cream); }
 .documents-people-results small { color: var(--muted); }
 .documents-modal .documents-selected-person { margin-top: 7px; color: var(--ink); }
+.documents-share-tabs { display: flex; gap: 18px; margin: -3px 0 20px; border-bottom: 1px solid var(--line); }
+.documents-share-tabs button { padding: 0 2px 11px; border: 0; border-bottom: 2px solid transparent; display: inline-flex; align-items: center; gap: 7px; color: var(--muted); background: transparent; font-size: 12px; font-weight: 800; cursor: pointer; }
+.documents-share-tabs button[aria-selected='true'] { color: #ca5b47; border-bottom-color: #ca5b47; }
+.documents-share-tabs button:hover { color: var(--ink); }
 .documents-share-list { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
 .documents-share-list > strong { font-size: 11px; }
 .documents-share-list > p { margin-top: 9px; }
 .documents-share-person { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
 .documents-share-person small { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; }
 .documents-share-person button { padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; color: var(--ink); background: var(--paper); font-size: 10px; cursor: pointer; }
-.documents-public-sharing { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+.documents-public-sharing { margin-top: 0; }
 .documents-public-sharing > strong { display: flex; align-items: center; gap: 7px; font-size: 11px; }
 .documents-public-sharing > p { margin: 8px 0 12px; }
 .documents-public-sharing label { margin-top: 12px; }
