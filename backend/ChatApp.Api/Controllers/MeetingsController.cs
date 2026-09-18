@@ -18,6 +18,63 @@ public sealed class MeetingsController(
     IHubContext<ChatHub> hubContext,
     PresenceTracker presence) : ControllerBase
 {
+    [HttpGet("manage")]
+    public async Task<ActionResult<MeetingManagePageDto>> Manage(
+        [FromQuery] string username,
+        [FromQuery] string tab = "created",
+        [FromQuery] int page = 0,
+        [FromQuery] string? from = null,
+        [FromQuery] string? to = null,
+        [FromQuery] string? name = null,
+        [FromQuery] string? organizer = null,
+        [FromQuery] string? participant = null,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await FindUser(username, cancellationToken);
+        if (user is null) return NotFound();
+        if (tab is not ("created" or "invited") || page < 0 || page > 10000)
+            return BadRequest(new { message = "Choose a valid meeting tab and page." });
+        if ((!string.IsNullOrWhiteSpace(from) && !TryDate(from, out _)) ||
+            (!string.IsNullOrWhiteSpace(to) && !TryDate(to, out _)))
+            return BadRequest(new { message = "Choose valid filter dates." });
+        var start = string.IsNullOrWhiteSpace(from)
+            ? (DateOnly?)null : DateOnly.ParseExact(from, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var end = string.IsNullOrWhiteSpace(to)
+            ? (DateOnly?)null : DateOnly.ParseExact(to, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+        if (start > end)
+            return BadRequest(new { message = "The end date must be on or after the start date." });
+        name = name?.Trim();
+        organizer = organizer?.Trim();
+        participant = participant?.Trim();
+        if (name?.Length > 200 || organizer?.Length > 100 || participant?.Length > 100)
+            return BadRequest(new { message = "A meeting search term is too long." });
+
+        const int pageSize = 50;
+        var query = ReadQuery().Where(x => tab == "created"
+            ? x.OrganizerUserId == user.Id
+            : x.Participants.Any(membership => membership.UserId == user.Id));
+        if (start.HasValue) query = query.Where(x => x.EndDate >= start.Value);
+        if (end.HasValue) query = query.Where(x => x.StartDate <= end.Value);
+        if (!string.IsNullOrEmpty(name))
+            query = query.Where(x => x.Title.Contains(name));
+        if (tab == "invited" && !string.IsNullOrEmpty(organizer))
+            query = query.Where(x => x.OrganizerUser.DisplayName.Contains(organizer) ||
+                x.OrganizerUser.Username.Contains(organizer));
+        if (!string.IsNullOrEmpty(participant))
+            query = query.Where(x => x.Participants.Any(person =>
+                person.User.DisplayName.Contains(participant) ||
+                person.User.Username.Contains(participant)));
+        var meetings = await query.OrderByDescending(x => x.StartDate)
+            .ThenByDescending(x => x.StartTime)
+            .ThenByDescending(x => x.Id)
+            .Skip(page * pageSize)
+            .Take(pageSize + 1)
+            .ToListAsync(cancellationToken);
+        return Ok(new MeetingManagePageDto(
+            meetings.Take(pageSize).Select(x => ToDto(x, user.Id)).ToArray(),
+            meetings.Count > pageSize));
+    }
+
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<ScheduledMeetingDto>>> List(
         [FromQuery] string username,
@@ -464,6 +521,9 @@ public sealed record MeetingPersonDto(Guid Id, string DisplayName,
     string Username);
 
 public sealed record MeetingConversationDto(Guid ConversationId);
+
+public sealed record MeetingManagePageDto(
+    ScheduledMeetingDto[] Items, bool HasMore);
 
 public sealed record ScheduledMeetingDto(
     Guid Id,
