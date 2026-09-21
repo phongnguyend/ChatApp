@@ -63,6 +63,18 @@
 .meetings-detail-date svg { color: #c85e4b; }
 .meetings-detail-section { margin-top: 17px; font-size: 12px; }
 .meetings-detail-section p { margin: 6px 0 0; color: var(--muted); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.meetings-response-list { display: grid; gap: 7px; margin: 8px 0 0; padding: 0; list-style: none; }
+.meetings-response-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.meetings-response-list small { color: var(--muted); }
+.meetings-response-status { flex: 0 0 auto; padding: 3px 7px; border-radius: 999px; color: var(--muted); background: var(--cream); font-size: 10px; font-weight: 700; }
+.meetings-response-status.accepted { color: #20744a; background: #e2f3e8; }
+.meetings-response-status.tentative { color: #8a6411; background: #fff1c9; }
+.meetings-response-status.declined { color: #a33d31; background: #fbe4df; }
+.meetings-rsvp > div { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
+.meetings-rsvp button { display: inline-flex; align-items: center; gap: 6px; }
+.meetings-rsvp button svg { flex: 0 0 auto; }
+.meetings-rsvp button.active { border-color: #c85e4b; color: #fff; background: #c85e4b; }
+.meetings-rsvp button.danger:not(.active) { color: #b14538; }
 .meetings-error { color: #cf5847; font-size: 12px; }
 .meetings-error button { border: 0; color: inherit; background: transparent; text-decoration: underline; cursor: pointer; }
 .meetings-spin { animation: meetings-spin 1s linear infinite; }

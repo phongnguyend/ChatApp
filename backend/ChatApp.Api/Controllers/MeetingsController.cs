@@ -296,6 +296,9 @@ public sealed class MeetingsController(
         {
             foreach (var participant in meeting.Participants.Where(x =>
                 existingIds.Contains(x.UserId)))
+            {
+                participant.ResponseStatus = "pending";
+                participant.RespondedAt = null;
                 db.UserNotifications.Add(new UserNotification
                 {
                     UserId = participant.UserId,
@@ -305,6 +308,7 @@ public sealed class MeetingsController(
                     TargetTitle = meeting.Title,
                     Details = ScheduleSummary(meeting),
                 });
+            }
         }
 
         ConversationChanges? conversationChanges = null;
@@ -354,6 +358,38 @@ public sealed class MeetingsController(
                     TargetTitle = meeting.Title,
                     Details = ScheduleSummary(meeting),
                 });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        return Ok(ToDto(meeting, user.Id));
+    }
+
+    [HttpPost("{id:guid}/response")]
+    public async Task<ActionResult<ScheduledMeetingDto>> Respond(
+        Guid id,
+        [FromQuery] string username,
+        MeetingResponseRequest request,
+        CancellationToken cancellationToken)
+    {
+        var user = await FindUser(username, cancellationToken);
+        if (user is null) return NotFound();
+        var response = request.Response?.Trim().ToLowerInvariant();
+        if (response is not ("accepted" or "tentative" or "declined"))
+            return BadRequest(new { message = "Choose accepted, tentative, or declined." });
+
+        var meeting = await WriteQuery().SingleOrDefaultAsync(x => x.Id == id,
+            cancellationToken);
+        if (meeting is null || !CanView(meeting, user.Id)) return NotFound();
+        if (meeting.Status == "cancelled")
+            return Conflict(new { message = "Cancelled meetings cannot receive responses." });
+        var participant = meeting.Participants.SingleOrDefault(x =>
+            x.UserId == user.Id);
+        if (participant is null)
+            return StatusCode(403, new { message = "The organizer cannot respond to their own meeting." });
+
+        if (participant.ResponseStatus != response)
+        {
+            participant.ResponseStatus = response;
+            participant.RespondedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(cancellationToken);
         }
         return Ok(ToDto(meeting, user.Id));
@@ -558,10 +594,12 @@ public sealed class MeetingsController(
         meeting.OrganizerUser.DisplayName,
         meeting.OrganizerUser.Username,
         meeting.OrganizerUserId == viewerId,
+        meeting.Participants.SingleOrDefault(x => x.UserId == viewerId)
+            ?.ResponseStatus,
         meeting.Participants
             .OrderBy(x => x.User.DisplayName)
             .Select(x => new MeetingPersonDto(x.UserId, x.User.DisplayName,
-                x.User.Username))
+                x.User.Username, x.ResponseStatus, x.RespondedAt))
             .ToArray(),
         meeting.CreatedAt,
         meeting.UpdatedAt,
@@ -579,7 +617,9 @@ public sealed record SaveScheduledMeetingRequest(
     Guid[]? People);
 
 public sealed record MeetingPersonDto(Guid Id, string DisplayName,
-    string Username);
+    string Username, string ResponseStatus, DateTimeOffset? RespondedAt);
+
+public sealed record MeetingResponseRequest(string? Response);
 
 public sealed record MeetingConversationDto(Guid ConversationId);
 
@@ -600,6 +640,7 @@ public sealed record ScheduledMeetingDto(
     string OrganizerDisplayName,
     string OrganizerUsername,
     bool CanEdit,
+    string? ViewerResponseStatus,
     IReadOnlyList<MeetingPersonDto> People,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,

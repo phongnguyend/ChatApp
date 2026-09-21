@@ -400,8 +400,13 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
             .OnDelete(DeleteBehavior.NoAction);
 
         var participant = modelBuilder.Entity<ScheduledMeetingParticipant>();
-        participant.ToTable("ScheduledMeetingParticipants");
+        participant.ToTable("ScheduledMeetingParticipants", table =>
+            table.HasCheckConstraint("CK_ScheduledMeetingParticipants_ResponseStatus",
+                "[ResponseStatus] IN ('pending', 'accepted', 'tentative', 'declined')"));
         participant.HasKey(x => new { x.MeetingId, x.UserId });
+        participant.Property(x => x.ResponseStatus).HasMaxLength(20)
+            .HasDefaultValue("pending").IsRequired();
+        participant.Property(x => x.RespondedAt).HasPrecision(3);
         participant.HasIndex(x => x.UserId);
         participant.HasOne(x => x.Meeting)
             .WithMany(x => x.Participants)

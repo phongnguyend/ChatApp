@@ -145,7 +145,7 @@ npm --prefix frontend run test:smoke
 
 # Database Schema
 
-Below is a practical relational schema for a chat application supporting:
+Below is the relational schema for the collaboration application, covering:
 
 - One-to-one conversations
 - Group chats
@@ -157,21 +157,37 @@ Below is a practical relational schema for a chat application supporting:
 - Message editing and deletion
 - Member roles
 - Muting and leaving conversations
+- Calling identities, recordings, and scheduled meetings
+- Tasks, reminders, notes, and in-app notifications
+- Personal documents, sharing, public links, version history, and resumable uploads
 
-PostgreSQL-style data types are used, but the design works with SQL Server or MySQL with minor changes.
+PostgreSQL-style table definitions are used for readability. The application
+itself targets SQL Server through Entity Framework Core; the authoritative model
+is `backend/ChatApp.Application/Data/ChatDbContext.cs`, and migrations are in
+`backend/ChatApp.Api/Data/Migrations`.
 
 ## 1. Core relationships
 
 ```text
 User
-  └── ConversationMember
-          └── Conversation
-                  ├── Message
-                  │     ├── MessageAttachment
-                  │     ├── MessageReaction
-                  │     └── MessageReceipt
-                  ├── LiveStreamSession
-                  └── ConversationMember
+  |-- ConversationMember -- Conversation -- Message
+  |                              |           |-- MessageAttachment
+  |                              |           |-- MessageReaction
+  |                              |           |-- MessageReceipt
+  |                              |           |-- MessageVersion
+  |                              |           `-- LiveLocationShare
+  |                              |-- LiveStreamSession
+  |                              |-- SessionRecording
+  |                              `-- ScheduledMeeting -- ScheduledMeetingParticipant
+  |-- CallingProviderIdentity
+  |-- UserTask -- UserTaskShare
+  |-- UserNote -- UserNoteShare
+  |-- UserReminder
+  |-- UserNotification
+  `-- DocumentFolder -- StoredDocument -- DocumentVersion
+                         |-- DocumentShare
+                         |-- DocumentPublicLink
+                         `-- DocumentUploadSession -- DocumentUploadChunk
 ```
 
 A conversation represents either:
@@ -179,7 +195,6 @@ A conversation represents either:
 - A direct chat between two users
 - A group chat
 - A live stream with one host and any number of conversation-member viewers
-- Optionally, a channel or support conversation later
 
 ## 2. Users
 
@@ -190,12 +205,18 @@ CREATE TABLE users (
     display_name    VARCHAR(100) NOT NULL,
     avatar_url      TEXT,
     status          VARCHAR(20) NOT NULL DEFAULT 'active',
+    document_storage_limit_bytes BIGINT,
     last_seen_at    TIMESTAMPTZ,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     CONSTRAINT ck_users_status
-        CHECK (status IN ('active', 'suspended', 'deleted'))
+        CHECK (status IN ('active', 'suspended', 'deleted')),
+    CONSTRAINT ck_users_document_storage_limit
+        CHECK (
+            document_storage_limit_bytes IS NULL
+            OR document_storage_limit_bytes > 0
+        )
 );
 ```
 
@@ -448,7 +469,10 @@ CREATE TABLE live_location_shares (
         CHECK (
             latitude BETWEEN -90 AND 90
             AND longitude BETWEEN -180 AND 180
-            AND (accuracy_meters IS NULL OR accuracy_meters >= 0)
+            AND (
+                accuracy_meters IS NULL
+                OR accuracy_meters BETWEEN 0 AND 10000
+            )
         )
 );
 
@@ -758,3 +782,417 @@ LIMIT 50;
 This remains efficient as conversation history grows.
 
 For strict and unambiguous message ordering, the server assigns the conversation-local `sequence_number` defined in section 5. Its uniqueness constraint ensures that a sequence number cannot be reused within the same conversation. This is better than relying only on timestamps because multiple messages can have the same timestamp.
+
+## 15. Calling identities and recordings
+
+Calling-provider identities are separate from application users so providers can
+be changed without changing user IDs.
+
+```sql
+CREATE TABLE calling_provider_identities (
+    user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider            VARCHAR(80) NOT NULL,
+    external_identity   VARCHAR(500) NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    PRIMARY KEY (user_id, provider),
+    CONSTRAINT uq_calling_provider_identity
+        UNIQUE (provider, external_identity)
+);
+
+CREATE TABLE session_recordings (
+    id                      UUID PRIMARY KEY,
+    conversation_id         UUID NOT NULL REFERENCES conversations(id),
+    session_id              UUID NOT NULL,
+    started_by_user_id      UUID NOT NULL REFERENCES users(id),
+    session_type            VARCHAR(20) NOT NULL,
+    provider                VARCHAR(80) NOT NULL,
+    provider_call_locator   VARCHAR(500),
+    provider_recording_id   VARCHAR(500),
+    status                  VARCHAR(30) NOT NULL,
+    storage_object_name     TEXT,
+    started_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at            TIMESTAMPTZ,
+    duration_milliseconds   BIGINT,
+
+    CONSTRAINT ck_session_recordings_type
+        CHECK (session_type IN ('direct', 'meeting', 'live_stream')),
+    CONSTRAINT ck_session_recordings_status
+        CHECK (status IN (
+            'requesting-consent', 'recording', 'processing',
+            'completed', 'cancelled', 'failed'
+        ))
+);
+
+CREATE UNIQUE INDEX uq_session_recordings_active_session
+ON session_recordings (session_id)
+WHERE status IN ('requesting-consent', 'recording', 'processing');
+
+CREATE INDEX ix_session_recordings_provider_recording
+ON session_recordings (provider, provider_recording_id);
+```
+
+The database stores object names rather than durable public recording URLs.
+
+## 16. Scheduled meetings
+
+```sql
+CREATE TABLE scheduled_meetings (
+    id                  UUID PRIMARY KEY,
+    organizer_user_id   UUID NOT NULL REFERENCES users(id),
+    conversation_id     UUID UNIQUE REFERENCES conversations(id),
+    title               VARCHAR(200) NOT NULL,
+    description         VARCHAR(4000),
+    start_date          DATE NOT NULL,
+    end_date            DATE NOT NULL,
+    is_all_day          BOOLEAN NOT NULL DEFAULT FALSE,
+    start_time          TIME,
+    end_time            TIME,
+    status              VARCHAR(20) NOT NULL DEFAULT 'scheduled',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    cancelled_at        TIMESTAMPTZ,
+
+    CONSTRAINT ck_scheduled_meetings_status
+        CHECK (status IN ('scheduled', 'cancelled')),
+    CONSTRAINT ck_scheduled_meetings_dates
+        CHECK (end_date >= start_date),
+    CONSTRAINT ck_scheduled_meetings_times
+        CHECK (
+            (is_all_day AND start_time IS NULL AND end_time IS NULL)
+            OR
+            (
+                NOT is_all_day
+                AND start_time IS NOT NULL
+                AND end_time IS NOT NULL
+                AND (end_date > start_date OR end_time > start_time)
+            )
+        )
+);
+
+CREATE TABLE scheduled_meeting_participants (
+    meeting_id  UUID NOT NULL
+                REFERENCES scheduled_meetings(id) ON DELETE CASCADE,
+    user_id     UUID NOT NULL REFERENCES users(id),
+    response_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    responded_at TIMESTAMPTZ,
+
+    PRIMARY KEY (meeting_id, user_id),
+    CONSTRAINT ck_scheduled_meeting_participant_response
+        CHECK (response_status IN ('pending', 'accepted', 'tentative', 'declined'))
+);
+
+CREATE INDEX ix_scheduled_meetings_dates
+ON scheduled_meetings (start_date, end_date);
+
+CREATE INDEX ix_scheduled_meeting_participants_user
+ON scheduled_meeting_participants (user_id);
+```
+
+The optional conversation link is unique so a meeting cannot be attached to
+multiple conversation records.
+
+## 17. Tasks and reminders
+
+```sql
+CREATE TABLE user_tasks (
+    id                  UUID PRIMARY KEY,
+    user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    assignee_user_id    UUID REFERENCES users(id),
+    title               VARCHAR(200) NOT NULL,
+    description         VARCHAR(4000),
+    due_date            DATE,
+    priority            VARCHAR(10) NOT NULL DEFAULT 'normal',
+    is_completed        BOOLEAN NOT NULL DEFAULT FALSE,
+    completed_at        TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT ck_user_tasks_priority
+        CHECK (priority IN ('low', 'normal', 'high'))
+);
+
+CREATE TABLE user_task_shares (
+    id                  UUID PRIMARY KEY,
+    task_id             UUID NOT NULL REFERENCES user_tasks(id) ON DELETE CASCADE,
+    grantee_user_id     UUID NOT NULL REFERENCES users(id),
+    permission          VARCHAR(10) NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT uq_user_task_share UNIQUE (task_id, grantee_user_id),
+    CONSTRAINT ck_user_task_share_permission
+        CHECK (permission IN ('viewer', 'editor'))
+);
+
+CREATE TABLE user_reminders (
+    id              UUID PRIMARY KEY,
+    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title           VARCHAR(200) NOT NULL,
+    description     VARCHAR(4000),
+    reminder_date   DATE NOT NULL,
+    reminder_time   TIME,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX ix_user_tasks_status_due
+ON user_tasks (user_id, is_completed, due_date);
+
+CREATE INDEX ix_user_task_shares_grantee
+ON user_task_shares (grantee_user_id);
+
+CREATE INDEX ix_user_reminders_schedule
+ON user_reminders (user_id, reminder_date, reminder_time);
+```
+
+Task ownership and assignment are distinct: `user_id` is the creator/owner,
+while `assignee_user_id` identifies the user responsible for the task.
+
+## 18. Notes
+
+```sql
+CREATE TABLE user_notes (
+    id          UUID PRIMARY KEY,
+    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title       VARCHAR(200) NOT NULL,
+    content     VARCHAR(20000) NOT NULL DEFAULT '',
+    is_pinned   BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE user_note_shares (
+    id                  UUID PRIMARY KEY,
+    note_id             UUID NOT NULL REFERENCES user_notes(id) ON DELETE CASCADE,
+    grantee_user_id     UUID NOT NULL REFERENCES users(id),
+    permission          VARCHAR(10) NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT uq_user_note_share UNIQUE (note_id, grantee_user_id),
+    CONSTRAINT ck_user_note_share_permission
+        CHECK (permission IN ('viewer', 'editor'))
+);
+
+CREATE INDEX ix_user_notes_pinned_updated
+ON user_notes (user_id, is_pinned, updated_at);
+
+CREATE INDEX ix_user_note_shares_grantee
+ON user_note_shares (grantee_user_id);
+```
+
+## 19. In-app notifications
+
+Notification targets are polymorphic: `target_id` identifies the primary
+resource and `context_id` optionally identifies its parent context, such as the
+conversation containing a reacted message.
+
+```sql
+CREATE TABLE user_notifications (
+    id              UUID PRIMARY KEY,
+    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    actor_user_id   UUID NOT NULL REFERENCES users(id),
+    type            VARCHAR(30) NOT NULL,
+    target_id       UUID NOT NULL,
+    context_id      UUID,
+    target_title    VARCHAR(255) NOT NULL,
+    details         VARCHAR(300),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    read_at         TIMESTAMPTZ,
+
+    CONSTRAINT ck_user_notifications_type
+        CHECK (type IN (
+            'meeting_invite', 'meeting_rescheduled', 'meeting_cancelled',
+            'document_file_share', 'document_folder_share', 'note_share',
+            'task_share', 'task_assignment', 'message_reaction',
+            'recording_ready'
+        ))
+);
+
+CREATE INDEX ix_user_notifications_feed
+ON user_notifications (user_id, created_at DESC, id);
+
+CREATE INDEX ix_user_notifications_unread
+ON user_notifications (user_id, read_at);
+```
+
+There are intentionally no foreign keys on polymorphic target columns. The
+notification type determines which resource table each identifier refers to.
+
+## 20. Documents
+
+Folders and files are user-owned, can be shared internally or through a public
+link, and support soft deletion. Folder and file names are stored with a
+normalized form for case-insensitive uniqueness.
+
+```sql
+CREATE TABLE document_folders (
+    id                  UUID PRIMARY KEY,
+    owner_user_id       UUID NOT NULL REFERENCES users(id),
+    parent_folder_id    UUID REFERENCES document_folders(id),
+    name                VARCHAR(255) NOT NULL,
+    normalized_name     VARCHAR(255) NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at          TIMESTAMPTZ
+);
+
+CREATE UNIQUE INDEX uq_document_folders_active_name
+ON document_folders (owner_user_id, parent_folder_id, normalized_name)
+WHERE deleted_at IS NULL;
+
+CREATE TABLE stored_documents (
+    id                          UUID PRIMARY KEY,
+    owner_user_id               UUID NOT NULL REFERENCES users(id),
+    folder_id                   UUID REFERENCES document_folders(id),
+    name                        VARCHAR(255) NOT NULL,
+    normalized_name             VARCHAR(255) NOT NULL,
+    storage_key                 VARCHAR(400) NOT NULL,
+    content_type                VARCHAR(255) NOT NULL,
+    size_bytes                  BIGINT NOT NULL,
+    current_version_number      INTEGER NOT NULL DEFAULT 1,
+    current_version_created_at  TIMESTAMPTZ,
+    created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at                  TIMESTAMPTZ
+);
+
+CREATE UNIQUE INDEX uq_stored_documents_active_name
+ON stored_documents (owner_user_id, folder_id, normalized_name)
+WHERE deleted_at IS NULL;
+
+CREATE TABLE document_versions (
+    id              UUID PRIMARY KEY,
+    document_id     UUID NOT NULL
+                    REFERENCES stored_documents(id) ON DELETE CASCADE,
+    number          INTEGER NOT NULL,
+    storage_key     VARCHAR(400) NOT NULL,
+    content_type    VARCHAR(255) NOT NULL,
+    size_bytes      BIGINT NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT uq_document_version UNIQUE (document_id, number)
+);
+```
+
+Document shares and public links target exactly one folder or file.
+
+```sql
+CREATE TABLE document_shares (
+    id                  UUID PRIMARY KEY,
+    owner_user_id       UUID NOT NULL REFERENCES users(id),
+    grantee_user_id     UUID NOT NULL REFERENCES users(id),
+    folder_id           UUID REFERENCES document_folders(id) ON DELETE CASCADE,
+    file_id             UUID REFERENCES stored_documents(id) ON DELETE CASCADE,
+    permission          VARCHAR(20) NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT ck_document_shares_target CHECK (
+        (folder_id IS NOT NULL AND file_id IS NULL)
+        OR (folder_id IS NULL AND file_id IS NOT NULL)
+    ),
+    CONSTRAINT ck_document_shares_permission
+        CHECK (permission IN ('viewer', 'editor'))
+);
+
+CREATE UNIQUE INDEX uq_document_shares_folder_grantee
+ON document_shares (folder_id, grantee_user_id)
+WHERE folder_id IS NOT NULL;
+
+CREATE UNIQUE INDEX uq_document_shares_file_grantee
+ON document_shares (file_id, grantee_user_id)
+WHERE file_id IS NOT NULL;
+
+CREATE TABLE document_public_links (
+    id              UUID PRIMARY KEY,
+    owner_user_id   UUID NOT NULL REFERENCES users(id),
+    folder_id       UUID REFERENCES document_folders(id) ON DELETE CASCADE,
+    file_id         UUID REFERENCES stored_documents(id) ON DELETE CASCADE,
+    token           VARCHAR(64) NOT NULL UNIQUE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at      TIMESTAMPTZ,
+
+    CONSTRAINT ck_document_public_links_target CHECK (
+        (folder_id IS NOT NULL AND file_id IS NULL)
+        OR (folder_id IS NULL AND file_id IS NOT NULL)
+    )
+);
+
+CREATE UNIQUE INDEX uq_document_public_links_folder
+ON document_public_links (folder_id)
+WHERE folder_id IS NOT NULL;
+
+CREATE UNIQUE INDEX uq_document_public_links_file
+ON document_public_links (file_id)
+WHERE file_id IS NOT NULL;
+```
+
+## 21. Resumable document uploads
+
+```sql
+CREATE TABLE document_upload_sessions (
+    id                  UUID PRIMARY KEY,
+    actor_user_id       UUID NOT NULL,
+    owner_user_id       UUID NOT NULL,
+    folder_id           UUID,
+    replace_file_id     UUID,
+    name                VARCHAR(255) NOT NULL,
+    normalized_name     VARCHAR(255) NOT NULL,
+    content_type        VARCHAR(255) NOT NULL,
+    fingerprint         VARCHAR(64) NOT NULL,
+    size_bytes          BIGINT NOT NULL,
+    chunk_size          INTEGER NOT NULL,
+    chunk_count         INTEGER NOT NULL,
+    completed_file_id   UUID,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at          TIMESTAMPTZ NOT NULL,
+    completed_at        TIMESTAMPTZ
+);
+
+CREATE TABLE document_upload_chunks (
+    session_id     UUID NOT NULL
+                   REFERENCES document_upload_sessions(id) ON DELETE CASCADE,
+    chunk_index    INTEGER NOT NULL,
+    storage_key    VARCHAR(400) NOT NULL,
+    sha256         VARCHAR(64) NOT NULL,
+    size_bytes     INTEGER NOT NULL,
+
+    PRIMARY KEY (session_id, chunk_index)
+);
+
+CREATE INDEX ix_document_upload_sessions_expiry
+ON document_upload_sessions (owner_user_id, expires_at);
+```
+
+Upload-session identifiers are validated by the document service. In the EF
+model they are deliberately not foreign keys, allowing expired or interrupted
+uploads to be cleaned up without creating long-lived document relationships.
+
+## 22. EF Core migration workflow
+
+The API applies pending migrations during startup with
+`Database.MigrateAsync()`. The current migration tip is
+`20260921065512_AddMeetingParticipantResponses`.
+
+```powershell
+cd backend
+
+# Check whether the model differs from the migration snapshot.
+dotnet ef migrations has-pending-model-changes `
+  --project ChatApp.Api `
+  --startup-project ChatApp.Api
+
+# Create a migration after changing an entity or ChatDbContext.
+dotnet ef migrations add <MigrationName> `
+  --project ChatApp.Api `
+  --startup-project ChatApp.Api `
+  --output-dir Data/Migrations
+
+# Apply all pending migrations to the configured database.
+dotnet ef database update `
+  --project ChatApp.Api `
+  --startup-project ChatApp.Api
+```
+
+Review generated migrations before committing them. Keep the migration,
+designer file, and `ChatDbContextModelSnapshot.cs` together. Never edit a
+migration that has already been deployed; create a new migration instead.

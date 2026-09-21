@@ -1,8 +1,9 @@
-import { AlarmClock, CalendarDays, CalendarX2, Check, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Clock3, LoaderCircle, MessageCircle, Pencil, Plus, RefreshCw, UserRound, Video, X } from "lucide-react";
+import { AlarmClock, CalendarDays, CalendarX2, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Clock3, HelpCircle, LoaderCircle, MessageCircle, Pencil, Plus, RefreshCw, UserRound, Video, X, XCircle } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import "./CalendarView.css";
 
-type Person = { id: string; displayName: string; username: string };
+type MeetingResponse = "pending" | "accepted" | "tentative" | "declined";
+type Person = { id: string; displayName: string; username: string; responseStatus?: MeetingResponse; respondedAt?: string | null };
 type CalendarMeeting = {
   id: string;
   title: string;
@@ -16,6 +17,7 @@ type CalendarMeeting = {
   organizerDisplayName: string;
   organizerUsername: string;
   canEdit: boolean;
+  viewerResponseStatus: MeetingResponse | null;
   people: Person[];
 };
 type CalendarTask = {
@@ -152,6 +154,13 @@ function minutesFromTime(value: string) {
   return hours * 60 + minutes;
 }
 
+function responseLabel(response: MeetingResponse | undefined | null) {
+  return response === "accepted" ? "Accepted"
+    : response === "tentative" ? "Maybe"
+    : response === "declined" ? "Declined"
+    : "Awaiting response";
+}
+
 function newForm(date: string, start: string, allDay = false): MeetingForm {
   return {
     title: "",
@@ -209,6 +218,7 @@ export function CalendarView({
   const [isSaving, setIsSaving] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isOpeningConversation, setIsOpeningConversation] = useState(false);
+  const [isResponding, setIsResponding] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [personQuery, setPersonQuery] = useState("");
   const [userResults, setUserResults] = useState<Person[]>([]);
@@ -305,11 +315,11 @@ export function CalendarView({
   useEffect(() => {
     if (!selectedMeeting) return;
     const onEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !isCancelling && !isOpeningConversation) closeDetails();
+      if (event.key === "Escape" && !isCancelling && !isOpeningConversation && !isResponding) closeDetails();
     };
     document.addEventListener("keydown", onEscape);
     return () => document.removeEventListener("keydown", onEscape);
-  }, [selectedMeeting, isCancelling, isOpeningConversation]);
+  }, [selectedMeeting, isCancelling, isOpeningConversation, isResponding]);
 
   useEffect(() => {
     if (!selectedTask) return;
@@ -515,6 +525,27 @@ export function CalendarView({
       setDetailError(error instanceof Error ? error.message : "Could not cancel meeting.");
     } finally {
       setIsCancelling(false);
+    }
+  }
+
+  async function respondToMeeting(responseValue: Exclude<MeetingResponse, "pending">) {
+    if (!selectedMeeting || selectedMeeting.canEdit || selectedMeeting.status === "cancelled" || isResponding) return;
+    setIsResponding(true);
+    setDetailError("");
+    try {
+      const response = await fetch(`${apiUrl}/api/meetings/${selectedMeeting.id}/response?username=${encodeURIComponent(currentUsername)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ response: responseValue }),
+      });
+      const updated = await readResponse<CalendarMeeting>(response);
+      setSelectedMeeting(updated);
+      setMeetings((current) => current.map((meeting) => meeting.id === updated.id ? updated : meeting));
+      setRefreshVersion((version) => version + 1);
+    } catch (error) {
+      setDetailError(error instanceof Error ? error.message : "Could not save your response.");
+    } finally {
+      setIsResponding(false);
     }
   }
 
@@ -916,17 +947,18 @@ export function CalendarView({
       )}
 
       {selectedMeeting && !form && (
-        <div className="calendar-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !isCancelling && !isOpeningConversation) closeDetails(); }}>
+        <div className="calendar-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !isCancelling && !isOpeningConversation && !isResponding) closeDetails(); }}>
           <div className="calendar-dialog calendar-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-detail-title">
             <div className="calendar-dialog-heading">
               <div><p className="eyebrow">Meeting details</p><h2 id="calendar-detail-title">{selectedMeeting.title}</h2></div>
-              <button type="button" aria-label="Close meeting details" disabled={isCancelling || isOpeningConversation} onClick={closeDetails}><X size={19} /></button>
+              <button type="button" aria-label="Close meeting details" disabled={isCancelling || isOpeningConversation || isResponding} onClick={closeDetails}><X size={19} /></button>
             </div>
             {selectedMeeting.status === "cancelled" && <p className="calendar-cancelled-badge">Cancelled</p>}
             <p className="calendar-detail-line"><CalendarDays size={16} /> {new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(localDate(selectedMeeting.startDate))}{selectedMeeting.endDate !== selectedMeeting.startDate ? ` – ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(localDate(selectedMeeting.endDate))}` : ""}</p>
             <p className="calendar-detail-line"><Clock3 size={16} /> {selectedMeeting.allDay ? "All day" : `${selectedMeeting.start} – ${selectedMeeting.end}`}</p>
             <div className="calendar-detail-section"><strong>Organizer</strong><p>{selectedMeeting.organizerDisplayName} (@{selectedMeeting.organizerUsername})</p></div>
-            <div className="calendar-detail-section"><strong>People</strong><p>{selectedMeeting.people.length ? selectedMeeting.people.map((person) => `${person.displayName} (@${person.username})`).join(", ") : "Only the organizer"}</p></div>
+            <div className="calendar-detail-section"><strong>People</strong>{selectedMeeting.people.length ? <ul className="calendar-response-list">{selectedMeeting.people.map((person) => <li key={person.id}><span>{person.displayName} <small>@{person.username}</small></span><span className={`calendar-response-status ${person.responseStatus ?? "pending"}`}>{responseLabel(person.responseStatus)}</span></li>)}</ul> : <p>Only the organizer</p>}</div>
+            {!selectedMeeting.canEdit && selectedMeeting.status !== "cancelled" && <div className="calendar-detail-section calendar-rsvp"><strong>Your response</strong><div role="group" aria-label="Respond to meeting invitation"><button type="button" className={selectedMeeting.viewerResponseStatus === "accepted" ? "active" : undefined} aria-pressed={selectedMeeting.viewerResponseStatus === "accepted"} disabled={isResponding || isLoadingDetail} onClick={() => void respondToMeeting("accepted")}><CheckCircle2 size={15} aria-hidden="true" /> Accept</button><button type="button" className={selectedMeeting.viewerResponseStatus === "tentative" ? "active" : undefined} aria-pressed={selectedMeeting.viewerResponseStatus === "tentative"} disabled={isResponding || isLoadingDetail} onClick={() => void respondToMeeting("tentative")}><HelpCircle size={15} aria-hidden="true" /> Maybe</button><button type="button" className={selectedMeeting.viewerResponseStatus === "declined" ? "active danger" : "danger"} aria-pressed={selectedMeeting.viewerResponseStatus === "declined"} disabled={isResponding || isLoadingDetail} onClick={() => void respondToMeeting("declined")}><XCircle size={15} aria-hidden="true" /> Decline</button></div>{isResponding && <p className="calendar-form-note" role="status"><LoaderCircle className="spin" size={15} /> Saving response…</p>}</div>}
             {selectedMeeting.description && <div className="calendar-detail-section"><strong>Description</strong><p className="calendar-detail-description">{selectedMeeting.description}</p></div>}
             {isLoadingDetail && <p role="status" className="calendar-form-note"><LoaderCircle className="spin" size={15} /> Loading current details…</p>}
             {detailError && <p role="alert" className="calendar-form-error">{detailError}</p>}
@@ -934,8 +966,8 @@ export function CalendarView({
             <div className="calendar-dialog-actions">
               {!confirmCancel && (
                 <>
-                  <button type="button" disabled={isLoadingDetail || isOpeningConversation || isCancelling} onClick={() => void openMeetingConversation("chat")}><MessageCircle size={14} aria-hidden="true" />{isOpeningConversation ? "Opening…" : "Chat"}</button>
-                  {selectedMeeting.status !== "cancelled" && <button className="calendar-join-button" type="button" disabled={isLoadingDetail || isOpeningConversation || isCancelling} onClick={() => void openMeetingConversation("join")}><Video size={14} aria-hidden="true" />{isOpeningConversation ? "Opening…" : "Join"}</button>}
+                  <button type="button" disabled={isLoadingDetail || isOpeningConversation || isCancelling || isResponding} onClick={() => void openMeetingConversation("chat")}><MessageCircle size={14} aria-hidden="true" />{isOpeningConversation ? "Opening…" : "Chat"}</button>
+                  {selectedMeeting.status !== "cancelled" && <button className="calendar-join-button" type="button" disabled={isLoadingDetail || isOpeningConversation || isCancelling || isResponding} onClick={() => void openMeetingConversation("join")}><Video size={14} aria-hidden="true" />{isOpeningConversation ? "Opening…" : "Join"}</button>}
                 </>
               )}
               {selectedMeeting.canEdit && selectedMeeting.status !== "cancelled" && (
@@ -945,7 +977,7 @@ export function CalendarView({
                   {confirmCancel && <button type="button" disabled={isCancelling} onClick={() => setConfirmCancel(false)}><Check size={14} aria-hidden="true" />Keep meeting</button>}
                 </>
               )}
-              <button type="button" disabled={isCancelling || isOpeningConversation} onClick={closeDetails}><X size={14} aria-hidden="true" />Close</button>
+              <button type="button" disabled={isCancelling || isOpeningConversation || isResponding} onClick={closeDetails}><X size={14} aria-hidden="true" />Close</button>
             </div>
           </div>
         </div>

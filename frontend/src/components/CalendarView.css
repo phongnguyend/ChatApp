@@ -941,6 +941,19 @@ html[data-theme='dark'] .calendar-month-grid button.active {
 .calendar-detail-section { margin-top: 18px; font-size: 12px; }
 .calendar-detail-section > strong { font-size: 11px; }
 .calendar-detail-section p { margin: 6px 0 0; color: var(--muted); line-height: 1.5; }
+.calendar-response-list { display: grid; gap: 7px; margin: 8px 0 0; padding: 0; list-style: none; }
+.calendar-response-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.calendar-response-list small { color: var(--muted); }
+.calendar-response-status { flex: 0 0 auto; padding: 3px 7px; border-radius: 999px; color: var(--muted); background: var(--cream); font-size: 10px; font-weight: 700; }
+.calendar-response-status.accepted { color: #20744a; background: #e2f3e8; }
+.calendar-response-status.tentative { color: #8a6411; background: #fff1c9; }
+.calendar-response-status.declined { color: #a33d31; background: #fbe4df; }
+.calendar-rsvp > div { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
+.calendar-rsvp button { min-height: 34px; padding: 0 11px; border: 1px solid var(--line); border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; color: var(--ink); background: var(--panel); font: inherit; font-weight: 700; cursor: pointer; }
+.calendar-rsvp button svg { flex: 0 0 auto; }
+.calendar-rsvp button.active { border-color: var(--coral); color: #fff; background: var(--coral); }
+.calendar-rsvp button.danger:not(.active) { color: #b14538; }
+.calendar-rsvp button:disabled { opacity: .55; cursor: default; }
 .calendar-detail-description { white-space: pre-wrap; }
 .calendar-cancelled-badge { width: fit-content; padding: 5px 8px; border-radius: 5px; color: var(--muted); background: var(--cream); font-size: 11px; font-weight: 700; }
 .calendar-cancel-confirm { margin: 18px 0 0; color: #c84b3d; font-size: 11px; }

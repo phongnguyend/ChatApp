@@ -38,15 +38,26 @@ test('meeting invitations, filters, reschedule notification, and cancellation', 
     const invitation = inviteePage.locator('.notifications-item').filter({ hasText: title });
     await expect(invitation).toBeVisible();
     await invitation.getByRole('button', { name: `Open ${title}` }).click();
-    await expect(inviteePage.getByRole('dialog', { name: title })).toContainText('Review the release plan');
+    const inviteeDialog = inviteePage.getByRole('dialog', { name: title });
+    await expect(inviteeDialog).toContainText('Review the release plan');
+    const responseGroup = inviteeDialog.getByRole('group', { name: 'Respond to meeting invitation' });
+    await responseGroup.getByRole('button', { name: 'Accept' }).click();
+    await expect(responseGroup.getByRole('button', { name: 'Accept' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(inviteeDialog.locator('.meetings-response-list').filter({ hasText: invitee.username })).toContainText('Accepted');
     await inviteePage.getByRole('button', { name: 'Close meeting details' }).click();
     await openSection(inviteePage, 'Notifications');
+
+    await organizerPage.locator('.meetings-item').filter({ hasText: title }).getByRole('button', { name: 'View' }).click();
+    const organizerDialog = organizerPage.getByRole('dialog', { name: title });
+    await expect(organizerDialog.locator('.meetings-response-list').filter({ hasText: invitee.username })).toContainText('Accepted');
+    await organizerPage.getByRole('button', { name: 'Close meeting details' }).click();
 
     await organizerPage.locator('.meetings-item').filter({ hasText: title }).getByRole('button', { name: 'Edit' }).click();
     const edit = organizerPage.getByRole('form', { name: 'Edit meeting' });
     await edit.getByLabel('Start date').fill('2030-05-21');
     await edit.getByLabel('End date').fill('2030-05-21');
     await edit.getByRole('button', { name: 'Save changes' }).click();
+    await expect(organizerPage.getByRole('dialog', { name: title }).locator('.meetings-response-list').filter({ hasText: invitee.username })).toContainText('Awaiting response');
     await organizerPage.getByRole('button', { name: 'Close meeting details' }).click();
     await inviteePage.getByRole('button', { name: 'Refresh' }).click();
     await expect(inviteePage.locator('.notifications-item').filter({ hasText: title })).toHaveCount(2);
