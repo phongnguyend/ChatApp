@@ -15,7 +15,9 @@
 .notifications-item { padding: 14px 6px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 12px; }
 .notifications-item.unread { background: color-mix(in srgb, #c85e4b 7%, var(--paper)); }
 .notifications-icon { width: 37px; height: 37px; flex: none; border-radius: 9px; display: grid; place-items: center; color: #c85e4b; background: color-mix(in srgb, #c85e4b 15%, var(--paper)); }
-.notifications-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 5px; }
+.notifications-copy { min-width: 0; flex: 1; padding: 4px; border: 0; border-radius: 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; color: inherit; background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.notifications-copy:hover { background: color-mix(in srgb, #c85e4b 8%, transparent); }
+.notifications-copy:focus-visible { outline: 2px solid #c85e4b; outline-offset: 2px; }
 .notifications-copy strong { font-size: 13px; overflow-wrap: anywhere; }
 .notifications-copy span { font-size: 12px; overflow-wrap: anywhere; }
 .notifications-copy .notifications-details { color: var(--muted); font-size: 11px; }

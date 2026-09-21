@@ -87,7 +87,7 @@ import { StorageManagementView } from "./components/StorageManagementView";
 import { TasksView } from "./components/TasksView";
 import { NotesView } from "./components/NotesView";
 import { RemindersView } from "./components/RemindersView";
-import { NotificationsView } from "./components/NotificationsView";
+import { NotificationsView, type UserNotification } from "./components/NotificationsView";
 import {
   type ChatAttachment,
   MessageAttachmentList,
@@ -1204,6 +1204,10 @@ function ChatApp({
   const [isRemindersOpen, setIsRemindersOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notificationUnreadCount, setNotificationUnreadCount] = useState<number | null>(null);
+  const [notificationMeetingTarget, setNotificationMeetingTarget] = useState<{ id: string; request: number } | null>(null);
+  const [notificationDocumentTarget, setNotificationDocumentTarget] = useState<{ id: string; kind: "folder" | "file"; request: number } | null>(null);
+  const [notificationTaskTarget, setNotificationTaskTarget] = useState<{ id: string; request: number } | null>(null);
+  const [notificationNoteTarget, setNotificationNoteTarget] = useState<{ id: string; request: number } | null>(null);
   const [isLiveStreamsOpen, setIsLiveStreamsOpen] = useState(false);
   useEffect(() => {
     let activeRequest: AbortController | null = null;
@@ -3148,6 +3152,66 @@ function ChatApp({
     setIsSidebarOpen(false);
   }
 
+  async function openNotification(notification: UserNotification) {
+    const request = Date.now();
+    const showDestination = () => {
+      setIsNotificationsOpen(false);
+      setIsCalendarOpen(false);
+      setIsMeetingsOpen(false);
+      setIsDocumentsOpen(false);
+      setIsStorageManagementOpen(false);
+      setIsTasksOpen(false);
+      setIsNotesOpen(false);
+      setIsRemindersOpen(false);
+    };
+
+    if (notification.type === "message_reaction" || notification.type === "recording_ready") {
+      if (!notification.contextId) throw new Error("This notification does not have a conversation destination.");
+      const items = await loadConversations();
+      if (!items.some((item) => item.id === notification.contextId))
+        throw new Error("This conversation is no longer available.");
+      showDestination();
+      pendingMessageJumpRef.current = {
+        conversationId: notification.contextId,
+        messageId: notification.targetId,
+        ready: false,
+      };
+      setHighlightedMessageId(null);
+      setMessageJumpVersion((current) => current + 1);
+      setActiveId(notification.contextId);
+      setConversationTab("chat");
+      setIsSidebarOpen(false);
+      return;
+    }
+
+    showDestination();
+
+    if (notification.type.startsWith("meeting_")) {
+      setNotificationMeetingTarget({ id: notification.targetId, request });
+      setIsMeetingsOpen(true);
+      return;
+    }
+    if (notification.type === "note_share") {
+      setNotificationNoteTarget({ id: notification.targetId, request });
+      setIsNotesOpen(true);
+      return;
+    }
+    if (notification.type === "task_share" || notification.type === "task_assignment") {
+      setNotificationTaskTarget({ id: notification.targetId, request });
+      setIsTasksOpen(true);
+      return;
+    }
+    if (notification.type === "document_file_share" || notification.type === "document_folder_share") {
+      setNotificationDocumentTarget({
+        id: notification.targetId,
+        kind: notification.type === "document_file_share" ? "file" : "folder",
+        request,
+      });
+      setIsDocumentsOpen(true);
+      return;
+    }
+  }
+
   async function changeGroupMeeting(
     action: "start" | "join" | "leave" | "stop",
     conversationId = activeConversation?.id,
@@ -4072,6 +4136,7 @@ function ChatApp({
         currentUsername={user.username}
         onBack={() => setIsMeetingsOpen(false)}
         onOpenConversation={openCalendarConversation}
+        openTarget={notificationMeetingTarget}
         hidden={!isMeetingsOpen}
       />
       <DocumentsView
@@ -4097,6 +4162,7 @@ function ChatApp({
           setIsRemindersOpen(false);
           setIsSidebarOpen(false);
         }}
+        openTarget={notificationDocumentTarget}
         hidden={!isDocumentsOpen}
       />
       <StorageManagementView
@@ -4109,12 +4175,14 @@ function ChatApp({
         apiUrl={API_URL}
         currentUsername={user.username}
         onBack={() => setIsTasksOpen(false)}
+        openTarget={notificationTaskTarget}
         hidden={!isTasksOpen}
       />
       <NotesView
         apiUrl={API_URL}
         currentUsername={user.username}
         onBack={() => setIsNotesOpen(false)}
+        openTarget={notificationNoteTarget}
         hidden={!isNotesOpen}
       />
       <RemindersView
@@ -4127,6 +4195,7 @@ function ChatApp({
         apiUrl={API_URL}
         currentUsername={user.username}
         onBack={() => setIsNotificationsOpen(false)}
+        onOpen={openNotification}
         onUnreadCountChange={setNotificationUnreadCount}
         hidden={!isNotificationsOpen}
       />

@@ -26,6 +26,7 @@
 .tasks-bulk-actions button:disabled { opacity: .45; cursor: default; }
 .tasks-list { min-height: 0; overflow-y: auto; }
 .tasks-item { display: grid; grid-template-columns: 31px minmax(0, 1fr) auto; align-items: start; gap: 12px; padding: 16px 5px; border-bottom: 1px solid var(--line); }
+.tasks-item.notification-target { border-radius: 10px; outline: 2px solid color-mix(in srgb, #c85e4b 65%, transparent); background: color-mix(in srgb, #c85e4b 8%, var(--paper)); }
 .tasks-select { flex: none; margin: 7px; }
 .tasks-item-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; flex: none; min-height: 31px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--ink); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
 .tasks-item-actions button svg { flex: none; }

@@ -56,6 +56,30 @@ public sealed class RecordingsController(
             return NotFound();
         }
 
+        var alreadyNotified = await db.UserNotifications.AnyAsync(
+            item => item.Type == "recording_ready" && item.TargetId == message.Id,
+            cancellationToken);
+        if (!alreadyNotified)
+        {
+            var recipients = await db.ConversationMembers
+                .Where(member => member.ConversationId == recording.ConversationId &&
+                    member.LeftAt == null && member.User.Status == "active")
+                .Select(member => member.UserId)
+                .ToArrayAsync(cancellationToken);
+            foreach (var recipientId in recipients)
+                db.UserNotifications.Add(new UserNotification
+                {
+                    UserId = recipientId,
+                    ActorUserId = recording.StartedByUserId,
+                    Type = "recording_ready",
+                    TargetId = message.Id,
+                    ContextId = recording.ConversationId,
+                    TargetTitle = message.Attachments.First().FileName,
+                    Details = "The recording is ready to view or download.",
+                });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
         recordingStates.Stop(recording.Id);
         var attachments = message.Attachments
             .Select(attachment => new MessageAttachmentDto(

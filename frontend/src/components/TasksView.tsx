@@ -43,10 +43,11 @@ function formatDateTime(value: string) {
   return dateTimeFormatter.format(new Date(value));
 }
 
-export function TasksView({ apiUrl, currentUsername, onBack, hidden }: {
+export function TasksView({ apiUrl, currentUsername, onBack, openTarget, hidden }: {
   apiUrl: string;
   currentUsername: string;
   onBack: () => void;
+  openTarget?: { id: string; request: number } | null;
   hidden: boolean;
 }) {
   const endpoint = `${apiUrl}/api/user-tasks?username=${encodeURIComponent(currentUsername)}`;
@@ -80,6 +81,15 @@ export function TasksView({ apiUrl, currentUsername, onBack, hidden }: {
   const [assignSaving, setAssignSaving] = useState(false);
   const [assignError, setAssignError] = useState("");
   const [assigneeId, setAssigneeId] = useState("");
+
+  useEffect(() => {
+    if (hidden || !openTarget || tasks.length === 0) return;
+    const task = tasks.find((item) => item.id === openTarget.id);
+    if (!task) return;
+    setMode(task.permission === "owner" ? "mine" : "shared");
+    setFilter("all");
+    window.requestAnimationFrame(() => document.querySelector(`[data-task-id="${task.id}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
+  }, [hidden, openTarget, tasks]);
 
   useEffect(() => {
     if (hidden) return;
@@ -340,7 +350,7 @@ export function TasksView({ apiUrl, currentUsername, onBack, hidden }: {
     {error && <p className="tasks-error" role="alert">{error}</p>}
     <div className="tasks-list">
       {loading ? <div className="tasks-empty"><LoaderCircle className="tasks-spin" size={25} /> Loading tasks...</div> : visible.length === 0 ? <div className="tasks-empty"><ClipboardList size={35} /><strong>{mode === "shared" ? "Nothing shared with you" : mode === "outgoing" ? "No shared tasks yet" : filter === "active" ? "Nothing to do" : "No tasks here"}</strong><span>{mode === "shared" ? "Tasks others share with you appear here." : mode === "outgoing" ? "Share a task to see it here." : filter === "active" ? "Add a task to get started." : "Tasks in this view will appear here."}</span></div> :
-        visible.map((task) => <article className={`tasks-item ${task.isCompleted ? "completed" : ""}`} key={task.id}>
+        visible.map((task) => <article data-task-id={task.id} className={`tasks-item ${task.isCompleted ? "completed" : ""} ${openTarget?.id === task.id ? "notification-target" : ""}`} key={task.id}>
           <input className="tasks-select" type="checkbox" aria-label={`Select ${task.title}`} checked={selectedIds.has(task.id)} disabled={!!busyId || !canComplete(task)} onChange={() => setSelectedIds((current) => { const next = new Set(current); if (next.has(task.id)) next.delete(task.id); else next.add(task.id); return next; })} />
           <div className="tasks-item-content">
             <h2>{task.title}</h2>

@@ -193,6 +193,24 @@ public sealed class MessagesController(
                 User = user,
                 Reaction = request.Reaction
             });
+            if (message.SenderUserId is Guid recipientId && recipientId != user.Id)
+            {
+                var preview = string.IsNullOrWhiteSpace(message.Content)
+                    ? "Message"
+                    : message.Content.Length > 120
+                        ? $"{message.Content[..117]}..."
+                        : message.Content;
+                db.UserNotifications.Add(new UserNotification
+                {
+                    UserId = recipientId,
+                    ActorUserId = user.Id,
+                    Type = "message_reaction",
+                    TargetId = message.Id,
+                    ContextId = message.ConversationId,
+                    TargetTitle = preview,
+                    Details = request.Reaction,
+                });
+            }
         }
         else
         {

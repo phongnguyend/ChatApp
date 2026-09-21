@@ -59,11 +59,12 @@ function newForm(): MeetingForm {
   return { title: "", description: "", startDate: today, endDate: today, allDay: false, start: "09:00", end: "10:00", people: [] };
 }
 
-export function MeetingsView({ apiUrl, currentUsername, onBack, onOpenConversation, hidden }: {
+export function MeetingsView({ apiUrl, currentUsername, onBack, onOpenConversation, openTarget, hidden }: {
   apiUrl: string;
   currentUsername: string;
   onBack: () => void;
   onOpenConversation: (conversationId: string, action: "chat" | "join") => Promise<void>;
+  openTarget?: { id: string; request: number } | null;
   hidden: boolean;
 }) {
   const [tab, setTab] = useState<"created" | "invited">("created");
@@ -94,6 +95,26 @@ export function MeetingsView({ apiUrl, currentUsername, onBack, onOpenConversati
   const hasFilters = Object.values(filters).some((value) => value.trim() !== "");
   const filterDateError = filters.from && filters.to && filters.from > filters.to
     ? "The end date must be on or after the start date." : "";
+
+  useEffect(() => {
+    if (hidden || !openTarget) return;
+    const controller = new AbortController();
+    const request = ++detailRequest.current;
+    setDetailLoading(true);
+    setDetailError("");
+    setConfirmCancel(false);
+    fetch(`${apiUrl}/api/meetings/${openTarget.id}?username=${encodeURIComponent(currentUsername)}`, { signal: controller.signal })
+      .then((response) => readResponse<Meeting>(response))
+      .then((meeting) => {
+        if (controller.signal.aborted || detailRequest.current !== request) return;
+        setTab(meeting.canEdit ? "created" : "invited");
+        setMeetings((current) => [meeting, ...current.filter((item) => item.id !== meeting.id)]);
+        setSelected(meeting);
+      })
+      .catch((reason) => { if (!controller.signal.aborted && detailRequest.current === request) setDetailError(reason instanceof Error ? reason.message : "Could not open meeting."); })
+      .finally(() => { if (!controller.signal.aborted && detailRequest.current === request) setDetailLoading(false); });
+    return () => controller.abort();
+  }, [apiUrl, currentUsername, hidden, openTarget]);
 
   useEffect(() => {
     if (hidden) return;

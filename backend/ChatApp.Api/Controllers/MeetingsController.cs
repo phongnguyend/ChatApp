@@ -344,6 +344,16 @@ public sealed class MeetingsController(
             meeting.Status = "cancelled";
             meeting.CancelledAt = DateTimeOffset.UtcNow;
             meeting.UpdatedAt = meeting.CancelledAt.Value;
+            foreach (var participant in meeting.Participants)
+                db.UserNotifications.Add(new UserNotification
+                {
+                    UserId = participant.UserId,
+                    ActorUserId = user.Id,
+                    Type = "meeting_cancelled",
+                    TargetId = meeting.Id,
+                    TargetTitle = meeting.Title,
+                    Details = ScheduleSummary(meeting),
+                });
             await db.SaveChangesAsync(cancellationToken);
         }
         return Ok(ToDto(meeting, user.Id));

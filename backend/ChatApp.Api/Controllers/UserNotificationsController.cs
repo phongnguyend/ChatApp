@@ -40,7 +40,7 @@ public sealed class UserNotificationsController(ChatDbContext db) : ControllerBa
         var items = await query.OrderByDescending(x => x.CreatedAt)
             .ThenByDescending(x => x.Id)
             .Skip(page * pageSize).Take(pageSize + 1)
-            .Select(x => new UserNotificationDto(x.Id, x.Type, x.TargetId,
+            .Select(x => new UserNotificationDto(x.Id, x.Type, x.TargetId, x.ContextId,
                 x.TargetTitle, x.Details, x.ActorUser.DisplayName, x.ActorUser.Username,
                 x.CreatedAt, x.ReadAt))
             .ToArrayAsync(ct);
@@ -83,7 +83,7 @@ public sealed class UserNotificationsController(ChatDbContext db) : ControllerBa
             .Select(x => (Guid?)x.Id).SingleOrDefaultAsync(ct);
 }
 
-public sealed record UserNotificationDto(Guid Id, string Type, Guid TargetId,
+public sealed record UserNotificationDto(Guid Id, string Type, Guid TargetId, Guid? ContextId,
     string TargetTitle, string? Details, string ActorDisplayName, string ActorUsername,
     DateTimeOffset CreatedAt, DateTimeOffset? ReadAt);
 

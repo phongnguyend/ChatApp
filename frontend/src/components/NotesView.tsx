@@ -26,10 +26,11 @@ async function readError(response: Response) {
   return body?.message || `Request failed (${response.status}).`;
 }
 
-export function NotesView({ apiUrl, currentUsername, onBack, hidden }: {
+export function NotesView({ apiUrl, currentUsername, onBack, openTarget, hidden }: {
   apiUrl: string;
   currentUsername: string;
   onBack: () => void;
+  openTarget?: { id: string; request: number } | null;
   hidden: boolean;
 }) {
   const endpoint = `${apiUrl}/api/user-notes?username=${encodeURIComponent(currentUsername)}`;
@@ -53,6 +54,26 @@ export function NotesView({ apiUrl, currentUsername, onBack, hidden }: {
   const [peopleResults, setPeopleResults] = useState<Person[]>([]);
   const [recipient, setRecipient] = useState<Person | null>(null);
   const [newPermission, setNewPermission] = useState<"viewer" | "editor">("viewer");
+
+  useEffect(() => {
+    if (hidden || !openTarget) return;
+    const controller = new AbortController();
+    setDialogError("");
+    fetch(`${apiUrl}/api/user-notes/${openTarget.id}?username=${encodeURIComponent(currentUsername)}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(await readError(response));
+        return response.json() as Promise<UserNote>;
+      })
+      .then((note) => {
+        if (controller.signal.aborted) return;
+        setNotes((current) => [note, ...current.filter((item) => item.id !== note.id)]);
+        setMode(note.permission === "owner" ? "mine" : "shared");
+        setQuery("");
+        setViewing(note);
+      })
+      .catch((reason) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not open note."); });
+    return () => controller.abort();
+  }, [apiUrl, currentUsername, hidden, openTarget]);
 
   useEffect(() => {
     if (hidden) return;

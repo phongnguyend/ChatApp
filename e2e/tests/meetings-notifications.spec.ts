@@ -35,7 +35,12 @@ test('meeting invitations, filters, reschedule notification, and cancellation', 
     await inviteePage.getByRole('tab', { name: 'Invited to' }).click();
     await expect(inviteePage.locator('.meetings-item').filter({ hasText: title })).toBeVisible();
     await openSection(inviteePage, 'Notifications');
-    await expect(inviteePage.locator('.notifications-item').filter({ hasText: title })).toBeVisible();
+    const invitation = inviteePage.locator('.notifications-item').filter({ hasText: title });
+    await expect(invitation).toBeVisible();
+    await invitation.getByRole('button', { name: `Open ${title}` }).click();
+    await expect(inviteePage.getByRole('dialog', { name: title })).toContainText('Review the release plan');
+    await inviteePage.getByRole('button', { name: 'Close meeting details' }).click();
+    await openSection(inviteePage, 'Notifications');
 
     await organizerPage.locator('.meetings-item').filter({ hasText: title }).getByRole('button', { name: 'Edit' }).click();
     const edit = organizerPage.getByRole('form', { name: 'Edit meeting' });
@@ -52,6 +57,8 @@ test('meeting invitations, filters, reschedule notification, and cancellation', 
     await organizerPage.getByRole('dialog', { name: title }).getByRole('button', { name: 'Cancel meeting' }).click();
     await organizerPage.getByRole('dialog', { name: title }).getByRole('button', { name: 'Confirm cancellation' }).click();
     await expect(organizerPage.getByRole('dialog', { name: title })).toContainText('Cancelled');
+    await inviteePage.getByRole('button', { name: 'Refresh' }).click();
+    await expect(inviteePage.locator('.notifications-item').filter({ hasText: 'cancelled a meeting' }).filter({ hasText: title })).toBeVisible();
   } finally {
     await organizerPage.close();
     await inviteePage.close();

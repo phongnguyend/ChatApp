@@ -65,11 +65,12 @@ function sharingSummary(summary?: SharingSummary) {
   return parts.join(" · ");
 }
 
-export function DocumentsView({ apiUrl, currentUsername, onBack, onOpenConversation, hidden }: {
+export function DocumentsView({ apiUrl, currentUsername, onBack, onOpenConversation, openTarget, hidden }: {
   apiUrl: string;
   currentUsername: string;
   onBack: () => void;
   onOpenConversation: (conversationId: string, messageId: string) => Promise<void>;
+  openTarget?: { id: string; kind: "folder" | "file"; request: number } | null;
   hidden: boolean;
 }) {
   const [folderId, setFolderId] = useState<string | null>(null);
@@ -90,7 +91,6 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, onOpenConversat
   const [bulkTrashOpen, setBulkTrashOpen] = useState(false);
   const [sort, setSort] = useState<"name" | "updated">("name");
   const [nameDialog, setNameDialog] = useState<NameDialog | null>(null);
-  const [deleteDialog, setDeleteDialog] = useState<DeleteDialog | null>(null);
   const [purgeDialog, setPurgeDialog] = useState<DeleteDialog | null>(null);
   const [conflict, setConflict] = useState<UploadConflict | null>(null);
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
@@ -123,6 +123,14 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, onOpenConversat
   const nameInput = useRef<HTMLInputElement>(null);
   const baseUrl = `${apiUrl}/api/documents`;
   const usernameQuery = `username=${encodeURIComponent(currentUsername)}`;
+
+  useEffect(() => {
+    if (hidden || !openTarget) return;
+    setMode("shared");
+    setFolderId(null);
+    setQuery("");
+    setPropertiesTarget({ kind: openTarget.kind, id: openTarget.id });
+  }, [hidden, openTarget]);
 
   function openShareDialog(kind: "folder" | "file", id: string, name: string) {
     setShareTab("internal");
@@ -328,21 +336,6 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, onOpenConversat
       refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not save the name.");
-    } finally { setBusy(false); }
-  }
-
-  async function deleteItem() {
-    if (!deleteDialog || busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      const response = await fetch(`${baseUrl}/${deleteDialog.kind === "folder" ? "folders" : "files"}/${deleteDialog.id}?${usernameQuery}`, { method: "DELETE" });
-      if (!response.ok) throw new Error(await errorMessage(response));
-      setDeleteDialog(null);
-      setNotice("Moved to Trash.");
-      refresh();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not delete the item.");
     } finally { setBusy(false); }
   }
 
@@ -686,12 +679,12 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, onOpenConversat
         {!loading && visible.folders.map((folder) => <div className={`documents-row ${dropTarget === folder.id ? "documents-drop-target" : ""} ${draggedItem === `folder:${folder.id}` ? "documents-drag-source" : ""}`} key={folder.id} draggable={!isTrashView && folder.permission === "owner" && !busy} onDragStart={(event) => startDocumentDrag(event, { kind: "folder", id: folder.id })} onDragEnd={clearDocumentDrag} onDragOver={folder.permission === "owner" && !isTrashView ? (event) => hoverDocumentFolder(event, folder.id) : undefined} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDropTarget(null); }} onDrop={folder.permission === "owner" && !isTrashView ? (event) => dropDocumentInto(event, folder.id) : undefined}>
           <div className="documents-row-leading">{!isTrashView && folder.permission === "owner" && <input type="checkbox" aria-label={`Select ${folder.name}`} checked={selected.some((item) => item.kind === "folder" && item.id === folder.id)} onChange={() => toggleSelected({ kind: "folder", id: folder.id })} />}<button className="documents-item-name" type="button" disabled={isTrashView} onClick={() => navigate(folder.id)}><span className="documents-item-icon folder"><Folder size={20} /></span><span title={folder.name}>{folder.name}{folder.ownerUsername && <small>Shared by @{folder.ownerUsername}</small>}{mode === "outgoing" && listing?.sharingSummaries?.[folder.id] && <small>{sharingSummary(listing.sharingSummaries[folder.id])}</small>}{query.trim() && listing?.locations?.[folder.id] && <small>{listing.locations[folder.id]}</small>}</span></button></div>
           <span className="documents-row-meta">{formatDate(folder.deletedAt ?? folder.updatedAt)}</span><span className="documents-row-meta">—</span>
-          <div className="documents-row-actions"><button type="button" title="Folder properties" aria-label={`Properties for ${folder.name}`} onClick={() => openProperties("folder", folder.id)}><Info size={16} /> Properties</button>{isTrashView ? <><button type="button" title="Restore folder" aria-label={`Restore ${folder.name}`} onClick={() => void restoreItem("folder", folder.id)}><RotateCcw size={16} /> Restore</button><button type="button" title="Delete folder permanently" aria-label={`Delete ${folder.name} permanently`} onClick={() => setPurgeDialog({ kind: "folder", id: folder.id, name: folder.name })}><Trash2 size={16} /> Delete permanently</button></> : <>{folder.permission !== "viewer" && <button type="button" title="Rename folder" aria-label={`Rename ${folder.name}`} onClick={() => setNameDialog({ kind: "folder", id: folder.id, name: folder.name })}><Pencil size={16} /> Rename</button>}{folder.permission === "owner" && <><button type="button" title="Share folder" aria-label={`Share ${folder.name}`} onClick={() => openShareDialog("folder", folder.id, folder.name)}><Share2 size={16} /> Share</button><button type="button" title="Move folder to Trash" aria-label={`Move ${folder.name} to Trash`} onClick={() => setDeleteDialog({ kind: "folder", id: folder.id, name: folder.name })}><Trash2 size={16} /> Move to Trash</button></>}</>}</div>
+          <div className="documents-row-actions"><button type="button" title="Folder properties" aria-label={`Properties for ${folder.name}`} onClick={() => openProperties("folder", folder.id)}><Info size={16} /> Properties</button>{isTrashView ? <><button type="button" title="Restore folder" aria-label={`Restore ${folder.name}`} onClick={() => void restoreItem("folder", folder.id)}><RotateCcw size={16} /> Restore</button><button type="button" title="Delete folder permanently" aria-label={`Delete ${folder.name} permanently`} onClick={() => setPurgeDialog({ kind: "folder", id: folder.id, name: folder.name })}><Trash2 size={16} /> Delete permanently</button></> : <>{folder.permission !== "viewer" && <button type="button" title="Rename folder" aria-label={`Rename ${folder.name}`} onClick={() => setNameDialog({ kind: "folder", id: folder.id, name: folder.name })}><Pencil size={16} /> Rename</button>}{folder.permission === "owner" && <button type="button" title="Share folder" aria-label={`Share ${folder.name}`} onClick={() => openShareDialog("folder", folder.id, folder.name)}><Share2 size={16} /> Share</button>}</>}</div>
         </div>)}
         {!loading && visible.files.map((file) => <div className={`documents-row ${draggedItem === `file:${file.id}` ? "documents-drag-source" : ""}`} key={file.id} draggable={!isTrashView && file.permission === "owner" && !busy} onDragStart={(event) => startDocumentDrag(event, { kind: "file", id: file.id })} onDragEnd={clearDocumentDrag}>
           <div className="documents-row-leading">{!isTrashView && file.permission === "owner" && <input type="checkbox" aria-label={`Select ${file.name}`} checked={selected.some((item) => item.kind === "file" && item.id === file.id)} onChange={() => toggleSelected({ kind: "file", id: file.id })} />}<button className="documents-item-name" type="button" disabled={isTrashView} onClick={() => setPreview(file)}><span className="documents-item-icon file">{file.contentType.startsWith("image/") ? <FileImage size={20} /> : <FileText size={20} />}</span><span title={file.name}>{file.name}{file.ownerUsername && <small>Shared by @{file.ownerUsername}</small>}{mode === "outgoing" && listing?.sharingSummaries?.[file.id] && <small>{sharingSummary(listing.sharingSummaries[file.id])}</small>}{query.trim() && listing?.locations?.[file.id] && <small>{listing.locations[file.id]}</small>}</span></button></div>
           <span className="documents-row-meta">{formatDate(file.deletedAt ?? file.updatedAt)}</span><span className="documents-row-meta">{formatSize(file.sizeBytes)}</span>
-          <div className="documents-row-actions"><button type="button" title="File properties" aria-label={`Properties for ${file.name}`} onClick={() => openProperties("file", file.id)}><Info size={16} /> Properties</button>{isTrashView ? <><button type="button" title="Restore file" aria-label={`Restore ${file.name}`} onClick={() => void restoreItem("file", file.id)}><RotateCcw size={16} /> Restore</button><button type="button" title="Delete file permanently" aria-label={`Delete ${file.name} permanently`} onClick={() => setPurgeDialog({ kind: "file", id: file.id, name: file.name })}><Trash2 size={16} /> Delete permanently</button></> : <><button type="button" title="Version history" aria-label={`Version history for ${file.name}`} onClick={() => { setVersionFile(file); setVersions([]); setVersionToDelete(null); }}><History size={16} /> Version history</button><button type="button" title="Download file" aria-label={`Download ${file.name}`} onClick={() => void downloadFile(file)}><Download size={16} /> Download</button>{file.permission !== "viewer" && <button type="button" title="Rename file" aria-label={`Rename ${file.name}`} onClick={() => setNameDialog({ kind: "file", id: file.id, name: file.name })}><Pencil size={16} /> Rename</button>}{file.permission === "owner" && <><button type="button" title="Clone file in this folder" aria-label={`Clone ${file.name} in this folder`} disabled={busy} onClick={() => void cloneFile(file)}><Copy size={16} /> Clone</button><button type="button" title="Share file" aria-label={`Share ${file.name}`} onClick={() => openShareDialog("file", file.id, file.name)}><Share2 size={16} /> Share</button><button type="button" title="Move file to Trash" aria-label={`Move ${file.name} to Trash`} onClick={() => setDeleteDialog({ kind: "file", id: file.id, name: file.name })}><Trash2 size={16} /> Move to Trash</button></>}</>}</div>
+          <div className="documents-row-actions"><button type="button" title="File properties" aria-label={`Properties for ${file.name}`} onClick={() => openProperties("file", file.id)}><Info size={16} /> Properties</button>{isTrashView ? <><button type="button" title="Restore file" aria-label={`Restore ${file.name}`} onClick={() => void restoreItem("file", file.id)}><RotateCcw size={16} /> Restore</button><button type="button" title="Delete file permanently" aria-label={`Delete ${file.name} permanently`} onClick={() => setPurgeDialog({ kind: "file", id: file.id, name: file.name })}><Trash2 size={16} /> Delete permanently</button></> : <><button type="button" title="Version history" aria-label={`Version history for ${file.name}`} onClick={() => { setVersionFile(file); setVersions([]); setVersionToDelete(null); }}><History size={16} /> Version history</button><button type="button" title="Download file" aria-label={`Download ${file.name}`} onClick={() => void downloadFile(file)}><Download size={16} /> Download</button>{file.permission !== "viewer" && <button type="button" title="Rename file" aria-label={`Rename ${file.name}`} onClick={() => setNameDialog({ kind: "file", id: file.id, name: file.name })}><Pencil size={16} /> Rename</button>}{file.permission === "owner" && <><button type="button" title="Clone file in this folder" aria-label={`Clone ${file.name} in this folder`} disabled={busy} onClick={() => void cloneFile(file)}><Copy size={16} /> Clone</button><button type="button" title="Share file" aria-label={`Share ${file.name}`} onClick={() => openShareDialog("file", file.id, file.name)}><Share2 size={16} /> Share</button></>}</>}</div>
         </div>)}
       </div>
       {busy && <p className="documents-busy" role="status"><LoaderCircle className="spin" size={16} /> Working…</p>}
@@ -707,7 +700,7 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, onOpenConversat
         <div className="documents-modal-actions"><button type="button" onClick={() => setDestinationAction(null)} disabled={busy}>Cancel</button><button type="button" onClick={() => void runBulk(destinationAction, destinationId)} disabled={busy || destinationLoading || !destinationListing}>{destinationAction === "move" ? "Move here" : "Copy here"}</button></div>
       </div></div>}
       {bulkTrashOpen && <div className="documents-modal-backdrop"><div className="documents-modal" role="dialog" aria-modal="true" aria-labelledby="documents-bulk-trash-title">
-        <div className="documents-modal-heading"><h2 id="documents-bulk-trash-title">Move {selected.length} items to Trash?</h2><button type="button" aria-label="Close" onClick={() => setBulkTrashOpen(false)} disabled={busy}><X size={18} /></button></div>
+        <div className="documents-modal-heading"><h2 id="documents-bulk-trash-title">Move {selected.length} {selected.length === 1 ? "item" : "items"} to Trash?</h2><button type="button" aria-label="Close" onClick={() => setBulkTrashOpen(false)} disabled={busy}><X size={18} /></button></div>
         <p>Selected folders will move with everything inside. You can restore them later.</p>
         {error && <p className="documents-modal-error" role="alert">{error}</p>}
         <div className="documents-modal-actions"><button type="button" onClick={() => setBulkTrashOpen(false)} disabled={busy}>Cancel</button><button type="button" className="danger" onClick={() => void runBulk("trash")} disabled={busy}>Move to Trash</button></div>
@@ -719,12 +712,6 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, onOpenConversat
         {error && <p className="documents-modal-error" role="alert">{error}</p>}
         <div className="documents-modal-actions"><button type="button" onClick={() => setNameDialog(null)} disabled={busy}>Cancel</button><button type="submit" disabled={busy || !nameDialog.name.trim()}>{nameDialog.kind === "create" ? "Create folder" : "Save name"}</button></div>
       </form></div>}
-      {deleteDialog && <div className="documents-modal-backdrop"><div className="documents-modal" role="dialog" aria-modal="true" aria-labelledby="documents-delete-title">
-        <div className="documents-modal-heading"><h2 id="documents-delete-title">Move to Trash?</h2><button type="button" aria-label="Close" onClick={() => setDeleteDialog(null)} disabled={busy}><X size={18} /></button></div>
-        <p>“{deleteDialog.name}” will move to Trash{deleteDialog.kind === "folder" ? " with everything inside it" : ""}. You can restore it later.</p>
-        {error && <p className="documents-modal-error" role="alert">{error}</p>}
-        <div className="documents-modal-actions"><button type="button" onClick={() => setDeleteDialog(null)} disabled={busy}>Keep</button><button className="danger" type="button" onClick={() => void deleteItem()} disabled={busy}>Move to Trash</button></div>
-      </div></div>}
       {purgeDialog && <div className="documents-modal-backdrop"><div className="documents-modal" role="dialog" aria-modal="true" aria-labelledby="documents-purge-title">
         <div className="documents-modal-heading"><h2 id="documents-purge-title">Delete permanently?</h2><button type="button" aria-label="Close" onClick={() => setPurgeDialog(null)} disabled={busy}><X size={18} /></button></div>
         <p>“{purgeDialog.name}”{purgeDialog.kind === "folder" ? " and everything inside it" : ""} cannot be restored after this.</p>

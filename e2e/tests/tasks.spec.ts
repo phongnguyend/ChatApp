@@ -63,6 +63,8 @@ test('share and assign a task to another person', async ({ browser, request }) =
     await expect(guestPage.locator('.tasks-item').filter({ hasText: title })).toContainText('Can edit');
     await openSection(guestPage, 'Notifications');
     await expect(guestPage.locator('.notifications-item').filter({ hasText: title })).toHaveCount(2);
+    await guestPage.getByRole('button', { name: `Open ${title}` }).first().click();
+    await expect(guestPage.locator('.tasks-item.notification-target').filter({ hasText: title })).toBeVisible();
   } finally {
     await ownerPage.close();
     await guestPage.close();

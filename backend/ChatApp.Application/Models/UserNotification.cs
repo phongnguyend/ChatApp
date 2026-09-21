@@ -9,6 +9,7 @@ public sealed class UserNotification
     public ChatUser ActorUser { get; set; } = null!;
     public required string Type { get; set; }
     public Guid TargetId { get; set; }
+    public Guid? ContextId { get; set; }
     public required string TargetTitle { get; set; }
     public string? Details { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

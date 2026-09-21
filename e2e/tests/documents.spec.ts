@@ -34,8 +34,9 @@ test('folders, uploads, conflicts, versions, clone, search, and trash', async ({
   await page.getByRole('textbox', { name: 'Search all documents' }).fill(file);
   await expect(fileRow).toBeVisible();
   await page.getByRole('textbox', { name: 'Search all documents' }).clear();
-  await fileRow.getByRole('button', { name: `Move ${file} to Trash` }).click();
-  await page.getByRole('dialog', { name: 'Move to Trash?' }).getByRole('button', { name: 'Move to Trash' }).click();
+  await fileRow.getByRole('checkbox', { name: `Select ${file}` }).check();
+  await page.locator('.documents-selection-bar').getByRole('button', { name: 'Move to Trash' }).click();
+  await page.getByRole('dialog', { name: 'Move 1 item to Trash?' }).getByRole('button', { name: 'Move to Trash' }).click();
   await expect(fileRow).toHaveCount(0);
   await page.getByRole('tab', { name: 'Trash' }).click();
   await expect(fileRow).toBeVisible();
