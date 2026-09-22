@@ -2048,6 +2048,139 @@
   color: #d9f1ff;
 }
 
+.pinned-messages {
+  position: sticky;
+  z-index: 4;
+  top: 0;
+  margin: -10px 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: 0 8px 22px rgba(35, 43, 40, 0.1);
+}
+
+.pinned-messages-summary {
+  width: 100%;
+  min-height: 48px;
+  padding: 7px 11px;
+  border: 0;
+  border-radius: 12px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  color: var(--coral);
+  background: transparent;
+  text-align: left;
+}
+
+.pinned-messages-summary > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.pinned-messages-summary strong,
+.pinned-messages-summary small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pinned-messages-summary strong {
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.pinned-messages-summary small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.pinned-messages-summary > svg:last-child {
+  color: var(--muted);
+  transition: transform 140ms ease;
+}
+
+.pinned-messages-summary > svg.expanded {
+  transform: rotate(180deg);
+}
+
+.pinned-message-list {
+  max-height: 230px;
+  padding: 0 6px 6px;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+}
+
+.pinned-message-item {
+  padding: 5px 3px 5px 7px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pinned-message-item:last-child {
+  border-bottom: 0;
+}
+
+.pinned-message-item > button:first-child {
+  min-width: 0;
+  flex: 1;
+  padding: 5px;
+  border: 0;
+  border-radius: 7px;
+  display: grid;
+  gap: 2px;
+  color: var(--ink);
+  background: transparent;
+  text-align: left;
+}
+
+.pinned-message-item > button:first-child:hover {
+  background: var(--cream);
+}
+
+.pinned-message-item strong,
+.pinned-message-item span,
+.pinned-message-item small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pinned-message-item strong {
+  font-size: 10px;
+}
+
+.pinned-message-item span {
+  font-size: 11px;
+}
+
+.pinned-message-item small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.pinned-message-unpin {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: transparent;
+}
+
+.pinned-message-unpin:hover:not(:disabled) {
+  color: var(--coral);
+  background: color-mix(in srgb, var(--coral) 10%, transparent);
+}
+
 .message-mention {
   padding: 1px 3px;
   border-radius: 4px;
@@ -2230,6 +2363,21 @@
 
 .message.own-message .message-edited {
   text-align: right;
+}
+
+.message-pinned-label {
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--coral);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.message.own-message .message-pinned-label {
+  justify-content: flex-end;
+  color: #ffd0c5;
 }
 
 .message-reply-reference {

@@ -10,7 +10,8 @@ A simple real-time chat application built with:
 The app includes persistent message history, pair-unique direct messages,
 multi-person group creation, live group member management, user discovery, online
 presence, typing indicators, unread counts, profile and group avatar uploads,
-member tagging (including `@everyone`) with linked in-app notifications, camera capture,
+member tagging (including `@everyone`) with linked in-app notifications,
+persistent conversation message pinning, camera capture,
 current-location sharing with confirmation previews, start/stop
 live-location sharing with an updating Leaflet map, automatic
 SignalR reconnection, SignalR-coordinated direct and group meetings whose audio,
@@ -157,6 +158,7 @@ Below is the relational schema for the collaboration application, covering:
 - Read receipts
 - Message editing and deletion
 - Conversation-member tagging and mention notifications
+- Persistent message pinning
 - Member roles
 - Muting and leaving conversations
 - Calling identities, recordings, and scheduled meetings
@@ -381,6 +383,8 @@ CREATE TABLE messages (
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     edited_at           TIMESTAMPTZ,
     deleted_at          TIMESTAMPTZ,
+    pinned_by_user_id   UUID REFERENCES users(id),
+    pinned_at           TIMESTAMPTZ,
 
     CONSTRAINT ck_messages_type
         CHECK (
@@ -418,6 +422,10 @@ CREATE TABLE messages (
     CONSTRAINT uq_message_conversation_sequence
         UNIQUE (conversation_id, sequence_number)
 );
+
+CREATE INDEX ix_messages_conversation_pinned
+ON messages (conversation_id, pinned_at DESC)
+WHERE pinned_at IS NOT NULL;
 ```
 
 `client_message_id` provides idempotency. A mobile or web client generates it before sending the message. If a retry happens because of a network error, the server does not create a duplicate message.
@@ -429,6 +437,11 @@ For soft deletion:
 - Hide or replace `content` when returning the message
 
 This preserves replies, ordering and audit history.
+
+A message is pinned when `pinned_at` and `pinned_by_user_id` are populated.
+Clearing both columns unpins it. This keeps one current pin state per message
+without requiring a separate table, while allowing any number of messages in a
+conversation to be pinned.
 
 Add the last-message foreign key afterward:
 
@@ -1173,7 +1186,7 @@ uploads to be cleaned up without creating long-lived document relationships.
 
 The API applies pending migrations during startup with
 `Database.MigrateAsync()`. The current migration tip is
-`20260922121542_AddMessageMentionNotifications`.
+`20260922152440_AddMessagePins`.
 
 ```powershell
 cd backend

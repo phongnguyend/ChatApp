@@ -160,6 +160,24 @@ public sealed record MessageReactionChangedDto(
     string Reaction,
     bool IsAdded);
 
+public sealed record MessagePinDto(
+    Guid MessageId,
+    Guid ConversationId,
+    Guid? SenderUserId,
+    string? SenderUsername,
+    string? Content,
+    string MessageType,
+    DateTimeOffset MessageCreatedAt,
+    Guid PinnedByUserId,
+    string PinnedByDisplayName,
+    DateTimeOffset PinnedAt);
+
+public sealed record MessagePinChangedDto(
+    Guid ConversationId,
+    Guid MessageId,
+    bool IsPinned,
+    MessagePinDto? Pin);
+
 public sealed record SendMessageRequest(
     Guid ConversationId,
     string? Content,

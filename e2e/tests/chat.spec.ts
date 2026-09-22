@@ -20,6 +20,17 @@ test('direct conversation sends, edits, and deletes a message', async ({ browser
     const message = senderPage.locator('article.message').filter({ hasText: original });
     await expect(message).toBeVisible();
     await message.hover();
+    await message.getByRole('button', { name: 'Pin message' }).click();
+    const pinnedSummary = senderPage.getByRole('button', { name: /1 pinned message/ });
+    await expect(pinnedSummary).toBeVisible();
+    await pinnedSummary.click();
+    await senderPage.locator('.pinned-message-item').filter({ hasText: original })
+      .getByRole('button', { name: new RegExp(original) }).click();
+    await expect(message).toHaveClass(/message-jump-highlight/);
+    await message.hover();
+    await message.getByRole('button', { name: 'Unpin message' }).click();
+    await expect(pinnedSummary).toHaveCount(0);
+    await message.hover();
     await message.getByRole('button', { name: 'Edit message' }).click();
     await message.locator('.message-edit-form textarea').fill(edited);
     await message.getByRole('button', { name: 'Save' }).click();

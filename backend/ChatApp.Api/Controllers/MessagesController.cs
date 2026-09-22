@@ -121,6 +121,9 @@ public sealed class MessagesController(
         }
 
         message.DeletedAt = DateTimeOffset.UtcNow;
+        var wasPinned = message.PinnedAt is not null;
+        message.PinnedAt = null;
+        message.PinnedByUserId = null;
         if (message.LiveLocationShare?.IsActive == true)
         {
             message.LiveLocationShare.IsActive = false;
@@ -144,6 +147,18 @@ public sealed class MessagesController(
         var changed = ToChangedDto(message);
         await hubContext.Clients.Group(ChatHub.ConversationGroup(message.ConversationId))
             .SendAsync("MessageChanged", changed, cancellationToken);
+        if (wasPinned)
+        {
+            await hubContext.Clients.Group(ChatHub.ConversationGroup(message.ConversationId))
+                .SendAsync(
+                    "MessagePinChanged",
+                    new MessagePinChangedDto(
+                        message.ConversationId,
+                        message.Id,
+                        false,
+                        null),
+                    cancellationToken);
+        }
         return Ok(changed);
     }
 
@@ -231,6 +246,80 @@ public sealed class MessagesController(
         return Ok(changed);
     }
 
+    [HttpPost("{id:guid}/pin")]
+    public async Task<ActionResult<MessagePinDto>> Pin(
+        Guid id,
+        [FromQuery] string username,
+        CancellationToken cancellationToken)
+    {
+        var normalized = Username.Normalize(username);
+        var user = await db.Users.SingleOrDefaultAsync(
+            item => item.NormalizedUsername == normalized && item.Status == "active",
+            cancellationToken);
+        if (user is null) return NotFound();
+
+        var message = await db.Messages
+            .Include(item => item.Sender)
+            .Include(item => item.PinnedByUser)
+            .SingleOrDefaultAsync(
+                item =>
+                    item.Id == id &&
+                    item.DeletedAt == null &&
+                    item.Conversation.Members.Any(member =>
+                        member.UserId == user.Id && member.LeftAt == null),
+                cancellationToken);
+        if (message is null) return NotFound();
+
+        if (message.PinnedAt is not null) return Ok(ToPinDto(message));
+
+        message.PinnedByUser = user;
+        message.PinnedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+
+        var result = ToPinDto(message);
+        await hubContext.Clients.Group(ChatHub.ConversationGroup(message.ConversationId))
+            .SendAsync(
+                "MessagePinChanged",
+                new MessagePinChangedDto(message.ConversationId, message.Id, true, result),
+                cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpDelete("{id:guid}/pin")]
+    public async Task<IActionResult> Unpin(
+        Guid id,
+        [FromQuery] string username,
+        CancellationToken cancellationToken)
+    {
+        var normalized = Username.Normalize(username);
+        var userId = await db.Users
+            .Where(item => item.NormalizedUsername == normalized && item.Status == "active")
+            .Select(item => (Guid?)item.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (userId is null) return NotFound();
+
+        var message = await db.Messages.SingleOrDefaultAsync(
+            item =>
+                item.Id == id &&
+                item.DeletedAt == null &&
+                item.PinnedAt != null &&
+                item.Conversation.Members.Any(member =>
+                    member.UserId == userId && member.LeftAt == null),
+            cancellationToken);
+        if (message is null) return NoContent();
+
+        var conversationId = message.ConversationId;
+        message.PinnedAt = null;
+        message.PinnedByUserId = null;
+        await db.SaveChangesAsync(cancellationToken);
+        await hubContext.Clients.Group(ChatHub.ConversationGroup(conversationId))
+            .SendAsync(
+                "MessagePinChanged",
+                new MessagePinChangedDto(conversationId, id, false, null),
+                cancellationToken);
+        return NoContent();
+    }
+
     private static MessageChangedDto ToChangedDto(ChatMessage message) =>
         new(
             message.Id,
@@ -238,4 +327,17 @@ public sealed class MessagesController(
             message.DeletedAt == null ? message.Content : null,
             message.EditedAt,
             message.DeletedAt);
+
+    private static MessagePinDto ToPinDto(ChatMessage message) =>
+        new(
+            message.Id,
+            message.ConversationId,
+            message.SenderUserId,
+            message.Sender?.Username,
+            message.Content,
+            message.MessageType,
+            message.CreatedAt,
+            message.PinnedByUserId!.Value,
+            message.PinnedByUser!.DisplayName,
+            message.PinnedAt!.Value);
 }

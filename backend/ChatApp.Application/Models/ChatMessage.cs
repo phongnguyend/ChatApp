@@ -21,5 +21,8 @@ public sealed class ChatMessage
     public ICollection<MessageAttachment> Attachments { get; set; } = [];
     public ICollection<MessageReaction> Reactions { get; set; } = [];
     public ICollection<MessageReceipt> Receipts { get; set; } = [];
+    public Guid? PinnedByUserId { get; set; }
+    public ChatUser? PinnedByUser { get; set; }
+    public DateTimeOffset? PinnedAt { get; set; }
     public LiveLocationShare? LiveLocationShare { get; set; }
 }

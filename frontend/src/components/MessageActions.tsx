@@ -1,4 +1,4 @@
-import { Copy, Pencil, Reply, SmilePlus, Trash2 } from 'lucide-react'
+import { Copy, Pencil, Pin, PinOff, Reply, SmilePlus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
 export type ChatReaction = {
@@ -18,6 +18,7 @@ type MessageActionsProps = {
   isOwn: boolean
   canEdit: boolean
   canCopy: boolean
+  isPinned: boolean
   disabled?: boolean
   reactions: ChatReaction[]
   resolveAvatarUrl: (avatarUrl: string | null) => string | null
@@ -26,6 +27,7 @@ type MessageActionsProps = {
   onEdit: () => void
   onDelete: () => void
   onCopy: () => void
+  onTogglePin: () => void
 }
 
 const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉']
@@ -34,6 +36,7 @@ export function MessageActions({
   isOwn,
   canEdit,
   canCopy,
+  isPinned,
   disabled = false,
   reactions,
   resolveAvatarUrl,
@@ -42,6 +45,7 @@ export function MessageActions({
   onEdit,
   onDelete,
   onCopy,
+  onTogglePin,
 }: MessageActionsProps) {
   const [isReactionPickerOpen, setIsReactionPickerOpen] = useState(false)
 
@@ -77,6 +81,15 @@ export function MessageActions({
             <Copy size={15} />
           </button>
         )}
+        <button
+          type="button"
+          disabled={disabled}
+          aria-label={isPinned ? 'Unpin message' : 'Pin message'}
+          title={isPinned ? 'Unpin' : 'Pin'}
+          onClick={onTogglePin}
+        >
+          {isPinned ? <PinOff size={15} /> : <Pin size={15} />}
+        </button>
         {isOwn && canEdit && (
           <button
             type="button"

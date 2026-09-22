@@ -840,6 +840,39 @@ public sealed class ConversationsController(
         return Ok(messages);
     }
 
+    [HttpGet("{id:guid}/pinned-messages")]
+    public async Task<ActionResult<IReadOnlyList<MessagePinDto>>> GetPinnedMessages(
+        Guid id,
+        [FromQuery] string username,
+        CancellationToken cancellationToken)
+    {
+        if (!await IsActiveMember(id, username, cancellationToken))
+        {
+            return NotFound();
+        }
+
+        var pins = await db.Messages.AsNoTracking()
+            .Where(message =>
+                message.ConversationId == id &&
+                message.DeletedAt == null &&
+                message.PinnedAt != null &&
+                message.PinnedByUserId != null)
+            .OrderByDescending(message => message.PinnedAt)
+            .Select(message => new MessagePinDto(
+                message.Id,
+                message.ConversationId,
+                message.SenderUserId,
+                message.Sender == null ? null : message.Sender.Username,
+                message.Content,
+                message.MessageType,
+                message.CreatedAt,
+                message.PinnedByUserId!.Value,
+                message.PinnedByUser!.DisplayName,
+                message.PinnedAt!.Value))
+            .ToListAsync(cancellationToken);
+        return Ok(pins);
+    }
+
     [HttpPost("{id:guid}/messages/attachments")]
     [RequestSizeLimit(80 * 1024 * 1024)]
     public async Task<ActionResult<MessageDto>> SendAttachmentMessage(

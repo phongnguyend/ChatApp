@@ -10,6 +10,7 @@ import {
   Ban,
   Bell,
   Check,
+  ChevronDown,
   BellOff,
   CalendarDays,
   CalendarCheck2,
@@ -41,6 +42,8 @@ import {
   Pencil,
   Phone,
   PhoneOff,
+  Pin,
+  PinOff,
   Plus,
   Route,
   Radio,
@@ -317,6 +320,26 @@ type MessageReactionChangedEvent = {
   avatarUrl: string | null;
   reaction: string;
   isAdded: boolean;
+};
+
+type PinnedMessage = {
+  messageId: string;
+  conversationId: string;
+  senderUserId: string | null;
+  senderUsername: string | null;
+  content: string | null;
+  messageType: string;
+  messageCreatedAt: string;
+  pinnedByUserId: string;
+  pinnedByDisplayName: string;
+  pinnedAt: string;
+};
+
+type MessagePinChangedEvent = {
+  conversationId: string;
+  messageId: string;
+  isPinned: boolean;
+  pin: PinnedMessage | null;
 };
 
 type TypingEvent = {
@@ -956,6 +979,19 @@ function replyPreview(message: Message) {
   return messagePreview(message) ?? "Message";
 }
 
+function pinnedMessagePreview(pin: PinnedMessage) {
+  if (pin.content) return pin.content;
+  switch (pin.messageType) {
+    case "image": return "Image";
+    case "video": return "Video";
+    case "audio": return "Audio message";
+    case "file": return "File attachment";
+    case "location": return "Shared location";
+    case "live_location": return "Live location";
+    default: return "Message";
+  }
+}
+
 function avatarSource(avatarUrl: string | null | undefined) {
   if (!avatarUrl) return null;
   try {
@@ -1244,6 +1280,12 @@ function ChatApp({
   const [messagesByConversation, setMessagesByConversation] = useState<
     Record<string, Message[]>
   >({});
+  const [pinnedMessagesByConversation, setPinnedMessagesByConversation] =
+    useState<Record<string, PinnedMessage[]>>({});
+  const [isPinnedMessagesOpen, setIsPinnedMessagesOpen] = useState(false);
+  const [pinActionMessageId, setPinActionMessageId] = useState<string | null>(
+    null,
+  );
   const [messageJumpVersion, setMessageJumpVersion] = useState(0);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [historicalConversationId, setHistoricalConversationId] = useState<string | null>(null);
@@ -1494,6 +1536,9 @@ function ChatApp({
   const activeMessages = activeId
     ? (messagesByConversation[activeId] ?? EMPTY_MESSAGES)
     : EMPTY_MESSAGES;
+  const activePinnedMessages = activeId
+    ? (pinnedMessagesByConversation[activeId] ?? [])
+    : [];
   const activeRecordings = activeId
     ? (recordingsByConversation[activeId] ?? EMPTY_RECORDINGS)
     : EMPTY_RECORDINGS;
@@ -1632,6 +1677,11 @@ function ChatApp({
       delete next[conversationId];
       return next;
     });
+    setPinnedMessagesByConversation((current) => {
+      const next = { ...current };
+      delete next[conversationId];
+      return next;
+    });
     setRecordingsByConversation((current) => {
       const next = { ...current };
       delete next[conversationId];
@@ -1700,6 +1750,7 @@ function ChatApp({
     activeIdRef.current = activeId;
     setMentionSearch(null);
     setDraftMentionUserIds(new Set());
+    setIsPinnedMessagesOpen(false);
   }, [activeId]);
 
   useEffect(() => {
@@ -1820,6 +1871,21 @@ function ChatApp({
         ),
       }));
       void loadConversations();
+    });
+    connection.on("MessagePinChanged", (event: MessagePinChangedEvent) => {
+      setPinnedMessagesByConversation((current) => {
+        const existing = current[event.conversationId] ?? [];
+        const withoutMessage = existing.filter(
+          (pin) => pin.messageId !== event.messageId,
+        );
+        return {
+          ...current,
+          [event.conversationId]:
+            event.isPinned && event.pin
+              ? [event.pin, ...withoutMessage]
+              : withoutMessage,
+        };
+      });
     });
     connection.on("LiveLocationUpdated", (event: LiveLocation) => {
       setMessagesByConversation((current) => ({
@@ -2462,6 +2528,42 @@ function ChatApp({
 
   useEffect(() => {
     if (!activeId) return;
+    const conversationId = activeId;
+    const abortController = new AbortController();
+    fetch(
+      `${API_URL}/api/conversations/${conversationId}/pinned-messages?username=${encodeURIComponent(user.username)}`,
+      { signal: abortController.signal },
+    )
+      .then(async (response) => {
+        if (!response.ok) throw new Error(await readError(response));
+        return (await response.json()) as PinnedMessage[];
+      })
+      .then((pins) => {
+        if (!abortController.signal.aborted) {
+          setPinnedMessagesByConversation((current) => ({
+            ...current,
+            [conversationId]: pins,
+          }));
+        }
+      })
+      .catch((requestError) => {
+        if (
+          requestError instanceof DOMException &&
+          requestError.name === "AbortError"
+        ) {
+          return;
+        }
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Could not load pinned messages.",
+        );
+      });
+    return () => abortController.abort();
+  }, [activeId, user.username]);
+
+  useEffect(() => {
+    if (!activeId) return;
     if (
       conversationTab !== "recordings" &&
       loadedRecordingConversationIdsRef.current.has(activeId)
@@ -3069,6 +3171,48 @@ function ChatApp({
     typingTimerRef.current = window.setTimeout(() => {
       void connection.invoke("SetTyping", activeId, false);
     }, 1200);
+  }
+
+  async function toggleMessagePin(messageId: string, isPinned: boolean) {
+    if (pinActionMessageId) return;
+    setPinActionMessageId(messageId);
+    setError("");
+    try {
+      const response = await fetch(
+        `${API_URL}/api/messages/${messageId}/pin?username=${encodeURIComponent(user.username)}`,
+        { method: isPinned ? "DELETE" : "POST" },
+      );
+      if (!response.ok) throw new Error(await readError(response));
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : `Could not ${isPinned ? "unpin" : "pin"} the message.`,
+      );
+    } finally {
+      setPinActionMessageId(null);
+    }
+  }
+
+  function jumpToPinnedMessage(messageId: string) {
+    if (!activeId) return;
+    setConversationTab("chat");
+    setIsPinnedMessagesOpen(false);
+    const messageElement = document.getElementById(`message-${messageId}`);
+    if (messageElement) {
+      messageElement.scrollIntoView({ behavior: "smooth", block: "center" });
+      messageElement.focus({ preventScroll: true });
+      setHighlightedMessageId(messageId);
+      return;
+    }
+
+    pendingMessageJumpRef.current = {
+      conversationId: activeId,
+      messageId,
+      ready: false,
+    };
+    setHighlightedMessageId(null);
+    setMessageJumpVersion((current) => current + 1);
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -4819,6 +4963,73 @@ function ChatApp({
           aria-live="polite"
           hidden={conversationTab !== "chat"}
         >
+          {activePinnedMessages.length > 0 && (
+            <div className="pinned-messages">
+              <button
+                className="pinned-messages-summary"
+                type="button"
+                aria-expanded={isPinnedMessagesOpen}
+                aria-controls="pinned-message-list"
+                onClick={() =>
+                  setIsPinnedMessagesOpen((current) => !current)
+                }
+              >
+                <Pin size={16} />
+                <span>
+                  <strong>
+                    {activePinnedMessages.length}{" "}
+                    {activePinnedMessages.length === 1
+                      ? "pinned message"
+                      : "pinned messages"}
+                  </strong>
+                  <small>
+                    {pinnedMessagePreview(activePinnedMessages[0])}
+                  </small>
+                </span>
+                <ChevronDown
+                  className={isPinnedMessagesOpen ? "expanded" : ""}
+                  size={16}
+                />
+              </button>
+              {isPinnedMessagesOpen && (
+                <div
+                  className="pinned-message-list"
+                  id="pinned-message-list"
+                >
+                  {activePinnedMessages.map((pin) => (
+                    <div className="pinned-message-item" key={pin.messageId}>
+                      <button
+                        type="button"
+                        onClick={() => jumpToPinnedMessage(pin.messageId)}
+                      >
+                        <strong>{pin.senderUsername ?? "System"}</strong>
+                        <span>{pinnedMessagePreview(pin)}</span>
+                        <small>
+                          Pinned by {pin.pinnedByDisplayName}
+                        </small>
+                      </button>
+                      <button
+                        className="pinned-message-unpin"
+                        type="button"
+                        disabled={pinActionMessageId === pin.messageId}
+                        aria-label={`Unpin message from ${pin.senderUsername ?? "System"}`}
+                        title="Unpin"
+                        onClick={() =>
+                          void toggleMessagePin(pin.messageId, true)
+                        }
+                      >
+                        {pinActionMessageId === pin.messageId ? (
+                          <LoaderCircle className="spin" size={15} />
+                        ) : (
+                          <PinOff size={15} />
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {historicalConversationId === activeId && !isLoadingMessages && (
             <button className="message-back-to-latest" type="button" onClick={() => {
               pendingMessageJumpRef.current = null;
@@ -4860,6 +5071,9 @@ function ChatApp({
           ) : (
             groupedMessages.map(({ message, startsDay, startsGroup }) => {
               const isOwnMessage = message.senderUserId === user.id;
+              const isPinned = activePinnedMessages.some(
+                (pin) => pin.messageId === message.id,
+              );
               const replyTarget = message.replyToMessageId
                 ? activeMessages.find(
                     (candidate) => candidate.id === message.replyToMessageId,
@@ -5056,6 +5270,11 @@ function ChatApp({
                               editingMessageId !== message.id && (
                                 <small className="message-edited">Edited</small>
                               )}
+                            {isPinned && (
+                              <small className="message-pinned-label">
+                                <Pin size={11} /> Pinned
+                              </small>
+                            )}
                             <MessageActions
                               isOwn={isOwnMessage}
                               canEdit={
@@ -5066,8 +5285,11 @@ function ChatApp({
                                 message.content ||
                                 (message.attachments?.length ?? 0) > 0,
                               )}
+                              isPinned={isPinned}
                               disabled={
-                                !isOnline || editingMessageId === message.id
+                                !isOnline ||
+                                editingMessageId === message.id ||
+                                pinActionMessageId === message.id
                               }
                               reactions={message.reactions ?? []}
                               resolveAvatarUrl={avatarSource}
@@ -5081,6 +5303,9 @@ function ChatApp({
                               }}
                               onDelete={() => setDeletingMessage(message)}
                               onCopy={() => void copyMessage(message)}
+                              onTogglePin={() =>
+                                void toggleMessagePin(message.id, isPinned)
+                              }
                             />
                           </>
                         )}

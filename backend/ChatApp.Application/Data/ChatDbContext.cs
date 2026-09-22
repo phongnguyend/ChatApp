@@ -469,6 +469,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         entity.Property(x => x.CreatedAt).HasPrecision(3);
         entity.Property(x => x.EditedAt).HasPrecision(3);
         entity.Property(x => x.DeletedAt).HasPrecision(3);
+        entity.Property(x => x.PinnedAt).HasPrecision(3);
         entity.HasIndex(x => new { x.SenderUserId, x.ClientMessageId })
             .HasDatabaseName("UQ_Messages_ClientId")
             .IsUnique()
@@ -482,6 +483,10 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         entity.HasIndex(x => x.ReplyToMessageId)
             .HasDatabaseName("IX_Messages_ReplyTo")
             .HasFilter("[ReplyToMessageId] IS NOT NULL");
+        entity.HasIndex(x => new { x.ConversationId, x.PinnedAt })
+            .IsDescending(false, true)
+            .HasFilter("[PinnedAt] IS NOT NULL")
+            .HasDatabaseName("IX_Messages_ConversationPinned");
         entity.HasOne(x => x.Conversation)
             .WithMany(x => x.Messages)
             .HasForeignKey(x => x.ConversationId)
@@ -493,6 +498,10 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         entity.HasOne(x => x.ReplyToMessage)
             .WithMany()
             .HasForeignKey(x => x.ReplyToMessageId)
+            .OnDelete(DeleteBehavior.NoAction);
+        entity.HasOne(x => x.PinnedByUser)
+            .WithMany()
+            .HasForeignKey(x => x.PinnedByUserId)
             .OnDelete(DeleteBehavior.NoAction);
     }
 
