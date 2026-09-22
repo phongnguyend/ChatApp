@@ -2048,6 +2048,19 @@
   color: #d9f1ff;
 }
 
+.message-mention {
+  padding: 1px 3px;
+  border-radius: 4px;
+  color: #9d4b3d;
+  background: #f9e6df;
+  font-weight: 700;
+}
+
+.message.own-message .message-mention {
+  color: white;
+  background: rgba(255, 255, 255, 0.18);
+}
+
 .message-body p a:focus-visible {
   border-radius: 3px;
   outline: 2px solid currentColor;
@@ -3058,6 +3071,93 @@
 
 .composer textarea::placeholder {
   color: #a5a6a1;
+}
+
+.composer-mentions {
+  position: absolute;
+  z-index: 20;
+  right: 12px;
+  bottom: calc(100% + 8px);
+  left: 12px;
+  max-height: 260px;
+  padding: 6px;
+  overflow-y: auto;
+  border: 1px solid #dedbd3;
+  border-radius: 12px;
+  background: white;
+  box-shadow: 0 14px 34px rgba(46, 51, 47, 0.16);
+}
+
+.composer-mentions-heading {
+  padding: 6px 8px 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #878a85;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.composer-mentions > button {
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #424743;
+  background: transparent;
+  text-align: left;
+}
+
+.composer-mentions > button:hover,
+.composer-mentions > button.active {
+  background: #f5f2ec;
+}
+
+.composer-mention-avatar {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: white;
+  background: var(--coral);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.composer-mention-avatar .avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.composer-mentions > button > span:last-child {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.composer-mentions strong,
+.composer-mentions small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-mentions strong {
+  font-size: 12px;
+}
+
+.composer-mentions small {
+  color: #8b8e88;
+  font-size: 10px;
 }
 
 .send-button {

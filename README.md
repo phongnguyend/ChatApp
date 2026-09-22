@@ -10,7 +10,8 @@ A simple real-time chat application built with:
 The app includes persistent message history, pair-unique direct messages,
 multi-person group creation, live group member management, user discovery, online
 presence, typing indicators, unread counts, profile and group avatar uploads,
-camera capture, current-location sharing with confirmation previews, start/stop
+member tagging (including `@everyone`) with linked in-app notifications, camera capture,
+current-location sharing with confirmation previews, start/stop
 live-location sharing with an updating Leaflet map, automatic
 SignalR reconnection, SignalR-coordinated direct and group meetings whose audio,
 video, screen sharing, and server-side recording run through Azure Communication
@@ -155,6 +156,7 @@ Below is the relational schema for the collaboration application, covering:
 - Reactions
 - Read receipts
 - Message editing and deletion
+- Conversation-member tagging and mention notifications
 - Member roles
 - Muting and leaving conversations
 - Calling identities, recordings, and scheduled meetings
@@ -1003,7 +1005,7 @@ CREATE TABLE user_notifications (
         CHECK (type IN (
             'meeting_invite', 'meeting_rescheduled', 'meeting_cancelled',
             'document_file_share', 'document_folder_share', 'note_share',
-            'task_share', 'task_assignment', 'message_reaction',
+            'task_share', 'task_assignment', 'message_reaction', 'message_mention',
             'recording_ready'
         ))
 );
@@ -1171,7 +1173,7 @@ uploads to be cleaned up without creating long-lived document relationships.
 
 The API applies pending migrations during startup with
 `Database.MigrateAsync()`. The current migration tip is
-`20260921065512_AddMeetingParticipantResponses`.
+`20260922121542_AddMessageMentionNotifications`.
 
 ```powershell
 cd backend

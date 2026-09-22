@@ -849,6 +849,8 @@ public sealed class ConversationsController(
         [FromForm] string? content,
         [FromForm] string clientMessageId,
         [FromForm] Guid? replyToMessageId,
+        [FromForm] List<Guid>? mentionedUserIds,
+        [FromForm] bool mentionEveryone,
         CancellationToken cancellationToken)
     {
         var normalized = Username.Normalize(username);
@@ -1039,6 +1041,16 @@ public sealed class ConversationsController(
                         x => x.UnreadCount,
                         x => x.UnreadCount + 1),
                     cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
+            await MessageMentionNotifications.AddAsync(
+                db,
+                id,
+                sender.Id,
+                message.Id,
+                message.Content,
+                mentionedUserIds,
+                mentionEveryone,
+                cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             committed = true;

@@ -167,7 +167,9 @@ public sealed record SendMessageRequest(
     Guid? ReplyToMessageId = null,
     string MessageType = "text",
     decimal? LocationLatitude = null,
-    decimal? LocationLongitude = null);
+    decimal? LocationLongitude = null,
+    Guid[]? MentionedUserIds = null,
+    bool MentionEveryone = false);
 
 public sealed record StartLiveLocationRequest(
     Guid ConversationId,

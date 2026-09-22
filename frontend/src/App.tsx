@@ -6,6 +6,7 @@ import {
 } from "@microsoft/signalr";
 import {
   AlarmClock,
+  AtSign,
   Ban,
   Bell,
   Check,
@@ -156,6 +157,16 @@ type ConversationMember = User & {
   role: "owner" | "admin" | "member";
   isOnline: boolean;
 };
+
+type MentionSearch = {
+  start: number;
+  end: number;
+  query: string;
+};
+
+type MentionOption =
+  | { kind: "everyone" }
+  | { kind: "member"; member: ConversationMember };
 
 type ViewedProfile = User & {
   isOnline: boolean;
@@ -459,7 +470,93 @@ function getCurrentPosition() {
   );
 }
 
-function MessageContent({ content }: { content: string }) {
+function isMentionUsernameCharacter(value: string | undefined) {
+  return value !== undefined && /[\p{L}\p{N}_.-]/u.test(value);
+}
+
+function hasExactMention(content: string, username: string) {
+  const loweredContent = content.toLocaleLowerCase();
+  const token = `@${username}`.toLocaleLowerCase();
+  let start = 0;
+  while (start < loweredContent.length) {
+    const index = loweredContent.indexOf(token, start);
+    if (index < 0) return false;
+    const after = index + token.length;
+    if (
+      !isMentionUsernameCharacter(content[index - 1]) &&
+      !isMentionUsernameCharacter(content[after])
+    ) {
+      return true;
+    }
+    start = after;
+  }
+  return false;
+}
+
+function findMentionSearch(value: string, cursor: number): MentionSearch | null {
+  const beforeCursor = value.slice(0, cursor);
+  const start = beforeCursor.lastIndexOf("@");
+  if (
+    start < 0 ||
+    isMentionUsernameCharacter(value[start - 1]) ||
+    /[@\n\r]/.test(beforeCursor.slice(start + 1))
+  ) {
+    return null;
+  }
+  return { start, end: cursor, query: beforeCursor.slice(start + 1) };
+}
+
+function escapeRegularExpression(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function renderMentions(
+  text: string,
+  members: ConversationMember[],
+  keyPrefix: string,
+) {
+  const usernames = [
+    ...new Set(["everyone", ...members.map((member) => member.username)]),
+  ].sort((left, right) => right.length - left.length);
+  if (usernames.length === 0) return text;
+
+  const memberByUsername = new Map(
+    members.map((member) => [member.username.toLocaleLowerCase(), member]),
+  );
+  const pattern = new RegExp(
+    `(^|[^\\p{L}\\p{N}_.-])(@(?:${usernames.map(escapeRegularExpression).join("|")}))(?=$|[^\\p{L}\\p{N}_.-])`,
+    "giu",
+  );
+  const result: ReactNode[] = [];
+  let cursor = 0;
+  for (const match of text.matchAll(pattern)) {
+    const index = match.index ?? 0;
+    const leading = match[1] ?? "";
+    const mention = match[2];
+    const member = memberByUsername.get(mention.slice(1).toLocaleLowerCase());
+    result.push(text.slice(cursor, index), leading);
+    result.push(
+      <span
+        className="message-mention"
+        key={`${keyPrefix}-${index}`}
+        title={member?.displayName ?? "Everyone in this conversation"}
+      >
+        {mention}
+      </span>,
+    );
+    cursor = index + match[0].length;
+  }
+  result.push(text.slice(cursor));
+  return result;
+}
+
+function MessageContent({
+  content,
+  members,
+}: {
+  content: string;
+  members: ConversationMember[];
+}) {
   return (
     <p>
       {content.split(MESSAGE_URL_PATTERN).map((part, index) =>
@@ -473,7 +570,7 @@ function MessageContent({ content }: { content: string }) {
             {part}
           </a>
         ) : (
-          part
+          renderMentions(part, members, `text-${index}`)
         ),
       )}
     </p>
@@ -1188,6 +1285,11 @@ function ChatApp({
     "start" | "join" | "leave" | "stop" | null
   >(null);
   const [draft, setDraft] = useState("");
+  const [mentionSearch, setMentionSearch] = useState<MentionSearch | null>(null);
+  const [activeMentionIndex, setActiveMentionIndex] = useState(0);
+  const [draftMentionUserIds, setDraftMentionUserIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [error, setError] = useState("");
   const [hubConnection, setHubConnection] = useState<HubConnection | null>(
@@ -1475,6 +1577,25 @@ function ChatApp({
     return item ? [item] : [];
   });
   const activeMembers = activeId ? (membersByConversation[activeId] ?? []) : [];
+  const mentionOptions: MentionOption[] = mentionSearch
+    ? [
+        ...("everyone".includes(
+          mentionSearch.query.trim().toLocaleLowerCase(),
+        )
+          ? ([{ kind: "everyone" }] as MentionOption[])
+          : []),
+        ...activeMembers
+          .filter(
+            (member) =>
+              member.id !== user.id &&
+              `${member.displayName} ${member.username}`
+                .toLocaleLowerCase()
+                .includes(mentionSearch.query.trim().toLocaleLowerCase()),
+          )
+          .slice(0, 6)
+          .map((member): MentionOption => ({ kind: "member", member })),
+      ]
+    : [];
   const directParticipant =
     activeConversation?.type === "direct"
       ? (activeMembers.find((member) => member.id !== user.id) ??
@@ -1577,6 +1698,8 @@ function ChatApp({
 
   useEffect(() => {
     activeIdRef.current = activeId;
+    setMentionSearch(null);
+    setDraftMentionUserIds(new Set());
   }, [activeId]);
 
   useEffect(() => {
@@ -2506,7 +2629,14 @@ function ChatApp({
 
     const filesToSend = attachmentFiles;
     const replyToMessageId = replyingToMessageId;
+    const mentionedUserIds = [...draftMentionUserIds].filter((memberId) => {
+      const member = activeMembers.find((item) => item.id === memberId);
+      return member ? hasExactMention(content, member.username) : false;
+    });
+    const mentionEveryone = hasExactMention(content, "everyone");
     setDraft("");
+    setMentionSearch(null);
+    setDraftMentionUserIds(new Set());
     setAttachmentFiles([]);
     setReplyingToMessageId(null);
     setIsSendingMessage(true);
@@ -2522,6 +2652,10 @@ function ChatApp({
         if (replyToMessageId) {
           formData.append("replyToMessageId", replyToMessageId);
         }
+        mentionedUserIds.forEach((memberId) =>
+          formData.append("mentionedUserIds", memberId),
+        );
+        formData.append("mentionEveryone", String(mentionEveryone));
         const response = await fetch(
           `${API_URL}/api/conversations/${activeId}/messages/attachments?username=${encodeURIComponent(
             user.username,
@@ -2536,10 +2670,13 @@ function ChatApp({
           content,
           clientMessageId: crypto.randomUUID(),
           replyToMessageId,
+          mentionedUserIds,
+          mentionEveryone,
         });
       }
     } catch (requestError) {
       setDraft(content);
+      setDraftMentionUserIds(new Set(mentionedUserIds));
       setAttachmentFiles(filesToSend);
       setReplyingToMessageId(replyToMessageId);
       setError(
@@ -2913,8 +3050,17 @@ function ChatApp({
     }
   }
 
-  function handleDraftChange(value: string) {
+  function handleDraftChange(value: string, cursor = value.length) {
     setDraft(value);
+    setDraftMentionUserIds((current) => {
+      const retained = [...current].filter((memberId) => {
+        const member = activeMembers.find((item) => item.id === memberId);
+        return member ? hasExactMention(value, member.username) : false;
+      });
+      return retained.length === current.size ? current : new Set(retained);
+    });
+    setMentionSearch(findMentionSearch(value, cursor));
+    setActiveMentionIndex(0);
     const connection = connectionRef.current;
     if (!activeId || connection?.state !== HubConnectionState.Connected) return;
 
@@ -2926,10 +3072,56 @@ function ChatApp({
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (mentionSearch && mentionOptions.length > 0) {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const direction = event.key === "ArrowDown" ? 1 : -1;
+        setActiveMentionIndex((current) =>
+          (current + direction + mentionOptions.length) %
+          mentionOptions.length,
+        );
+        return;
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault();
+        selectMention(
+          mentionOptions[Math.min(activeMentionIndex, mentionOptions.length - 1)],
+        );
+        return;
+      }
+    }
+    if (event.key === "Escape" && mentionSearch) {
+      event.preventDefault();
+      setMentionSearch(null);
+      return;
+    }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       void sendMessage();
     }
+  }
+
+  function selectMention(option: MentionOption) {
+    if (!mentionSearch) return;
+    const username =
+      option.kind === "everyone" ? "everyone" : option.member.username;
+    const insertion = `@${username} `;
+    const nextDraft =
+      draft.slice(0, mentionSearch.start) +
+      insertion +
+      draft.slice(mentionSearch.end);
+    if (nextDraft.length > 2000) return;
+
+    const nextCursor = mentionSearch.start + insertion.length;
+    if (option.kind === "member") {
+      setDraftMentionUserIds((current) => new Set(current).add(option.member.id));
+    }
+    handleDraftChange(nextDraft, nextCursor);
+    setMentionSearch(null);
+    window.requestAnimationFrame(() => {
+      draftInputRef.current?.focus();
+      draftInputRef.current?.setSelectionRange(nextCursor, nextCursor);
+    });
   }
 
   function insertEmoji(emoji: string) {
@@ -3165,7 +3357,7 @@ function ChatApp({
       setIsRemindersOpen(false);
     };
 
-    if (notification.type === "message_reaction" || notification.type === "recording_ready") {
+    if (notification.type === "message_reaction" || notification.type === "message_mention" || notification.type === "recording_ready") {
       if (!notification.contextId) throw new Error("This notification does not have a conversation destination.");
       const items = await loadConversations();
       if (!items.some((item) => item.id === notification.contextId))
@@ -3748,6 +3940,42 @@ function ChatApp({
 
         <nav className="sidebar-rail" aria-label="Main sections">
           <button
+            className={`sidebar-rail-button ${isNotificationsOpen ? "active" : ""}`}
+            type="button"
+            aria-label={
+              notificationUnreadCount
+                ? `Notifications, ${notificationUnreadCount} unread`
+                : "Notifications"
+            }
+            title={
+              notificationUnreadCount
+                ? `Notifications (${notificationUnreadCount} unread)`
+                : "Notifications"
+            }
+            aria-current={isNotificationsOpen ? "page" : undefined}
+            onClick={() => {
+              setIsNotificationsOpen(true);
+              setIsCalendarOpen(false);
+              setIsMeetingsOpen(false);
+              setIsDocumentsOpen(false);
+              setIsStorageManagementOpen(false);
+              setIsTasksOpen(false);
+              setIsNotesOpen(false);
+              setIsRemindersOpen(false);
+              setIsSidebarOpen(false);
+            }}
+          >
+            <Bell size={21} />
+            {notificationUnreadCount !== null &&
+              notificationUnreadCount > 0 && (
+                <span className="sidebar-rail-unread-badge" aria-hidden="true">
+                  {notificationUnreadCount > 99
+                    ? "99+"
+                    : notificationUnreadCount}
+                </span>
+              )}
+          </button>
+          <button
             className={`sidebar-rail-button ${!isCalendarOpen && !isMeetingsOpen && !isDocumentsOpen && !isStorageManagementOpen && !isTasksOpen && !isNotesOpen && !isRemindersOpen && !isNotificationsOpen ? "active" : ""}`}
             type="button"
             aria-label="Chat"
@@ -3765,24 +3993,6 @@ function ChatApp({
               setIsSidebarOpen(false);
             }}
           ><MessageCircleMore size={21} /></button>
-          <button
-            className={`sidebar-rail-button ${isNotificationsOpen ? "active" : ""}`}
-            type="button"
-            aria-label={notificationUnreadCount ? `Notifications, ${notificationUnreadCount} unread` : "Notifications"}
-            title={notificationUnreadCount ? `Notifications (${notificationUnreadCount} unread)` : "Notifications"}
-            aria-current={isNotificationsOpen ? "page" : undefined}
-            onClick={() => {
-              setIsNotificationsOpen(true);
-              setIsCalendarOpen(false);
-              setIsMeetingsOpen(false);
-              setIsDocumentsOpen(false);
-              setIsStorageManagementOpen(false);
-              setIsTasksOpen(false);
-              setIsNotesOpen(false);
-              setIsRemindersOpen(false);
-              setIsSidebarOpen(false);
-            }}
-          ><Bell size={21} />{notificationUnreadCount !== null && notificationUnreadCount > 0 && <span className="sidebar-rail-unread-badge" aria-hidden="true">{notificationUnreadCount > 99 ? "99+" : notificationUnreadCount}</span>}</button>
           <button
             className={`sidebar-rail-button ${isMeetingsOpen ? "active" : ""}`}
             type="button"
@@ -4836,7 +5046,10 @@ function ChatApp({
                               />
                             ) : (
                               message.content && (
-                                <MessageContent content={message.content} />
+                                <MessageContent
+                                  content={message.content}
+                                  members={activeMembers}
+                                />
                               )
                             )}
                             {message.editedAt &&
@@ -5547,9 +5760,72 @@ function ChatApp({
             }
             rows={1}
             value={draft}
-            onChange={(event) => handleDraftChange(event.target.value)}
+            aria-autocomplete="list"
+            aria-controls={
+              mentionOptions.length > 0
+                ? "composer-mention-results"
+                : undefined
+            }
+            aria-expanded={mentionOptions.length > 0}
+            onChange={(event) =>
+              handleDraftChange(
+                event.target.value,
+                event.target.selectionStart ?? event.target.value.length,
+              )
+            }
             onKeyDown={handleComposerKeyDown}
           />
+          {mentionOptions.length > 0 && (
+            <div
+              className="composer-mentions"
+              id="composer-mention-results"
+              role="listbox"
+              aria-label="Tag a person"
+            >
+              <div className="composer-mentions-heading">
+                <AtSign size={14} />
+                Tag people
+              </div>
+              {mentionOptions.map((option, index) => (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={index === activeMentionIndex}
+                  className={index === activeMentionIndex ? "active" : ""}
+                  key={
+                    option.kind === "everyone"
+                      ? "everyone"
+                      : option.member.id
+                  }
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => selectMention(option)}
+                >
+                  <span className="composer-mention-avatar">
+                    {option.kind === "everyone" ? (
+                      <Users size={16} />
+                    ) : (
+                      <AvatarContent
+                        avatarUrl={option.member.avatarUrl}
+                        name={option.member.displayName}
+                      />
+                    )}
+                  </span>
+                  <span>
+                    <strong>
+                      {option.kind === "everyone"
+                        ? "Everyone"
+                        : option.member.displayName}
+                    </strong>
+                    <small>
+                      @{option.kind === "everyone"
+                        ? "everyone"
+                        : option.member.username}
+                    </small>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
           <EmojiPicker
             disabled={
               !activeConversation ||

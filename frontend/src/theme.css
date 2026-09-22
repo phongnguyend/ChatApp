@@ -92,6 +92,7 @@ html[data-theme='dark'] .login-panel {
 
 html[data-theme='dark'] .login-card,
 html[data-theme='dark'] .composer,
+html[data-theme='dark'] .composer-mentions,
 html[data-theme='dark'] .conversation-file-card,
 html[data-theme='dark'] .conversation-media-card,
 html[data-theme='dark'] .conversation-location-card,
@@ -106,6 +107,20 @@ html[data-theme='dark'] .live-location-duration-menu {
   color: var(--ink);
   background: #222e34;
   border-color: var(--line);
+}
+
+html[data-theme='dark'] .composer-mentions > button {
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .composer-mentions > button:hover,
+html[data-theme='dark'] .composer-mentions > button.active {
+  background: #303e44;
+}
+
+html[data-theme='dark'] .message-mention {
+  color: #ffc1b3;
+  background: rgba(231, 101, 75, 0.18);
 }
 
 html[data-theme='dark'] .live-location-message-card,

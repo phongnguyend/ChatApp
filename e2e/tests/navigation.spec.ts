@@ -9,6 +9,10 @@ test('sign in, switch theme, and navigate the work sections', async ({ page, req
   await page.getByRole('menuitemradio', { name: 'Dark' }).click();
   await expect(page.getByRole('button', { name: 'Theme: dark. Choose theme' })).toBeVisible();
 
+  const mainMenuButtons = page.getByRole('navigation', { name: 'Main sections' }).getByRole('button');
+  await expect(mainMenuButtons.nth(0)).toHaveAccessibleName(/^Notifications(?:[,\s]|$)/);
+  await expect(mainMenuButtons.nth(1)).toHaveAccessibleName('Chat');
+
   for (const section of ['Notifications', 'Meetings', 'Calendar', 'My Documents', 'Tasks', 'Reminders', 'Notes']) {
     await openSection(page, section);
   }

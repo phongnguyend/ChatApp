@@ -294,8 +294,18 @@ public sealed class ChatHub(
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(x => x.UnreadCount, x => x.UnreadCount + 1));
 
-        await db.SaveChangesAsync();
-        await transaction.CommitAsync();
+        await db.SaveChangesAsync(Context.ConnectionAborted);
+        await MessageMentionNotifications.AddAsync(
+            db,
+            request.ConversationId,
+            session.UserId,
+            message.Id,
+            message.Content,
+            request.MentionedUserIds,
+            request.MentionEveryone,
+            Context.ConnectionAborted);
+        await db.SaveChangesAsync(Context.ConnectionAborted);
+        await transaction.CommitAsync(Context.ConnectionAborted);
 
         var result = new MessageDto(
             message.Id,
