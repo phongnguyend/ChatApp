@@ -11,7 +11,8 @@ The app includes persistent message history, pair-unique direct messages,
 multi-person group creation, live group member management, user discovery, online
 presence, typing indicators, unread counts, profile and group avatar uploads,
 member tagging (including `@everyone`) with linked in-app notifications,
-persistent conversation message pinning, camera capture,
+persistent conversation message pinning, single- and multiple-choice
+in-conversation polls with expiration and live vote totals, camera capture,
 current-location sharing with confirmation previews, start/stop
 live-location sharing with an updating Leaflet map, automatic
 SignalR reconnection, SignalR-coordinated direct and group meetings whose audio,
@@ -159,6 +160,7 @@ Below is the relational schema for the collaboration application, covering:
 - Message editing and deletion
 - Conversation-member tagging and mention notifications
 - Persistent message pinning
+- Single- and multiple-choice conversation polls with optional expiration
 - Member roles
 - Muting and leaving conversations
 - Calling identities, recordings, and scheduled meetings
@@ -178,6 +180,7 @@ User
   |                              |           |-- MessageAttachment
   |                              |           |-- MessageReaction
   |                              |           |-- MessageReceipt
+  |                              |           `-- MessagePoll -- MessagePollOption -- MessagePollVote
   |                              |           |-- MessageVersion
   |                              |           `-- LiveLocationShare
   |                              |-- LiveStreamSession
@@ -396,6 +399,7 @@ CREATE TABLE messages (
                 'video',
                 'location',
                 'live_location',
+                'poll',
                 'system'
             )
         ),
@@ -498,6 +502,54 @@ WHERE is_active = TRUE;
 
 The server broadcasts `LiveLocationUpdated` after coordinate changes and
 `LiveLocationStopped` when the sender stops sharing or the share expires.
+
+### 5.2 Message polls
+
+A poll is a message, so it follows the conversation's normal ordering,
+permissions, deletion, and pinning behavior. Single-choice polls replace a
+member's previous selection; multiple-choice polls store one row for each
+selected option. Expired polls keep their results but reject new votes.
+
+```sql
+CREATE TABLE message_polls (
+    message_id  UUID PRIMARY KEY
+                REFERENCES messages(id)
+                ON DELETE CASCADE,
+    question    VARCHAR(300) NOT NULL,
+    is_multiple BOOLEAN NOT NULL DEFAULT FALSE,
+    expires_at  TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE message_poll_options (
+    id               UUID PRIMARY KEY,
+    poll_message_id  UUID NOT NULL
+                     REFERENCES message_polls(message_id)
+                     ON DELETE CASCADE,
+    text             VARCHAR(200) NOT NULL,
+    sort_order       INTEGER NOT NULL CHECK (sort_order >= 0),
+
+    UNIQUE (poll_message_id, sort_order)
+);
+
+CREATE TABLE message_poll_votes (
+    poll_message_id  UUID NOT NULL
+                     REFERENCES message_polls(message_id)
+                     ON DELETE CASCADE,
+    user_id          UUID NOT NULL REFERENCES users(id),
+    option_id        UUID NOT NULL REFERENCES message_poll_options(id),
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    PRIMARY KEY (poll_message_id, user_id, option_id)
+);
+
+CREATE INDEX ix_message_poll_votes_option
+ON message_poll_votes (option_id);
+```
+
+The server broadcasts `MessagePollVoteChanged` after each vote so every open
+client receives the latest totals and the current user's selection without
+reloading the conversation.
 
 ## 6. Attachments
 
@@ -1186,7 +1238,7 @@ uploads to be cleaned up without creating long-lived document relationships.
 
 The API applies pending migrations during startup with
 `Database.MigrateAsync()`. The current migration tip is
-`20260922152440_AddMessagePins`.
+`20260922162419_AddMessagePolls`.
 
 ```powershell
 cd backend

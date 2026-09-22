@@ -24,5 +24,6 @@ public sealed class ChatMessage
     public Guid? PinnedByUserId { get; set; }
     public ChatUser? PinnedByUser { get; set; }
     public DateTimeOffset? PinnedAt { get; set; }
+    public MessagePoll? Poll { get; set; }
     public LiveLocationShare? LiveLocationShare { get; set; }
 }

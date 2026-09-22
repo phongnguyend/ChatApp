@@ -8,6 +8,7 @@ import {
   AlarmClock,
   AtSign,
   Ban,
+  BarChart3,
   Bell,
   Check,
   ChevronDown,
@@ -16,16 +17,19 @@ import {
   CalendarCheck2,
   ClipboardList,
   CirclePlay,
+  CircleDot,
   Copy,
   Download,
   ExternalLink,
   FileText,
   FolderOpen,
+  GripVertical,
   HardDrive,
   Hash,
   Images,
   LoaderCircle,
   Link2,
+  ListChecks,
   LocateFixed,
   LogOut,
   MapPinned,
@@ -102,6 +106,10 @@ import {
   resolveUnknownVideoDuration,
 } from "./components/mediaDuration";
 import { type ChatReaction, MessageActions } from "./components/MessageActions";
+import {
+  MessagePoll as MessagePollCard,
+  type ChatPoll,
+} from "./components/MessagePoll";
 import { EmojiPicker } from "./components/EmojiPicker";
 import { GroupMemberActions } from "./components/GroupMemberActions";
 import {
@@ -256,6 +264,7 @@ type Message = {
   attachments?: ChatAttachment[] | null;
   reactions?: ChatReaction[] | null;
   liveLocation?: LiveLocation | null;
+  poll?: ChatPoll | null;
 };
 
 type SessionRecording = {
@@ -342,6 +351,15 @@ type MessagePinChangedEvent = {
   pin: PinnedMessage | null;
 };
 
+type MessagePollVoteChangedEvent = {
+  messageId: string;
+  conversationId: string;
+  userId: string;
+  selectedOptionIds: string[];
+  totalVotes: number;
+  options: { id: string; voteCount: number }[];
+};
+
 type TypingEvent = {
   conversationId: string;
   username: string;
@@ -351,12 +369,22 @@ type TypingEvent = {
 type ConnectionStatus = "connecting" | "connected" | "reconnecting" | "offline";
 type ConversationTab =
   | "chat"
+  | "polls"
   | "files"
   | "photos"
   | "locations"
   | "recordings";
 const EMPTY_MESSAGES: Message[] = [];
 const EMPTY_RECORDINGS: SessionRecording[] = [];
+
+type PollDraftOption = { id: string; text: string };
+
+function createPollDraftOptions(): PollDraftOption[] {
+  return [
+    { id: crypto.randomUUID(), text: "" },
+    { id: crypto.randomUUID(), text: "" },
+  ];
+}
 
 function conversationDisplayTitle(
   conversation: Conversation | null | undefined,
@@ -1327,6 +1355,23 @@ function ChatApp({
     "start" | "join" | "leave" | "stop" | null
   >(null);
   const [draft, setDraft] = useState("");
+  const [isPollDialogOpen, setIsPollDialogOpen] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollMode, setPollMode] = useState<"single" | "multiple">("single");
+  const [pollExpiresAt, setPollExpiresAt] = useState("");
+  const [pollOptions, setPollOptions] = useState<PollDraftOption[]>(
+    createPollDraftOptions,
+  );
+  const [draggedPollOptionId, setDraggedPollOptionId] = useState<string | null>(
+    null,
+  );
+  const [pollOptionDropTargetId, setPollOptionDropTargetId] = useState<
+    string | null
+  >(null);
+  const [isCreatingPoll, setIsCreatingPoll] = useState(false);
+  const [pollVoteMessageId, setPollVoteMessageId] = useState<string | null>(
+    null,
+  );
   const [mentionSearch, setMentionSearch] = useState<MentionSearch | null>(null);
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const [draftMentionUserIds, setDraftMentionUserIds] = useState<Set<string>>(
@@ -1579,6 +1624,25 @@ function ChatApp({
           !attachment.contentType.startsWith("video/"),
       ),
     [activeAttachmentItems],
+  );
+  const activePollItems = useMemo(
+    () =>
+      activeMessages.flatMap((message) =>
+        !message.deletedAt && message.messageType === "poll" && message.poll
+          ? [
+              {
+                messageId: message.id,
+                poll: message.poll,
+                senderName:
+                  message.senderUserId === user.id
+                    ? "You"
+                    : (message.username ?? "Unknown user"),
+                createdAt: message.createdAt,
+              },
+            ]
+          : [],
+      ),
+    [activeMessages, user.id],
   );
   const activeLocationItems = useMemo(
     () =>
@@ -1887,6 +1951,37 @@ function ChatApp({
         };
       });
     });
+    connection.on(
+      "MessagePollVoteChanged",
+      (event: MessagePollVoteChangedEvent) => {
+        const resultByOption = new Map(
+          event.options.map((option) => [option.id, option.voteCount]),
+        );
+        setMessagesByConversation((current) => ({
+          ...current,
+          [event.conversationId]: (current[event.conversationId] ?? []).map(
+            (message) =>
+              message.id === event.messageId && message.poll
+                ? {
+                    ...message,
+                    poll: {
+                      ...message.poll,
+                      totalVotes: event.totalVotes,
+                      options: message.poll.options.map((option) => ({
+                        ...option,
+                        voteCount: resultByOption.get(option.id) ?? 0,
+                        isSelected:
+                          event.userId === user.id
+                            ? event.selectedOptionIds.includes(option.id)
+                            : option.isSelected,
+                      })),
+                    },
+                  }
+                : message,
+          ),
+        }));
+      },
+    );
     connection.on("LiveLocationUpdated", (event: LiveLocation) => {
       setMessagesByConversation((current) => ({
         ...current,
@@ -2789,6 +2884,98 @@ function ChatApp({
     } finally {
       setIsSendingMessage(false);
     }
+  }
+
+  async function createPoll(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!activeId || isCreatingPoll) return;
+    const question = pollQuestion.trim();
+    const options = pollOptions
+      .map((option) => option.text.trim())
+      .filter(Boolean);
+    if (question.length === 0 || options.length < 2) return;
+
+    setIsCreatingPoll(true);
+    setError("");
+    try {
+      const response = await fetch(
+        `${API_URL}/api/conversations/${activeId}/polls?username=${encodeURIComponent(user.username)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question,
+            options,
+            isMultiple: pollMode === "multiple",
+            expiresAt: pollExpiresAt
+              ? new Date(pollExpiresAt).toISOString()
+              : null,
+            clientMessageId: crypto.randomUUID(),
+          }),
+        },
+      );
+      if (!response.ok) throw new Error(await readError(response));
+      receiveMessage((await response.json()) as Message);
+      setIsPollDialogOpen(false);
+      setPollQuestion("");
+      setPollMode("single");
+      setPollExpiresAt("");
+      setPollOptions(createPollDraftOptions());
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Could not create the poll.",
+      );
+    } finally {
+      setIsCreatingPoll(false);
+    }
+  }
+
+  async function voteInPoll(messageId: string, optionId: string, poll: ChatPoll) {
+    if (pollVoteMessageId) return;
+    setPollVoteMessageId(messageId);
+    setError("");
+    try {
+      const response = await fetch(
+        `${API_URL}/api/messages/${messageId}/poll-vote?username=${encodeURIComponent(user.username)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            optionIds: poll.isMultiple
+              ? poll.options
+                  .filter((option) =>
+                    option.id === optionId ? !option.isSelected : option.isSelected,
+                  )
+                  .map((option) => option.id)
+              : [optionId],
+          }),
+        },
+      );
+      if (!response.ok) throw new Error(await readError(response));
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Could not record your vote.",
+      );
+    } finally {
+      setPollVoteMessageId(null);
+    }
+  }
+
+  function movePollOption(optionId: string, targetIndex: number) {
+    setPollOptions((current) => {
+      const sourceIndex = current.findIndex((option) => option.id === optionId);
+      if (sourceIndex < 0) return current;
+      const boundedTarget = Math.max(0, Math.min(targetIndex, current.length - 1));
+      if (sourceIndex === boundedTarget) return current;
+      const next = [...current];
+      const [moved] = next.splice(sourceIndex, 1);
+      next.splice(boundedTarget, 0, moved);
+      return next;
+    });
   }
 
   async function shareCurrentLocation(location: SharedLocation) {
@@ -4898,6 +5085,20 @@ function ChatApp({
             Chat
           </button>
           <button
+            id="conversation-tab-polls"
+            type="button"
+            role="tab"
+            aria-selected={conversationTab === "polls"}
+            aria-controls="conversation-polls-panel"
+            onClick={() => setConversationTab("polls")}
+          >
+            <BarChart3 size={16} />
+            Polls
+            {activePollItems.length > 0 && (
+              <span>{activePollItems.length}</span>
+            )}
+          </button>
+          <button
             id="conversation-tab-files"
             type="button"
             role="tab"
@@ -5236,6 +5437,16 @@ function ChatApp({
                                   </button>
                                 </div>
                               </form>
+                            ) : message.messageType === "poll" && message.poll ? (
+                              <MessagePollCard
+                                poll={message.poll}
+                                disabled={
+                                  !isOnline || pollVoteMessageId === message.id
+                                }
+                                onVote={(optionId) =>
+                                  void voteInPoll(message.id, optionId, message.poll!)
+                                }
+                              />
                             ) : message.messageType === "live_location" ? (
                               message.liveLocation ? (
                                 <LiveLocationMessageMap
@@ -5279,6 +5490,7 @@ function ChatApp({
                               isOwn={isOwnMessage}
                               canEdit={
                                 message.messageType !== "location" &&
+                                message.messageType !== "poll" &&
                                 Boolean(message.content)
                               }
                               canCopy={Boolean(
@@ -5318,6 +5530,60 @@ function ChatApp({
           )}
           <div ref={messagesEndRef} />
         </div>
+
+        {conversationTab === "polls" && (
+          <div
+            className="conversation-assets"
+            id="conversation-polls-panel"
+            role="tabpanel"
+            aria-labelledby="conversation-tab-polls"
+          >
+            <div className="conversation-assets-heading">
+              <div>
+                <p className="eyebrow">Conversation polls</p>
+                <h2>Polls in this conversation</h2>
+              </div>
+              <span>
+                {activePollItems.length}{" "}
+                {activePollItems.length === 1 ? "poll" : "polls"}
+              </span>
+            </div>
+            {isLoadingMessages ? (
+              <div className="center-state">
+                <LoaderCircle className="spin" size={24} />
+                <p>Loading polls...</p>
+              </div>
+            ) : activePollItems.length === 0 ? (
+              <div className="empty-assets">
+                <span>
+                  <BarChart3 size={25} />
+                </span>
+                <h3>No polls yet</h3>
+                <p>Polls created in the chat will appear here.</p>
+              </div>
+            ) : (
+              <div className="conversation-poll-grid">
+                {[...activePollItems].reverse().map((item) => (
+                  <article className="conversation-poll-card" key={item.messageId}>
+                    <div className="conversation-poll-meta">
+                      <strong>{item.senderName}</strong>
+                      <time dateTime={item.createdAt}>
+                        {formatAttachmentDate(item.createdAt)}
+                      </time>
+                    </div>
+                    <MessagePollCard
+                      poll={item.poll}
+                      disabled={!isOnline || pollVoteMessageId === item.messageId}
+                      onVote={(optionId) =>
+                        void voteInPoll(item.messageId, optionId, item.poll)
+                      }
+                    />
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {conversationTab === "files" && (
           <div
@@ -5959,6 +6225,27 @@ function ChatApp({
             onChange={setAttachmentFiles}
             onError={setError}
           />
+          <button
+            className="poll-button"
+            type="button"
+            disabled={
+              !activeConversation ||
+              !isOnline ||
+              isSendingMessage ||
+              isActiveDirectMessagingBlocked
+            }
+            aria-label="Create a poll"
+            title="Poll"
+            onClick={() => {
+              setPollQuestion("");
+              setPollMode("single");
+              setPollExpiresAt("");
+              setPollOptions(createPollDraftOptions());
+              setIsPollDialogOpen(true);
+            }}
+          >
+            <BarChart3 size={17} />
+          </button>
           <textarea
             ref={draftInputRef}
             aria-label={`Message ${conversationDisplayTitle(
@@ -6963,6 +7250,204 @@ function ChatApp({
             </div>
           </div>
         )}
+
+      {isPollDialogOpen && (
+        <div className="modal-backdrop" role="presentation">
+          <form
+            className="modal-card poll-dialog"
+            aria-label="Create a poll"
+            onSubmit={createPoll}
+          >
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">Conversation poll</p>
+                <h2>Create a poll</h2>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                aria-label="Close poll creator"
+                disabled={isCreatingPoll}
+                onClick={() => setIsPollDialogOpen(false)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <label htmlFor="poll-question">Question</label>
+            <input
+              id="poll-question"
+              maxLength={300}
+              autoFocus
+              value={pollQuestion}
+              onChange={(event) => setPollQuestion(event.target.value)}
+              placeholder="What would you like to ask?"
+            />
+            <fieldset className="poll-mode-picker">
+              <legend>Response type</legend>
+              <label className={pollMode === "single" ? "selected" : ""}>
+                <input
+                  type="radio"
+                  name="poll-mode"
+                  value="single"
+                  checked={pollMode === "single"}
+                  onChange={() => setPollMode("single")}
+                />
+                <CircleDot size={17} />
+                <span><strong>Single choice</strong><small>Choose one option</small></span>
+              </label>
+              <label className={pollMode === "multiple" ? "selected" : ""}>
+                <input
+                  type="radio"
+                  name="poll-mode"
+                  value="multiple"
+                  checked={pollMode === "multiple"}
+                  onChange={() => setPollMode("multiple")}
+                />
+                <ListChecks size={17} />
+                <span><strong>Multiple choice</strong><small>Choose several options</small></span>
+              </label>
+            </fieldset>
+            <label className="poll-expiration-field" htmlFor="poll-expires-at">
+              <span>Expiration <small>Optional</small></span>
+              <input
+                id="poll-expires-at"
+                type="datetime-local"
+                value={pollExpiresAt}
+                onChange={(event) => setPollExpiresAt(event.target.value)}
+              />
+            </label>
+            <div className="poll-dialog-options-heading">
+              <strong>Options</strong>
+              <span>Drag to reorder · {pollOptions.length}/10</span>
+            </div>
+            <div className="poll-dialog-options">
+              {pollOptions.map((option, index) => (
+                <div
+                  className={`poll-dialog-option ${
+                    draggedPollOptionId === option.id ? "dragging" : ""
+                  } ${
+                    pollOptionDropTargetId === option.id ? "drop-target" : ""
+                  }`}
+                  key={option.id}
+                  onDragOver={(event) => {
+                    if (!draggedPollOptionId) return;
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                    if (pollOptionDropTargetId !== option.id) {
+                      setPollOptionDropTargetId(option.id);
+                    }
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    if (draggedPollOptionId) {
+                      movePollOption(draggedPollOptionId, index);
+                    }
+                    setDraggedPollOptionId(null);
+                    setPollOptionDropTargetId(null);
+                  }}
+                >
+                  <button
+                    className="poll-option-drag-handle"
+                    type="button"
+                    draggable={!isCreatingPoll}
+                    disabled={isCreatingPoll}
+                    aria-label={`Reorder option ${index + 1}`}
+                    title="Drag to reorder. Use arrow keys for keyboard reordering."
+                    onDragStart={(event) => {
+                      setDraggedPollOptionId(option.id);
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("text/plain", option.id);
+                    }}
+                    onDragEnd={() => {
+                      setDraggedPollOptionId(null);
+                      setPollOptionDropTargetId(null);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
+                        return;
+                      }
+                      event.preventDefault();
+                      movePollOption(
+                        option.id,
+                        index + (event.key === "ArrowUp" ? -1 : 1),
+                      );
+                    }}
+                  >
+                    <GripVertical size={16} />
+                  </button>
+                  <input
+                    aria-label={`Option ${index + 1}`}
+                    maxLength={200}
+                    value={option.text}
+                    onChange={(event) =>
+                      setPollOptions((current) =>
+                        current.map((item) =>
+                          item.id === option.id
+                            ? { ...item, text: event.target.value }
+                            : item,
+                        ),
+                      )
+                    }
+                    placeholder={`Option ${index + 1}`}
+                  />
+                  <button
+                    className="poll-option-remove"
+                    type="button"
+                    disabled={pollOptions.length <= 2}
+                    aria-label={`Remove option ${index + 1}`}
+                    onClick={() =>
+                      setPollOptions((current) =>
+                        current.filter((item) => item.id !== option.id),
+                      )
+                    }
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            {pollOptions.length < 10 && (
+              <button
+                className="poll-add-option"
+                type="button"
+                onClick={() =>
+                  setPollOptions((current) => [
+                    ...current,
+                    { id: crypto.randomUUID(), text: "" },
+                  ])
+                }
+              >
+                <Plus size={15} /> Add option
+              </button>
+            )}
+            <div className="modal-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={isCreatingPoll}
+                onClick={() => setIsPollDialogOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="primary-button"
+                type="submit"
+                disabled={
+                  isCreatingPoll ||
+                  !pollQuestion.trim() ||
+                  pollOptions.filter((option) => option.text.trim()).length < 2
+                }
+              >
+                {isCreatingPoll ? (
+                  <LoaderCircle className="spin" size={17} />
+                ) : (
+                  <><BarChart3 size={16} /> Create poll</>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {deletingMessage && (
         <div className="modal-backdrop" role="presentation">

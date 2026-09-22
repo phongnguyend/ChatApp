@@ -13,6 +13,9 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
     public DbSet<MessageAttachment> MessageAttachments => Set<MessageAttachment>();
     public DbSet<MessageReaction> MessageReactions => Set<MessageReaction>();
     public DbSet<MessageReceipt> MessageReceipts => Set<MessageReceipt>();
+    public DbSet<MessagePoll> MessagePolls => Set<MessagePoll>();
+    public DbSet<MessagePollOption> MessagePollOptions => Set<MessagePollOption>();
+    public DbSet<MessagePollVote> MessagePollVotes => Set<MessagePollVote>();
     public DbSet<DirectConversation> DirectConversations => Set<DirectConversation>();
     public DbSet<ConversationInvitation> ConversationInvitations => Set<ConversationInvitation>();
     public DbSet<MessageVersion> MessageVersions => Set<MessageVersion>();
@@ -49,6 +52,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         ConfigureAttachments(modelBuilder);
         ConfigureReactions(modelBuilder);
         ConfigureReceipts(modelBuilder);
+        ConfigureMessagePolls(modelBuilder);
         ConfigureDirectConversations(modelBuilder);
         ConfigureInvitations(modelBuilder);
         ConfigureMessageVersions(modelBuilder);
@@ -454,7 +458,7 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
         {
             table.HasCheckConstraint(
                 "CK_Messages_Type",
-                "[MessageType] IN ('text', 'image', 'file', 'audio', 'video', 'location', 'live_location', 'system')");
+                "[MessageType] IN ('text', 'image', 'file', 'audio', 'video', 'location', 'live_location', 'poll', 'system')");
             table.HasCheckConstraint(
                 "CK_Messages_Location",
                 "([MessageType] = 'location' AND [Content] IS NULL AND [LocationLatitude] BETWEEN -90 AND 90 AND [LocationLongitude] BETWEEN -180 AND 180) OR ([MessageType] <> 'location' AND [LocationLatitude] IS NULL AND [LocationLongitude] IS NULL)");
@@ -521,6 +525,50 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options)
             .WithMany(x => x.Attachments)
             .HasForeignKey(x => x.MessageId)
             .OnDelete(DeleteBehavior.Cascade);
+    }
+
+    private static void ConfigureMessagePolls(ModelBuilder modelBuilder)
+    {
+        var poll = modelBuilder.Entity<MessagePoll>();
+        poll.ToTable("MessagePolls");
+        poll.HasKey(x => x.MessageId);
+        poll.Property(x => x.Question).HasMaxLength(300).IsRequired();
+        poll.Property(x => x.ExpiresAt).HasPrecision(3);
+        poll.Property(x => x.CreatedAt).HasPrecision(3);
+        poll.HasOne(x => x.Message)
+            .WithOne(x => x.Poll)
+            .HasForeignKey<MessagePoll>(x => x.MessageId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var option = modelBuilder.Entity<MessagePollOption>();
+        option.ToTable("MessagePollOptions", table => table.HasCheckConstraint(
+            "CK_MessagePollOptions_SortOrder", "[SortOrder] >= 0"));
+        option.HasKey(x => x.Id);
+        option.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
+        option.Property(x => x.Text).HasMaxLength(200).IsRequired();
+        option.HasIndex(x => new { x.PollMessageId, x.SortOrder }).IsUnique();
+        option.HasOne(x => x.Poll)
+            .WithMany(x => x.Options)
+            .HasForeignKey(x => x.PollMessageId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var vote = modelBuilder.Entity<MessagePollVote>();
+        vote.ToTable("MessagePollVotes");
+        vote.HasKey(x => new { x.PollMessageId, x.UserId, x.OptionId });
+        vote.Property(x => x.CreatedAt).HasPrecision(3);
+        vote.HasIndex(x => x.OptionId);
+        vote.HasOne(x => x.Poll)
+            .WithMany(x => x.Votes)
+            .HasForeignKey(x => x.PollMessageId)
+            .OnDelete(DeleteBehavior.Cascade);
+        vote.HasOne(x => x.Option)
+            .WithMany(x => x.Votes)
+            .HasForeignKey(x => x.OptionId)
+            .OnDelete(DeleteBehavior.NoAction);
+        vote.HasOne(x => x.User)
+            .WithMany()
+            .HasForeignKey(x => x.UserId)
+            .OnDelete(DeleteBehavior.NoAction);
     }
 
     private static void ConfigureReactions(ModelBuilder modelBuilder)

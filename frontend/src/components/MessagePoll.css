@@ -1,0 +1,20 @@
+.message-poll { width: min(390px, 100%); padding: 13px; border: 1px solid var(--line); border-radius: 14px; color: var(--ink); background: var(--paper); box-shadow: 0 5px 16px rgba(35, 43, 40, .07); }
+.message-poll header { margin-bottom: 11px; display: flex; align-items: flex-start; gap: 9px; }
+.message-poll header > span { width: 32px; height: 32px; flex: 0 0 32px; border-radius: 9px; display: grid; place-items: center; color: var(--coral); background: color-mix(in srgb, var(--coral) 12%, var(--paper)); }
+.message-poll header div { min-width: 0; display: grid; gap: 2px; }
+.message-poll header small { color: var(--coral); font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.message-poll header strong { overflow-wrap: anywhere; font-size: 13px; line-height: 1.4; }
+.message-poll-mode { margin-top: 2px; display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 9px; font-weight: 650; }
+.message-poll-options { display: grid; gap: 6px; }
+.message-poll-options button { position: relative; min-height: 38px; padding: 7px 9px; overflow: hidden; border: 1px solid var(--line); border-radius: 9px; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto auto; align-items: center; gap: 7px; color: var(--ink); background: transparent; text-align: left; }
+.message-poll-options button:hover:not(:disabled), .message-poll-options button.selected { border-color: color-mix(in srgb, var(--coral) 55%, var(--line)); }
+.message-poll-progress { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--coral) 11%, transparent); pointer-events: none; transition: width 180ms ease; }
+.message-poll-check { position: relative; z-index: 1; width: 17px; height: 17px; border: 1px solid var(--line); border-radius: 50%; display: grid; place-items: center; color: white; background: var(--paper); }
+.message-poll-options button.selected .message-poll-check { border-color: var(--coral); background: var(--coral); }
+.message-poll-option-text, .message-poll-options button > strong, .message-poll-options button > small { position: relative; z-index: 1; }
+.message-poll-option-text { overflow-wrap: anywhere; font-size: 11px; font-weight: 700; }
+.message-poll-options button > strong { font-size: 10px; }
+.message-poll-options button > small { color: var(--muted); font-size: 9px; }
+.message-poll footer { margin-top: 9px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; color: var(--muted); font-size: 10px; }
+.message-poll footer span { display: inline-flex; align-items: center; gap: 4px; }
+.message-poll footer .expired { color: #a84337; font-weight: 700; }

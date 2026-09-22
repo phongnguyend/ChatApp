@@ -125,7 +125,44 @@ public sealed record MessageDto(
     IReadOnlyList<MessageReactionDto>? Reactions = null,
     decimal? LocationLatitude = null,
     decimal? LocationLongitude = null,
-    LiveLocationDto? LiveLocation = null);
+    LiveLocationDto? LiveLocation = null,
+    MessagePollDto? Poll = null);
+
+public sealed record MessagePollDto(
+    Guid MessageId,
+    string Question,
+    bool IsMultiple,
+    DateTimeOffset? ExpiresAt,
+    int TotalVotes,
+    IReadOnlyList<MessagePollOptionDto> Options);
+
+public sealed record MessagePollOptionDto(
+    Guid Id,
+    string Text,
+    int SortOrder,
+    int VoteCount,
+    bool IsSelected);
+
+public sealed record CreateMessagePollRequest(
+    string Question,
+    IReadOnlyList<string> Options,
+    bool IsMultiple,
+    DateTimeOffset? ExpiresAt,
+    string ClientMessageId);
+
+public sealed record VoteMessagePollRequest(IReadOnlyList<Guid> OptionIds);
+
+public sealed record MessagePollVoteChangedDto(
+    Guid MessageId,
+    Guid ConversationId,
+    Guid UserId,
+    IReadOnlyList<Guid> SelectedOptionIds,
+    int TotalVotes,
+    IReadOnlyList<MessagePollOptionResultDto> Options);
+
+public sealed record MessagePollOptionResultDto(
+    Guid Id,
+    int VoteCount);
 
 public sealed record LiveLocationDto(
     Guid MessageId,

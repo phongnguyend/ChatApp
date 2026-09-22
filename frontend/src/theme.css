@@ -164,6 +164,7 @@ html[data-theme='dark'] .attachment-screen-button,
 html[data-theme='dark'] .attachment-audio-button,
 html[data-theme='dark'] .location-button,
 html[data-theme='dark'] .live-location-button,
+html[data-theme='dark'] .poll-button,
 html[data-theme='dark'] .location-preview-heading > button {
   color: #c8d4d1;
   background: #303e44;

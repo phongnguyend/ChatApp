@@ -59,6 +59,7 @@ public sealed class MessagesController(
                     x.MessageType != "system" &&
                     x.MessageType != "location" &&
                     x.MessageType != "live_location" &&
+                    x.MessageType != "poll" &&
                     x.DeletedAt == null,
                 cancellationToken);
         if (message is null)
@@ -283,6 +284,99 @@ public sealed class MessagesController(
                 new MessagePinChangedDto(message.ConversationId, message.Id, true, result),
                 cancellationToken);
         return Ok(result);
+    }
+
+    [HttpPost("{id:guid}/poll-vote")]
+    public async Task<ActionResult<MessagePollVoteChangedDto>> VoteInPoll(
+        Guid id,
+        [FromQuery] string username,
+        VoteMessagePollRequest request,
+        CancellationToken cancellationToken)
+    {
+        var normalized = Username.Normalize(username);
+        var user = await db.Users.SingleOrDefaultAsync(
+            item => item.NormalizedUsername == normalized && item.Status == "active",
+            cancellationToken);
+        if (user is null) return NotFound();
+
+        var message = await db.Messages
+            .Include(item => item.Poll)
+                .ThenInclude(poll => poll!.Options)
+            .Include(item => item.Poll)
+                .ThenInclude(poll => poll!.Votes)
+            .SingleOrDefaultAsync(
+                item =>
+                    item.Id == id &&
+                    item.MessageType == "poll" &&
+                    item.DeletedAt == null &&
+                    item.Conversation.Members.Any(member =>
+                        member.UserId == user.Id && member.LeftAt == null),
+                cancellationToken);
+        if (message?.Poll is null)
+        {
+            return NotFound();
+        }
+        if (message.Poll.ExpiresAt <= DateTimeOffset.UtcNow)
+        {
+            return Conflict(new { message = "This poll has expired." });
+        }
+
+        var selectedOptionIds = (request.OptionIds ?? []).Distinct().ToArray();
+        if ((!message.Poll.IsMultiple && selectedOptionIds.Length != 1) ||
+            selectedOptionIds.Length > message.Poll.Options.Count ||
+            selectedOptionIds.Any(optionId =>
+                message.Poll.Options.All(option => option.Id != optionId)))
+        {
+            return BadRequest(new
+            {
+                message = message.Poll.IsMultiple
+                    ? "Choose only options from this poll."
+                    : "Single-choice polls require exactly one option."
+            });
+        }
+
+        var existingVotes = message.Poll.Votes
+            .Where(item => item.UserId == user.Id)
+            .ToList();
+        foreach (var vote in existingVotes.Where(vote =>
+                     !selectedOptionIds.Contains(vote.OptionId)))
+        {
+            db.MessagePollVotes.Remove(vote);
+        }
+        foreach (var optionId in selectedOptionIds.Where(optionId =>
+                     existingVotes.All(vote => vote.OptionId != optionId)))
+        {
+            db.MessagePollVotes.Add(new MessagePollVote
+            {
+                Poll = message.Poll,
+                User = user,
+                OptionId = optionId,
+            });
+        }
+        await db.SaveChangesAsync(cancellationToken);
+
+        var optionResults = await db.MessagePollOptions.AsNoTracking()
+            .Where(option => option.PollMessageId == message.Id)
+            .OrderBy(option => option.SortOrder)
+            .Select(option => new MessagePollOptionResultDto(
+                option.Id,
+                option.Votes.Count))
+            .ToListAsync(cancellationToken);
+        var totalVoters = await db.MessagePollVotes.AsNoTracking()
+            .Where(vote => vote.PollMessageId == message.Id)
+            .Select(vote => vote.UserId)
+            .Distinct()
+            .CountAsync(cancellationToken);
+        var changed = new MessagePollVoteChangedDto(
+            message.Id,
+            message.ConversationId,
+            user.Id,
+            selectedOptionIds,
+            totalVoters,
+            optionResults);
+        await hubContext.Clients.Group(ChatHub.ConversationGroup(message.ConversationId))
+            .SendAsync("MessagePollVoteChanged", changed, cancellationToken);
+        return Ok(changed);
     }
 
     [HttpDelete("{id:guid}/pin")]

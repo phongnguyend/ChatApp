@@ -767,6 +767,10 @@ public sealed class ConversationsController(
             .Include(x => x.Reactions)
                 .ThenInclude(reaction => reaction.User)
             .Include(x => x.LiveLocationShare)
+            .Include(x => x.Poll)
+                .ThenInclude(poll => poll!.Options)
+                    .ThenInclude(option => option.Votes)
+                        .ThenInclude(vote => vote.User)
             .Where(x => x.ConversationId == id)
             .OrderByDescending(x => x.SequenceNumber)
             .Skip(skip)
@@ -833,11 +837,178 @@ public sealed class ConversationsController(
                         x.LiveLocationShare.ExpiresAt,
                         x.LiveLocationShare.StoppedAt,
                         x.LiveLocationShare.IsActive)
+                    : null,
+                x.DeletedAt == null && x.Poll != null
+                    ? new MessagePollDto(
+                        x.Id,
+                        x.Poll.Question,
+                        x.Poll.IsMultiple,
+                        x.Poll.ExpiresAt,
+                        x.Poll.Votes.Select(vote => vote.UserId).Distinct().Count(),
+                        x.Poll.Options
+                            .OrderBy(option => option.SortOrder)
+                            .Select(option => new MessagePollOptionDto(
+                                option.Id,
+                                option.Text,
+                                option.SortOrder,
+                                option.Votes.Count,
+                                option.Votes.Any(vote =>
+                                    vote.User.NormalizedUsername == normalizedUsername)))
+                            .ToList())
                     : null))
             .ToList();
 
         messages.Reverse();
         return Ok(messages);
+    }
+
+    [HttpPost("{id:guid}/polls")]
+    public async Task<ActionResult<MessageDto>> CreatePoll(
+        Guid id,
+        [FromQuery] string username,
+        CreateMessagePollRequest request,
+        CancellationToken cancellationToken)
+    {
+        var question = request.Question?.Trim() ?? "";
+        var clientMessageId = request.ClientMessageId?.Trim() ?? "";
+        var options = (request.Options ?? [])
+            .Select(option => option?.Trim() ?? "")
+            .Where(option => option.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var expiresAt = request.ExpiresAt?.ToUniversalTime();
+        if (question.Length is < 1 or > 300 ||
+            options.Length is < 2 or > 10 ||
+            options.Any(option => option.Length > 200) ||
+            clientMessageId.Length is < 1 or > 100 ||
+            expiresAt <= DateTimeOffset.UtcNow)
+        {
+            return BadRequest(new
+            {
+                message = "Polls need a question, 2-10 unique options, and a future expiration time when provided."
+            });
+        }
+
+        var normalized = Username.Normalize(username);
+        var sender = await db.Users.SingleOrDefaultAsync(
+            user => user.NormalizedUsername == normalized && user.Status == "active",
+            cancellationToken);
+        if (sender is null ||
+            !await db.ConversationMembers.AnyAsync(
+                member =>
+                    member.ConversationId == id &&
+                    member.UserId == sender.Id &&
+                    member.LeftAt == null,
+                cancellationToken))
+        {
+            return NotFound();
+        }
+        if (await DirectMessagingPolicy.IsBlockedAsync(
+                db, sender.Id, id, cancellationToken))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                message = "Messages cannot be sent while either user has blocked the other."
+            });
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync(
+            IsolationLevel.Serializable,
+            cancellationToken);
+        var existing = await db.Messages.AsNoTracking()
+            .AnyAsync(message =>
+                message.SenderUserId == sender.Id &&
+                message.ClientMessageId == clientMessageId,
+                cancellationToken);
+        if (existing)
+        {
+            return Conflict(new { message = "This poll was already created." });
+        }
+
+        var conversation = await db.Conversations.SingleAsync(
+            item => item.Id == id,
+            cancellationToken);
+        var nextSequence = await db.Messages
+            .Where(message => message.ConversationId == id)
+            .Select(message => (long?)message.SequenceNumber)
+            .MaxAsync(cancellationToken) ?? 0;
+        var now = DateTimeOffset.UtcNow;
+        var message = new ChatMessage
+        {
+            Conversation = conversation,
+            Sender = sender,
+            MessageType = "poll",
+            Content = question,
+            ClientMessageId = clientMessageId,
+            SequenceNumber = nextSequence + 1,
+            CreatedAt = now,
+        };
+        var poll = new MessagePoll
+        {
+            Message = message,
+            Question = question,
+            IsMultiple = request.IsMultiple,
+            ExpiresAt = expiresAt,
+            CreatedAt = now,
+            Options = options.Select((option, index) => new MessagePollOption
+            {
+                Text = option,
+                SortOrder = index,
+            }).ToList(),
+        };
+        message.Poll = poll;
+        db.Messages.Add(message);
+        conversation.LastMessage = message;
+        conversation.LastMessageAt = now;
+        conversation.UpdatedAt = now;
+        await db.ConversationMembers
+            .Where(member =>
+                member.ConversationId == id &&
+                member.UserId != sender.Id &&
+                member.LeftAt == null)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(
+                    member => member.UnreadCount,
+                    member => member.UnreadCount + 1),
+                cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        var pollDto = new MessagePollDto(
+            message.Id,
+            question,
+            poll.IsMultiple,
+            poll.ExpiresAt,
+            0,
+            poll.Options
+                .OrderBy(option => option.SortOrder)
+                .Select(option => new MessagePollOptionDto(
+                    option.Id, option.Text, option.SortOrder, 0, false))
+                .ToList());
+        var result = new MessageDto(
+            message.Id,
+            id,
+            sender.Id,
+            sender.Username,
+            sender.AvatarUrl,
+            question,
+            message.MessageType,
+            clientMessageId,
+            message.SequenceNumber,
+            null,
+            now,
+            null,
+            null,
+            Poll: pollDto);
+        await hubContext.Clients.Group(ChatHub.ConversationGroup(id))
+            .SendAsync("MessageReceived", result, cancellationToken);
+        await pushNotifications.NotifyMessageAsync(
+            id,
+            sender.Id,
+            sender.DisplayName,
+            $"Created a poll: {question}",
+            cancellationToken);
+        return Ok(result);
     }
 
     [HttpGet("{id:guid}/pinned-messages")]
