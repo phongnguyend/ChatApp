@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ChatApp.Api.Data.Migrations
 {
     [DbContext(typeof(ChatDbContext))]
-    [Migration("20260922162419_AddMessagePolls")]
+    [Migration("20260922235007_AddMessagePolls")]
     partial class AddMessagePolls
     {
         /// <inheritdoc />
@@ -1368,7 +1368,7 @@ namespace ChatApp.Api.Data.Migrations
 
                     b.ToTable("UserNotifications", null, t =>
                         {
-                            t.HasCheckConstraint("CK_UserNotifications_Type", "[Type] IN ('meeting_invite', 'meeting_rescheduled', 'meeting_cancelled', 'document_file_share', 'document_folder_share', 'note_share', 'task_share', 'task_assignment', 'message_reaction', 'message_mention', 'recording_ready')");
+                            t.HasCheckConstraint("CK_UserNotifications_Type", "[Type] IN ('meeting_invite', 'meeting_rescheduled', 'meeting_cancelled', 'document_file_share', 'document_folder_share', 'note_share', 'task_share', 'task_assignment', 'message_reaction', 'message_mention', 'message_reply', 'recording_ready')");
                         });
                 });
 

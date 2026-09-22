@@ -1,8 +1,8 @@
-import { ArrowLeft, AtSign, Bell, CalendarDays, Check, CheckCheck, ClipboardList, FileText, FolderOpen, LoaderCircle, MessageCircle, NotebookPen, Radio, RefreshCw, UserRoundCheck } from "lucide-react";
+import { ArrowLeft, AtSign, Bell, CalendarDays, Check, CheckCheck, ClipboardList, FileText, FolderOpen, LoaderCircle, MessageCircle, NotebookPen, Radio, RefreshCw, Reply, UserRoundCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import "./NotificationsView.css";
 
-export type NotificationType = "meeting_invite" | "meeting_rescheduled" | "meeting_cancelled" | "document_file_share" | "document_folder_share" | "note_share" | "task_share" | "task_assignment" | "message_reaction" | "message_mention" | "recording_ready";
+export type NotificationType = "meeting_invite" | "meeting_rescheduled" | "meeting_cancelled" | "document_file_share" | "document_folder_share" | "note_share" | "task_share" | "task_assignment" | "message_reaction" | "message_mention" | "message_reply" | "recording_ready";
 export type UserNotification = {
   id: string;
   type: NotificationType;
@@ -34,6 +34,7 @@ function activity(type: NotificationType) {
     case "task_assignment": return { action: "assigned you a task", icon: UserRoundCheck };
     case "message_reaction": return { action: "reacted to your message", icon: MessageCircle };
     case "message_mention": return { action: "mentioned you in a message", icon: AtSign };
+    case "message_reply": return { action: "replied to your message", icon: Reply };
     case "recording_ready": return { action: "made a recording available", icon: Radio };
   }
 }
@@ -131,13 +132,13 @@ export function NotificationsView({ apiUrl, currentUsername, onBack, onOpen, onU
 
   return <section className="notifications-view" hidden={hidden} aria-label="Notifications">
     <header className="notifications-header">
-      <div><p className="eyebrow">YOUR ACTIVITY</p><h1>Notifications</h1><p>Mentions, reactions, recordings, meetings, shares, and assignments appear here.</p></div>
+      <div><p className="eyebrow">YOUR ACTIVITY</p><h1>Notifications</h1><p>Replies, mentions, reactions, recordings, meetings, shares, and assignments appear here.</p></div>
       <div className="notifications-header-actions"><button type="button" onClick={onBack}><ArrowLeft size={16} /> Back to chat</button><button type="button" onClick={refresh} disabled={loading}><RefreshCw size={15} /> Refresh</button></div>
     </header>
     <div className="notifications-toolbar"><span>{unreadCount} unread</span><button type="button" disabled={markingAll || unreadCount === 0} onClick={() => void markAllRead()}><CheckCheck size={15} /> Mark all as read</button></div>
     {error && <p className="notifications-error" role="alert">{error}</p>}
     <div className="notifications-list">
-    {loading && page === 0 ? <div className="notifications-empty"><LoaderCircle className="notifications-spin" size={26} /> Loading notifications...</div> : items.length === 0 ? <div className="notifications-empty"><Bell size={35} /><strong>No notifications yet</strong><span>New mentions, reactions, recordings, invitations, shares, and assignments will appear here.</span></div> : items.map((item) => {
+    {loading && page === 0 ? <div className="notifications-empty"><LoaderCircle className="notifications-spin" size={26} /> Loading notifications...</div> : items.length === 0 ? <div className="notifications-empty"><Bell size={35} /><strong>No notifications yet</strong><span>New replies, mentions, reactions, recordings, invitations, shares, and assignments will appear here.</span></div> : items.map((item) => {
         const details = activity(item.type);
         const Icon = details.icon;
         return <article className={`notifications-item ${item.readAt ? "" : "unread"}`} key={item.id}>

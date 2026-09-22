@@ -295,6 +295,14 @@ public sealed class ChatHub(
                 .SetProperty(x => x.UnreadCount, x => x.UnreadCount + 1));
 
         await db.SaveChangesAsync(Context.ConnectionAborted);
+        await MessageReplyNotifications.AddAsync(
+            db,
+            request.ConversationId,
+            session.UserId,
+            message.Id,
+            message.ReplyToMessageId,
+            messageType == "location" ? "Shared a location" : message.Content,
+            Context.ConnectionAborted);
         await MessageMentionNotifications.AddAsync(
             db,
             request.ConversationId,

@@ -1365,7 +1365,7 @@ namespace ChatApp.Api.Data.Migrations
 
                     b.ToTable("UserNotifications", null, t =>
                         {
-                            t.HasCheckConstraint("CK_UserNotifications_Type", "[Type] IN ('meeting_invite', 'meeting_rescheduled', 'meeting_cancelled', 'document_file_share', 'document_folder_share', 'note_share', 'task_share', 'task_assignment', 'message_reaction', 'message_mention', 'recording_ready')");
+                            t.HasCheckConstraint("CK_UserNotifications_Type", "[Type] IN ('meeting_invite', 'meeting_rescheduled', 'meeting_cancelled', 'document_file_share', 'document_folder_share', 'note_share', 'task_share', 'task_assignment', 'message_reaction', 'message_mention', 'message_reply', 'recording_ready')");
                         });
                 });
 

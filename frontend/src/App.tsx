@@ -3688,7 +3688,7 @@ function ChatApp({
       setIsRemindersOpen(false);
     };
 
-    if (notification.type === "message_reaction" || notification.type === "message_mention" || notification.type === "recording_ready") {
+    if (notification.type === "message_reaction" || notification.type === "message_mention" || notification.type === "message_reply" || notification.type === "recording_ready") {
       if (!notification.contextId) throw new Error("This notification does not have a conversation destination.");
       const items = await loadConversations();
       if (!items.some((item) => item.id === notification.contextId))

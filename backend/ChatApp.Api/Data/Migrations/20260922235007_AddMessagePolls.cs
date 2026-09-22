@@ -12,6 +12,10 @@ namespace ChatApp.Api.Data.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropCheckConstraint(
+                name: "CK_UserNotifications_Type",
+                table: "UserNotifications");
+
+            migrationBuilder.DropCheckConstraint(
                 name: "CK_Messages_Type",
                 table: "Messages");
 
@@ -88,6 +92,11 @@ namespace ChatApp.Api.Data.Migrations
                 });
 
             migrationBuilder.AddCheckConstraint(
+                name: "CK_UserNotifications_Type",
+                table: "UserNotifications",
+                sql: "[Type] IN ('meeting_invite', 'meeting_rescheduled', 'meeting_cancelled', 'document_file_share', 'document_folder_share', 'note_share', 'task_share', 'task_assignment', 'message_reaction', 'message_mention', 'message_reply', 'recording_ready')");
+
+            migrationBuilder.AddCheckConstraint(
                 name: "CK_Messages_Type",
                 table: "Messages",
                 sql: "[MessageType] IN ('text', 'image', 'file', 'audio', 'video', 'location', 'live_location', 'poll', 'system')");
@@ -123,10 +132,21 @@ namespace ChatApp.Api.Data.Migrations
 
             migrationBuilder.Sql(
                 "UPDATE [Messages] SET [MessageType] = 'text' WHERE [MessageType] = 'poll';");
+            migrationBuilder.Sql(
+                "DELETE FROM [UserNotifications] WHERE [Type] = 'message_reply';");
+
+            migrationBuilder.DropCheckConstraint(
+                name: "CK_UserNotifications_Type",
+                table: "UserNotifications");
 
             migrationBuilder.DropCheckConstraint(
                 name: "CK_Messages_Type",
                 table: "Messages");
+
+            migrationBuilder.AddCheckConstraint(
+                name: "CK_UserNotifications_Type",
+                table: "UserNotifications",
+                sql: "[Type] IN ('meeting_invite', 'meeting_rescheduled', 'meeting_cancelled', 'document_file_share', 'document_folder_share', 'note_share', 'task_share', 'task_assignment', 'message_reaction', 'message_mention', 'recording_ready')");
 
             migrationBuilder.AddCheckConstraint(
                 name: "CK_Messages_Type",

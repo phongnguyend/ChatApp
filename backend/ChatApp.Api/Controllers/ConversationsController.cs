@@ -1246,6 +1246,22 @@ public sealed class ConversationsController(
                         x => x.UnreadCount + 1),
                     cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
+            var replyNotificationPreview = message.Content ??
+                (message.MessageType == "image"
+                    ? "Sent an image"
+                    : message.MessageType == "video"
+                        ? "Sent a video"
+                        : message.MessageType == "audio"
+                            ? "Sent a voice message"
+                            : "Sent a file");
+            await MessageReplyNotifications.AddAsync(
+                db,
+                id,
+                sender.Id,
+                message.Id,
+                message.ReplyToMessageId,
+                replyNotificationPreview,
+                cancellationToken);
             await MessageMentionNotifications.AddAsync(
                 db,
                 id,

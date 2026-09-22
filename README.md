@@ -10,7 +10,8 @@ A simple real-time chat application built with:
 The app includes persistent message history, pair-unique direct messages,
 multi-person group creation, live group member management, user discovery, online
 presence, typing indicators, unread counts, profile and group avatar uploads,
-member tagging (including `@everyone`) with linked in-app notifications,
+member tagging (including `@everyone`) plus reply notifications linked to the
+new message,
 persistent conversation message pinning, single- and multiple-choice
 in-conversation polls with expiration and live vote totals, camera capture,
 current-location sharing with confirmation previews, start/stop
@@ -158,7 +159,7 @@ Below is the relational schema for the collaboration application, covering:
 - Reactions
 - Read receipts
 - Message editing and deletion
-- Conversation-member tagging and mention notifications
+- Conversation-member tagging, mention notifications, and reply notifications
 - Persistent message pinning
 - Single- and multiple-choice conversation polls with optional expiration
 - Member roles
@@ -1071,7 +1072,7 @@ CREATE TABLE user_notifications (
             'meeting_invite', 'meeting_rescheduled', 'meeting_cancelled',
             'document_file_share', 'document_folder_share', 'note_share',
             'task_share', 'task_assignment', 'message_reaction', 'message_mention',
-            'recording_ready'
+            'message_reply', 'recording_ready'
         ))
 );
 
@@ -1238,7 +1239,7 @@ uploads to be cleaned up without creating long-lived document relationships.
 
 The API applies pending migrations during startup with
 `Database.MigrateAsync()`. The current migration tip is
-`20260922162419_AddMessagePolls`.
+`20260922235007_AddMessagePolls`.
 
 ```powershell
 cd backend

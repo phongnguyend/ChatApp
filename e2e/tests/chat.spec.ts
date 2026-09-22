@@ -101,6 +101,51 @@ test('tags a conversation member and links their notification to the message', a
   }
 });
 
+test('notifies a user when another user replies to their message', async ({ browser, request }) => {
+  const sender = await createUser(request, 'reply-sender');
+  const recipient = await createUser(request, 'reply-recipient');
+  const original = uniqueName('Original message');
+  const reply = uniqueName('Reply notification');
+  const senderPage = await browser.newPage();
+  const recipientPage = await browser.newPage();
+  try {
+    await login(senderPage, sender.username);
+    await login(recipientPage, recipient.username);
+    await senderPage.getByRole('button', { name: 'Create a conversation' }).click();
+    await senderPage.getByLabel('Find a person').fill(recipient.username);
+    await senderPage.locator('.user-result').filter({ hasText: recipient.username }).click();
+    await senderPage.locator('.composer textarea').fill(original);
+    await senderPage.getByRole('button', { name: 'Send message' }).click();
+
+    const recipientConversation = recipientPage
+      .getByRole('navigation', { name: 'Conversations' })
+      .locator('.conversation-item')
+      .filter({ hasText: sender.username });
+    await expect(recipientConversation).toBeVisible();
+    await recipientConversation.click();
+    const originalMessage = recipientPage.locator('article.message').filter({ hasText: original });
+    await expect(originalMessage).toBeVisible();
+    await originalMessage.locator('.message-body').hover();
+    await originalMessage.getByRole('button', { name: 'Reply to message' }).click();
+    await recipientPage.locator('.composer textarea').fill(reply);
+    await recipientPage.getByRole('button', { name: 'Send message' }).click();
+
+    await openSection(senderPage, 'Notifications');
+    const notification = senderPage.locator('.notifications-item')
+      .filter({ hasText: 'replied to your message' })
+      .filter({ hasText: reply });
+    await expect(notification).toBeVisible();
+    await notification.locator('.notifications-copy').click();
+
+    const replyMessage = senderPage.locator('article.message').filter({ hasText: reply });
+    await expect(replyMessage).toBeVisible();
+    await expect(replyMessage).toHaveClass(/message-jump-highlight/);
+  } finally {
+    await senderPage.close();
+    await recipientPage.close();
+  }
+});
+
 test('creates a poll, lists it in the Polls tab, and synchronizes a vote', async ({ browser, request }) => {
   const sender = await createUser(request, 'poll-sender');
   const recipient = await createUser(request, 'poll-recipient');
