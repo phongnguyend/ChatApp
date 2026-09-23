@@ -1,6 +1,6 @@
-.documents-storage-usage { padding: 14px 20px 16px; border-top: 1px solid rgba(255,255,255,.08); color: #dfe8e6; }
+.documents-storage-usage { width: 100%; padding: 13px 14px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: var(--cream); }
 .documents-storage-heading { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 10px; font-size: 11px; }
-.documents-storage-heading span, .documents-storage-usage small { color: #9cb4b0; }
-.documents-storage-track { height: 6px; overflow: hidden; border-radius: 99px; background: rgba(255,255,255,.15); }
+.documents-storage-heading span, .documents-storage-usage small { color: var(--muted); }
+.documents-storage-track { height: 6px; overflow: hidden; border-radius: 99px; background: color-mix(in srgb, var(--ink) 14%, transparent); }
 .documents-storage-track span { display: block; height: 100%; border-radius: inherit; background: #e27b66; }
 .documents-storage-usage small { display: block; margin-top: 8px; font-size: 10px; }

@@ -19,7 +19,7 @@ export function applyTheme(preference: ThemePreference) {
   document.documentElement.style.colorScheme = dark ? "dark" : "light";
   document.querySelector('meta[name="theme-color"]')?.setAttribute(
     "content",
-    dark ? "#171f24" : "#172f35",
+    dark ? "#171f24" : "#f7f9f8",
   );
 }
 

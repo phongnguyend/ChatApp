@@ -16,6 +16,14 @@
   --paper: #fffdfa;
   --line: #e7e3da;
   --green: #43ad78;
+  --chrome-header: #f7f9f8;
+  --chrome-rail: #eaf1ef;
+  --chrome-panel: #f0f5f4;
+  --chrome-active: #d9e9e6;
+  --chrome-hover: #e2ecea;
+  --chrome-border: #d6e1df;
+  --chrome-text: #243a3e;
+  --chrome-muted: #6d8581;
 }
 
 * {

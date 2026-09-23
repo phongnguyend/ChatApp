@@ -1,6 +1,7 @@
 import { ArrowLeft, CheckSquare2, ChevronRight, Copy, Download, FileImage, FileText, Folder, FolderInput, FolderOpen, FolderPlus, Globe2, History, Info, Link2, LoaderCircle, Pencil, QrCode, RotateCcw, Search, Send, Share2, Trash2, Upload, Users, X } from "lucide-react";
 import { type ChangeEvent, type DragEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ConversationFilesPanel } from "./ConversationFilesPanel";
+import { DocumentsStorageUsage } from "./DocumentsStorageUsage";
 import { discardDocumentUpload, uploadDocument, type UploadProgress } from "./documentUploads";
 import "./DocumentsView.css";
 
@@ -641,7 +642,10 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, onOpenConversat
       onDrop={dropFiles}>
       <header className="documents-header">
         <div><p className="eyebrow">Your files</p><h1>My Documents</h1><p>Keep files organized and share them with people.</p></div>
-        <button type="button" className="documents-back" onClick={onBack}><ArrowLeft size={16} /> Back to chat</button>
+        <div className="documents-header-aside">
+          <button type="button" className="documents-back" onClick={onBack}><ArrowLeft size={16} /> Back to chat</button>
+          <DocumentsStorageUsage apiUrl={apiUrl} username={currentUsername} />
+        </div>
       </header>
       <div className="documents-tabs" role="tablist" aria-label="Document sections">
         <button type="button" role="tab" aria-selected={mode === "mine"} onClick={() => changeMode("mine")}><FolderOpen size={15} aria-hidden="true" /> My Documents</button>

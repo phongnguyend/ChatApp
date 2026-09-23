@@ -82,6 +82,14 @@ html[data-theme='dark'] {
   --line: #36444a;
   --surface: #222e34;
   --text: #e9eeeb;
+  --chrome-header: #111b20;
+  --chrome-rail: #102126;
+  --chrome-panel: #111b20;
+  --chrome-active: #29434b;
+  --chrome-hover: rgba(255, 255, 255, 0.055);
+  --chrome-border: rgba(255, 255, 255, 0.08);
+  --chrome-text: #dfe8e6;
+  --chrome-muted: #7f9995;
   color: var(--ink);
   background: #161f24;
 }

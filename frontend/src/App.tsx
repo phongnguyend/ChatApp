@@ -90,7 +90,6 @@ import { CalendarView } from "./components/CalendarView";
 import { MeetingsView } from "./components/MeetingsView";
 import { DocumentsView } from "./components/DocumentsView";
 import { PublicDocumentsView } from "./components/PublicDocumentsView";
-import { DocumentsStorageUsage } from "./components/DocumentsStorageUsage";
 import { StorageManagementView } from "./components/StorageManagementView";
 import { TasksView } from "./components/TasksView";
 import { NotesView } from "./components/NotesView";
@@ -4245,30 +4244,80 @@ function ChatApp({
 
   const currentTypingUsers = activeId ? (typingUsers[activeId] ?? []) : [];
   const isOnline = status === "connected";
+  const isChatOpen =
+    !isCalendarOpen &&
+    !isMeetingsOpen &&
+    !isDocumentsOpen &&
+    !isStorageManagementOpen &&
+    !isTasksOpen &&
+    !isNotesOpen &&
+    !isRemindersOpen &&
+    !isNotificationsOpen;
 
   return (
-    <main className={`chat-shell ${isCalendarOpen ? "calendar-open" : ""} ${isMeetingsOpen ? "meetings-open" : ""} ${isDocumentsOpen ? "documents-open" : ""} ${isStorageManagementOpen ? "storage-management-open" : ""} ${isTasksOpen ? "tasks-open" : ""} ${isNotesOpen ? "notes-open" : ""} ${isRemindersOpen ? "reminders-open" : ""} ${isNotificationsOpen ? "notifications-open" : ""}`}>
+    <main className={`chat-shell ${isChatOpen ? "chat-open" : "section-open"} ${isCalendarOpen ? "calendar-open" : ""} ${isMeetingsOpen ? "meetings-open" : ""} ${isDocumentsOpen ? "documents-open" : ""} ${isStorageManagementOpen ? "storage-management-open" : ""} ${isTasksOpen ? "tasks-open" : ""} ${isNotesOpen ? "notes-open" : ""} ${isRemindersOpen ? "reminders-open" : ""} ${isNotificationsOpen ? "notifications-open" : ""}`}>
       <button
         className={`mobile-scrim ${isSidebarOpen ? "visible" : ""}`}
         aria-label="Close conversation menu"
         onClick={() => setIsSidebarOpen(false)}
       />
-      <aside className={`sidebar ${isSidebarOpen ? "open" : ""}`}>
-        <div className="sidebar-brand brand">
+      <header className="layout-header">
+        <div className="layout-brand brand">
           <span className="brand-mark">
             <MessageCircleMore size={20} strokeWidth={2.5} />
           </span>
           <span>Huddle</span>
+        </div>
+        <div className="layout-header-actions">
           {themeControl}
-          <button
+          <div className="layout-user">
+            <button
+              className="avatar avatar-small avatar-edit-trigger"
+              type="button"
+              aria-label="Edit your profile"
+              style={
+                !user.avatarUrl
+                  ? { backgroundColor: avatarColor(user.username) }
+                  : undefined
+              }
+              onClick={() => {
+                setProfileTab("avatar");
+                setDisplayNameDraft(user.displayName);
+                setDisplayNameError("");
+                setAvatarDialog("user");
+              }}
+            >
+              <AvatarContent avatarUrl={user.avatarUrl} name={user.displayName} />
+              <i className="presence-dot" aria-label="Online" />
+            </button>
+            <span className="sidebar-user-copy">
+              <strong>{user.displayName}</strong>
+              <small>Online</small>
+            </span>
+            <PushNotificationButton
+              apiUrl={API_URL}
+              username={user.username}
+              onError={setError}
+            />
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="Sign out"
+              onClick={() => setIsLogoutDialogOpen(true)}
+            >
+              <LogOut size={17} />
+            </button>
+          </div>
+          {isSidebarOpen && <button
             className="icon-button mobile-close"
             aria-label="Close menu"
             onClick={() => setIsSidebarOpen(false)}
           >
             <X size={20} />
-          </button>
+          </button>}
         </div>
-
+      </header>
+      <aside className={`sidebar ${isSidebarOpen ? "open" : ""}`}>
         <nav className="sidebar-rail" aria-label="Main sections">
           <button
             className={`sidebar-rail-button ${isNotificationsOpen ? "active" : ""}`}
@@ -4307,11 +4356,11 @@ function ChatApp({
               )}
           </button>
           <button
-            className={`sidebar-rail-button ${!isCalendarOpen && !isMeetingsOpen && !isDocumentsOpen && !isStorageManagementOpen && !isTasksOpen && !isNotesOpen && !isRemindersOpen && !isNotificationsOpen ? "active" : ""}`}
+            className={`sidebar-rail-button ${isChatOpen ? "active" : ""}`}
             type="button"
             aria-label="Chat"
             title="Chat"
-            aria-current={!isCalendarOpen && !isMeetingsOpen && !isDocumentsOpen && !isStorageManagementOpen && !isTasksOpen && !isNotesOpen && !isRemindersOpen && !isNotificationsOpen ? "page" : undefined}
+            aria-current={isChatOpen ? "page" : undefined}
             onClick={() => {
               setIsCalendarOpen(false);
               setIsMeetingsOpen(false);
@@ -4452,6 +4501,9 @@ function ChatApp({
           ><HardDrive size={21} /></button>
         </nav>
 
+      </aside>
+
+      {isChatOpen && <aside className={`conversations-panel ${isSidebarOpen ? "open" : ""}`} aria-label="Chat navigation">
         <div className="sidebar-section">
           <div className="sidebar-heading">
             <span>Conversations</span>
@@ -4622,46 +4674,7 @@ function ChatApp({
           </nav>
         </div>
 
-        <DocumentsStorageUsage apiUrl={API_URL} username={user.username} />
-        <div className="sidebar-user">
-          <button
-            className="avatar avatar-small avatar-edit-trigger"
-            type="button"
-            aria-label="Edit your profile"
-            style={
-              !user.avatarUrl
-                ? { backgroundColor: avatarColor(user.username) }
-                : undefined
-            }
-            onClick={() => {
-              setProfileTab("avatar");
-              setDisplayNameDraft(user.displayName);
-              setDisplayNameError("");
-              setAvatarDialog("user");
-            }}
-          >
-            <AvatarContent avatarUrl={user.avatarUrl} name={user.displayName} />
-            <i className="presence-dot" aria-label="Online" />
-          </button>
-          <span className="sidebar-user-copy">
-            <strong>{user.displayName}</strong>
-            <small>Online</small>
-          </span>
-          <PushNotificationButton
-            apiUrl={API_URL}
-            username={user.username}
-            onError={setError}
-          />
-          <button
-            className="icon-button"
-            type="button"
-            aria-label="Sign out"
-            onClick={() => setIsLogoutDialogOpen(true)}
-          >
-            <LogOut size={17} />
-          </button>
-        </div>
-      </aside>
+      </aside>}
 
       <CalendarView
         apiUrl={API_URL}
