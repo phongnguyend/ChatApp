@@ -62,8 +62,14 @@ backend/
     Controllers/
 frontend/
   src/
+    components/
+    pages/
   scripts/
 ```
+
+Page views and their styles live in `frontend/src/pages`. Shared UI components
+and their supporting modules live in `frontend/src/components`. `src/App.tsx`
+composes the application and selects the active page.
 
 ## Run locally
 

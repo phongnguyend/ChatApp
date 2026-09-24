@@ -86,15 +86,15 @@ import {
   type ThemePreference,
 } from "./theme";
 import { AvatarPicker } from "./components/AvatarPicker";
-import { CalendarView } from "./components/CalendarView";
-import { MeetingsView } from "./components/MeetingsView";
-import { DocumentsView } from "./components/DocumentsView";
-import { PublicDocumentsView } from "./components/PublicDocumentsView";
-import { StorageManagementView } from "./components/StorageManagementView";
-import { TasksView } from "./components/TasksView";
-import { NotesView } from "./components/NotesView";
-import { RemindersView } from "./components/RemindersView";
-import { NotificationsView, type UserNotification } from "./components/NotificationsView";
+import { CalendarView } from "./pages/CalendarView";
+import { MeetingsView } from "./pages/MeetingsView";
+import { DocumentsView } from "./pages/DocumentsView";
+import { PublicDocumentsView } from "./pages/PublicDocumentsView";
+import { StorageManagementView } from "./pages/StorageManagementView";
+import { TasksView } from "./pages/TasksView";
+import { NotesView } from "./pages/NotesView";
+import { RemindersView } from "./pages/RemindersView";
+import { NotificationsView, type UserNotification } from "./pages/NotificationsView";
 import {
   type ChatAttachment,
   MessageAttachmentList,

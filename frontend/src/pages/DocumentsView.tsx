@@ -1,8 +1,8 @@
 import { ArrowLeft, CheckSquare2, ChevronRight, Copy, Download, FileImage, FileText, Folder, FolderInput, FolderOpen, FolderPlus, Globe2, History, Info, Link2, LoaderCircle, Pencil, QrCode, RotateCcw, Search, Send, Share2, Trash2, Upload, Users, X } from "lucide-react";
 import { type ChangeEvent, type DragEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { ConversationFilesPanel } from "./ConversationFilesPanel";
-import { DocumentsStorageUsage } from "./DocumentsStorageUsage";
-import { discardDocumentUpload, uploadDocument, type UploadProgress } from "./documentUploads";
+import { ConversationFilesPanel } from "../components/ConversationFilesPanel";
+import { DocumentsStorageUsage } from "../components/DocumentsStorageUsage";
+import { discardDocumentUpload, uploadDocument, type UploadProgress } from "../components/documentUploads";
 import "./DocumentsView.css";
 
 type Permission = "owner" | "editor" | "viewer";
