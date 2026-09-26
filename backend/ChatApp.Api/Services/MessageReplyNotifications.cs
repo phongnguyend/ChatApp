@@ -1,5 +1,5 @@
-using ChatApp.Application.Data;
-using ChatApp.Application.Models;
+using ChatApp.Persistence;
+using ChatApp.Domain.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace ChatApp.Api.Services;
@@ -7,7 +7,7 @@ namespace ChatApp.Api.Services;
 public static class MessageReplyNotifications
 {
     public static async Task AddAsync(
-        ChatDbContext db,
+        ChatAppDbContext db,
         Guid conversationId,
         Guid senderUserId,
         Guid messageId,

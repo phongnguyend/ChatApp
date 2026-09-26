@@ -1,4 +1,4 @@
-using ChatApp.Application.Data;
+using ChatApp.Persistence;
 using ChatApp.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -8,7 +8,7 @@ namespace ChatApp.Api.Controllers;
 [ApiController]
 [Route("api/attachments")]
 public sealed class AttachmentsController(
-    ChatDbContext db,
+    ChatAppDbContext db,
     IMessageAttachmentStorage storage) : ControllerBase
 {
     [HttpGet("{id:guid}")]

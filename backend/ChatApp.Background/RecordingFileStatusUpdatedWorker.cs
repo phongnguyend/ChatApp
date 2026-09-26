@@ -1,3 +1,4 @@
+using ChatApp.Infrastructure.Messaging;
 using System.Text.Json;
 using Azure.Messaging.ServiceBus;
 using ChatApp.Application.Handlers;

@@ -1,5 +1,5 @@
 using System.Security.Cryptography;
-using ChatApp.Application.Models;
+using ChatApp.Domain.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 

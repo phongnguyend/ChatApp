@@ -56,16 +56,67 @@ added later.
 backend/
   ChatApp.slnx
   ChatApp.Api/
-    Data/
-    Models/
-    Hubs/
     Controllers/
+    Hubs/
+    DependencyInjection.cs
+    Dockerfile
+    Program.cs
+  ChatApp.Application/
+    Abstractions/
+    Contracts/
+    Handlers/
+  ChatApp.AspireAppHost/
+    Program.cs
+  ChatApp.Background/
+    DependencyInjection.cs
+    Dockerfile
+    Program.cs
+  ChatApp.Domain/
+    Models/
+  ChatApp.Infrastructure/
+    Caching/
+    Calling/
+    Indexing/
+    Logging/
+    Messaging/
+    Monitoring/
+    Notification/
+    Storage/
+  ChatApp.Persistence/
+    Migrations/
+    Repositories/
+    ChatAppDbContext.cs
+  ChatApp.AzureFunctions/
+    Program.cs
 frontend/
   src/
     components/
     pages/
   scripts/
 ```
+
+Domain contains entities; Application contains contracts, abstractions, and the
+recording use case. Persistence owns EF Core, migrations, and repository
+implementations. Infrastructure owns external providers and in-memory state.
+API, Background, and Azure Functions compose these libraries; the existing
+Azure Functions host remains available through Aspire. API-specific SignalR
+coordination and HTTP upload adapters remain in the API project. Indexing,
+Logging, and Monitoring contain extension-point documentation until shared
+implementations are needed.
+
+Build container images from the repository root:
+
+```powershell
+docker build -f backend/ChatApp.Api/Dockerfile -t chatapp-api backend
+docker build -f backend/ChatApp.Background/Dockerfile -t chatapp-background backend
+```
+
+Supply connection strings and provider settings through environment variables
+when running the containers. Use a reachable SQL Server connection instead of
+LocalDB in containers. The API listens on port 8080; mount persistent storage
+at `/app/uploads` when using local upload storage. Background processes Service
+Bus events when `Messaging__Provider=AzureServiceBus` is configured; set
+`Api__BaseUrl` to the API's reachable URL.
 
 Page views and their styles live in `frontend/src/pages`. Shared UI components
 and their supporting modules live in `frontend/src/components`. `src/App.tsx`
@@ -176,8 +227,8 @@ Below is the relational schema for the collaboration application, covering:
 
 PostgreSQL-style table definitions are used for readability. The application
 itself targets SQL Server through Entity Framework Core; the authoritative model
-is `backend/ChatApp.Application/Data/ChatDbContext.cs`, and migrations are in
-`backend/ChatApp.Api/Data/Migrations`.
+is `backend/ChatApp.Persistence/ChatAppDbContext.cs`, and migrations are in
+`backend/ChatApp.Persistence/Migrations`.
 
 ## 1. Core relationships
 
@@ -1252,21 +1303,21 @@ cd backend
 
 # Check whether the model differs from the migration snapshot.
 dotnet ef migrations has-pending-model-changes `
-  --project ChatApp.Api `
+  --project ChatApp.Persistence `
   --startup-project ChatApp.Api
 
-# Create a migration after changing an entity or ChatDbContext.
+# Create a migration after changing an entity or ChatAppDbContext.
 dotnet ef migrations add <MigrationName> `
-  --project ChatApp.Api `
+  --project ChatApp.Persistence `
   --startup-project ChatApp.Api `
-  --output-dir Data/Migrations
+  --output-dir Migrations
 
 # Apply all pending migrations to the configured database.
 dotnet ef database update `
-  --project ChatApp.Api `
+  --project ChatApp.Persistence `
   --startup-project ChatApp.Api
 ```
 
 Review generated migrations before committing them. Keep the migration,
-designer file, and `ChatDbContextModelSnapshot.cs` together. Never edit a
+designer file, and `ChatAppDbContextModelSnapshot.cs` together. Never edit a
 migration that has already been deployed; create a new migration instead.

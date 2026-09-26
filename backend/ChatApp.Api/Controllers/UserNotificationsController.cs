@@ -1,5 +1,5 @@
 using ChatApp.Api.Services;
-using ChatApp.Application.Data;
+using ChatApp.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,7 +7,7 @@ namespace ChatApp.Api.Controllers;
 
 [ApiController]
 [Route("api/user-notifications")]
-public sealed class UserNotificationsController(ChatDbContext db) : ControllerBase
+public sealed class UserNotificationsController(ChatAppDbContext db) : ControllerBase
 {
     [HttpGet("unread-count")]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]

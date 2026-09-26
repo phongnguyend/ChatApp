@@ -1,8 +1,9 @@
+using ChatApp.Application.Abstractions;
 using System.Data;
 using ChatApp.Application.Contracts;
-using ChatApp.Application.Data;
+using ChatApp.Persistence;
 using ChatApp.Api.Hubs;
-using ChatApp.Application.Models;
+using ChatApp.Domain.Models;
 using ChatApp.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -13,7 +14,7 @@ namespace ChatApp.Api.Controllers;
 [ApiController]
 [Route("api/live-streams")]
 public sealed class LiveStreamsController(
-    ChatDbContext db,
+    ChatAppDbContext db,
     IHubContext<ChatHub> hubContext,
     ICallingProvider callingProvider,
     ILogger<LiveStreamsController> logger) : ControllerBase

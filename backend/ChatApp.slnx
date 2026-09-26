@@ -4,4 +4,7 @@
   <Project Path="ChatApp.AspireAppHost/ChatApp.AspireAppHost.csproj" Id="e9189dc3-08de-4b40-bdd8-3887f840cd70" />
   <Project Path="ChatApp.AzureFunctions/ChatApp.AzureFunctions.csproj" />
   <Project Path="ChatApp.Background/ChatApp.Background.csproj" Id="430395d5-dcb4-4d4a-8ad3-d3614136cd80" />
+  <Project Path="ChatApp.Domain/ChatApp.Domain.csproj" />
+  <Project Path="ChatApp.Infrastructure/ChatApp.Infrastructure.csproj" />
+  <Project Path="ChatApp.Persistence/ChatApp.Persistence.csproj" />
 </Solution>

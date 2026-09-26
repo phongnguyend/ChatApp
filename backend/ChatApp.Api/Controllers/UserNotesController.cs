@@ -1,7 +1,7 @@
 using System.Data;
 using ChatApp.Api.Services;
-using ChatApp.Application.Data;
-using ChatApp.Application.Models;
+using ChatApp.Persistence;
+using ChatApp.Domain.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,7 +9,7 @@ namespace ChatApp.Api.Controllers;
 
 [ApiController]
 [Route("api/user-notes")]
-public sealed class UserNotesController(ChatDbContext db) : ControllerBase
+public sealed class UserNotesController(ChatAppDbContext db) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] string username, CancellationToken ct)

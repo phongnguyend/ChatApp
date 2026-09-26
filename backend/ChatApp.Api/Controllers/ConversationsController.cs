@@ -1,9 +1,11 @@
+using ChatApp.Infrastructure.Notification;
+using ChatApp.Infrastructure.Caching;
 using System.Data;
 using System.Data.SqlTypes;
 using ChatApp.Application.Contracts;
-using ChatApp.Application.Data;
+using ChatApp.Persistence;
 using ChatApp.Api.Hubs;
-using ChatApp.Application.Models;
+using ChatApp.Domain.Models;
 using ChatApp.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -15,7 +17,7 @@ namespace ChatApp.Api.Controllers;
 [ApiController]
 [Route("api/conversations")]
 public sealed class ConversationsController(
-    ChatDbContext db,
+    ChatAppDbContext db,
     IHubContext<ChatHub> hubContext,
     PresenceTracker presence,
     IAvatarStorage avatarStorage,

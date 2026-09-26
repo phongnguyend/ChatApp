@@ -1,16 +1,14 @@
-using System.Data;
 using System.Net.Http.Json;
 using System.Text.Json;
 using ChatApp.Application.Contracts;
-using ChatApp.Application.Data;
-using ChatApp.Application.Models;
-using Microsoft.EntityFrameworkCore;
+using ChatApp.Application.Abstractions;
+using ChatApp.Domain.Models;
 using Microsoft.Extensions.Logging;
 
 namespace ChatApp.Application.Handlers;
 
 public sealed class RecordingFileStatusUpdatedHandler(
-    ChatDbContext db,
+    IRecordingRepository recordings,
     HttpClient apiClient,
     ILogger<RecordingFileStatusUpdatedHandler> logger)
 {
@@ -65,8 +63,8 @@ public sealed class RecordingFileStatusUpdatedHandler(
                 "The ACS recording event does not contain any recording files.");
         }
 
-        var recording = await db.SessionRecordings.SingleOrDefaultAsync(
-            item => item.ProviderRecordingId == providerRecordingId,
+        var recording = await recordings.FindByProviderIdAsync(
+            providerRecordingId,
             cancellationToken);
         if (recording is null)
         {
@@ -85,7 +83,7 @@ public sealed class RecordingFileStatusUpdatedHandler(
         {
             recording.DurationMilliseconds = duration;
         }
-        await db.SaveChangesAsync(cancellationToken);
+        await recordings.SaveChangesAsync(cancellationToken);
         await FinalizeRecordingAsync(
             recording,
             locations,
@@ -122,7 +120,7 @@ public sealed class RecordingFileStatusUpdatedHandler(
             .ToArray();
         try
         {
-            await SaveRecordingMessageAsync(
+            await recordings.CompleteAsync(
                 recording,
                 attachments,
                 durationMilliseconds,
@@ -132,64 +130,10 @@ public sealed class RecordingFileStatusUpdatedHandler(
         {
             recording.Status = "failed";
             recording.CompletedAt = DateTimeOffset.UtcNow;
-            await db.SaveChangesAsync(CancellationToken.None);
+            await recordings.SaveChangesAsync(CancellationToken.None);
             throw;
         }
         await NotifyApiAsync(recording.Id, cancellationToken);
-    }
-
-    private async Task SaveRecordingMessageAsync(
-        SessionRecording recording,
-        IReadOnlyCollection<MessageAttachment> attachments,
-        long durationMilliseconds,
-        CancellationToken cancellationToken)
-    {
-        await using var transaction = await db.Database.BeginTransactionAsync(
-            IsolationLevel.Serializable,
-            cancellationToken);
-        var conversation = await db.Conversations.SingleAsync(
-            item => item.Id == recording.ConversationId,
-            cancellationToken);
-        var sequence = await db.Messages
-            .Where(message => message.ConversationId == conversation.Id)
-            .Select(message => (long?)message.SequenceNumber)
-            .MaxAsync(cancellationToken) ?? 0;
-        var now = DateTimeOffset.UtcNow;
-        var message = new ChatMessage
-        {
-            Conversation = conversation,
-            ConversationId = conversation.Id,
-            MessageType = "system",
-            Content = "Session recording completed.",
-            SequenceNumber = sequence + 1,
-            CreatedAt = now
-        };
-        foreach (var attachment in attachments)
-        {
-            attachment.Message = message;
-            message.Attachments.Add(attachment);
-        }
-        db.Messages.Add(message);
-        recording.StorageObjectName = attachments.First().StorageKey;
-        recording.DurationMilliseconds = durationMilliseconds > 0
-            ? durationMilliseconds
-            : null;
-        recording.Status = "completed";
-        recording.CompletedAt = now;
-        conversation.LastMessage = message;
-        conversation.LastMessageAt = now;
-        conversation.UpdatedAt = now;
-        await db.ConversationMembers
-            .Where(member =>
-                member.ConversationId == conversation.Id &&
-                member.LeftAt == null)
-            .ExecuteUpdateAsync(
-                setters => setters.SetProperty(
-                    member => member.UnreadCount,
-                    member => member.UnreadCount + 1),
-                cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
     }
 
     private async Task NotifyApiAsync(

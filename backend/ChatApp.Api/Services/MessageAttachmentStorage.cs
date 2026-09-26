@@ -1,3 +1,4 @@
+using ChatApp.Application.Abstractions;
 namespace ChatApp.Api.Services;
 
 public sealed class MessageAttachmentStorage(

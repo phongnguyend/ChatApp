@@ -1,8 +1,9 @@
+using ChatApp.Application.Abstractions;
 using System.Data;
 using System.Security.Cryptography;
 using ChatApp.Api.Services;
-using ChatApp.Application.Data;
-using ChatApp.Application.Models;
+using ChatApp.Persistence;
+using ChatApp.Domain.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -13,7 +14,7 @@ namespace ChatApp.Api.Controllers;
 [ApiController]
 [Route("api/documents")]
 public sealed partial class DocumentsController(
-    ChatDbContext db,
+    ChatAppDbContext db,
     IUploadObjectStorage storage,
     IConfiguration configuration,
     ILogger<DocumentsController> logger) : ControllerBase

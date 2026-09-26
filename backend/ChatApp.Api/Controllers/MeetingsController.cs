@@ -1,9 +1,10 @@
+using ChatApp.Infrastructure.Caching;
 using System.Globalization;
 using ChatApp.Api.Hubs;
 using ChatApp.Api.Services;
 using ChatApp.Application.Contracts;
-using ChatApp.Application.Data;
-using ChatApp.Application.Models;
+using ChatApp.Persistence;
+using ChatApp.Domain.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -14,7 +15,7 @@ namespace ChatApp.Api.Controllers;
 [ApiController]
 [Route("api/meetings")]
 public sealed class MeetingsController(
-    ChatDbContext db,
+    ChatAppDbContext db,
     IHubContext<ChatHub> hubContext,
     PresenceTracker presence) : ControllerBase
 {

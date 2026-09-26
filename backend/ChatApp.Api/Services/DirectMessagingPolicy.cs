@@ -1,4 +1,4 @@
-using ChatApp.Application.Data;
+using ChatApp.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace ChatApp.Api.Services;
@@ -6,7 +6,7 @@ namespace ChatApp.Api.Services;
 public static class DirectMessagingPolicy
 {
     public static async Task<bool> IsBlockedAsync(
-        ChatDbContext db,
+        ChatAppDbContext db,
         Guid userId,
         Guid conversationId,
         CancellationToken cancellationToken = default)

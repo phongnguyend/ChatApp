@@ -1,5 +1,5 @@
 using ChatApp.Application.Contracts;
-using ChatApp.Application.Data;
+using ChatApp.Persistence;
 using ChatApp.Api.Hubs;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -37,7 +37,7 @@ public sealed class LiveLocationExpiryService(
     private async Task ExpireShares(CancellationToken cancellationToken)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
+        var db = scope.ServiceProvider.GetRequiredService<ChatAppDbContext>();
         var now = DateTimeOffset.UtcNow;
         var shares = await db.LiveLocationShares
             .Where(x => x.IsActive && x.ExpiresAt <= now)

@@ -8,13 +8,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Azure.Identity" Version="1.21.0" />
-    <PackageReference Include="Azure.Messaging.ServiceBus" Version="7.20.2" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.10" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ChatApp.Application\ChatApp.Application.csproj" />
+    <ProjectReference Include="../ChatApp.Application/ChatApp.Application.csproj" />
+    <ProjectReference Include="../ChatApp.Persistence/ChatApp.Persistence.csproj" />
+    <ProjectReference Include="../ChatApp.Infrastructure/ChatApp.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

@@ -1,6 +1,6 @@
 using System.Data;
-using ChatApp.Application.Data;
-using ChatApp.Application.Models;
+using ChatApp.Persistence;
+using ChatApp.Domain.Models;
 using ChatApp.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -9,7 +9,7 @@ namespace ChatApp.Api.Controllers;
 
 [ApiController]
 [Route("api/user-tasks")]
-public sealed class UserTasksController(ChatDbContext db) : ControllerBase
+public sealed class UserTasksController(ChatAppDbContext db) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] string username,

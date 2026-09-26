@@ -1,7 +1,8 @@
+using ChatApp.Infrastructure.Caching;
 using ChatApp.Application.Contracts;
-using ChatApp.Application.Data;
+using ChatApp.Persistence;
 using ChatApp.Api.Hubs;
-using ChatApp.Application.Models;
+using ChatApp.Domain.Models;
 using ChatApp.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -12,7 +13,7 @@ namespace ChatApp.Api.Controllers;
 [ApiController]
 [Route("api/users")]
 public sealed class UsersController(
-    ChatDbContext db,
+    ChatAppDbContext db,
     IAvatarStorage avatarStorage,
     PresenceTracker presence,
     IHubContext<ChatHub> hubContext) : ControllerBase

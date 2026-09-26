@@ -1,98 +1,9 @@
-using ChatApp.Application.Data;
+using ChatApp.Api;
 using ChatApp.Api.Hubs;
-using ChatApp.Api.Services;
-using Microsoft.EntityFrameworkCore;
+using ChatApp.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
-var uploadStorageSection = builder.Configuration.GetSection(
-    UploadStorageOptions.SectionName);
-var uploadStorageProvider =
-    uploadStorageSection.GetValue<string>("Provider") ?? "Local";
-var callingSection = builder.Configuration.GetSection(
-    CallingOptions.SectionName);
-
-builder.Services.AddControllers();
-builder.Services.AddSignalR();
-builder.Services.AddHttpClient();
-builder.Services.AddDbContext<ChatDbContext>(options =>
-    options.UseSqlServer(
-        builder.Configuration.GetConnectionString("ChatDatabase"),
-        sqlServer => sqlServer.MigrationsAssembly("ChatApp.Api")));
-builder.Services.AddOptions<UploadStorageOptions>()
-    .Bind(uploadStorageSection)
-    .Validate(
-        options =>
-            !options.Provider.Equals("Local", StringComparison.OrdinalIgnoreCase) ||
-            !string.IsNullOrWhiteSpace(options.Path),
-        "UploadStorage:Path must not be empty.")
-    .ValidateOnStart();
-builder.Services.AddOptions<AzureBlobOptions>()
-    .Bind(uploadStorageSection.GetSection("AzureBlob"))
-    .Validate(
-        options =>
-            !uploadStorageProvider.Equals(
-                "AzureBlob",
-                StringComparison.OrdinalIgnoreCase) ||
-            options.IsValid(),
-        "Azure Blob storage configuration is incomplete.")
-    .ValidateOnStart();
-builder.Services.Configure<NotificationOptions>(
-    builder.Configuration.GetSection(NotificationOptions.SectionName));
-builder.Services.AddOptions<CallingOptions>()
-    .Bind(callingSection)
-    .Validate(
-        options =>
-            string.Equals(
-                options.Provider,
-                "AzureCommunicationServices",
-                StringComparison.OrdinalIgnoreCase) &&
-            !string.IsNullOrWhiteSpace(
-                options.AzureCommunicationServices.ConnectionString),
-        "Calling must use Azure Communication Services with a connection string.")
-    .ValidateOnStart();
-builder.Services.AddScoped<
-    ICallingProvider,
-    AzureCommunicationServicesCallingProvider>();
-builder.Services.AddSingleton<PresenceTracker>();
-builder.Services.AddSingleton<CallStateTracker>();
-builder.Services.AddSingleton<GroupMeetingStateTracker>();
-builder.Services.AddSingleton<RecordingStateTracker>();
-if (uploadStorageProvider.Equals(
-    "AzureBlob",
-    StringComparison.OrdinalIgnoreCase))
-{
-    builder.Services.AddSingleton<
-        IUploadObjectStorage,
-        AzureBlobUploadObjectStorage>();
-}
-else if (uploadStorageProvider.Equals(
-    "Local",
-    StringComparison.OrdinalIgnoreCase))
-{
-    builder.Services.AddSingleton<IUploadObjectStorage, LocalUploadObjectStorage>();
-}
-else
-{
-    throw new InvalidOperationException(
-        $"Unsupported upload storage provider \"{uploadStorageProvider}\".");
-}
-builder.Services.AddScoped<IAvatarStorage, AvatarStorage>();
-builder.Services.AddScoped<IMessageAttachmentStorage, MessageAttachmentStorage>();
-builder.Services.AddScoped<AzurePushNotificationService>();
-builder.Services.AddHostedService<LiveLocationExpiryService>();
-
-var allowedOrigins = builder.Configuration
-    .GetSection("AllowedOrigins")
-    .Get<string[]>() ?? ["http://localhost:5173"];
-
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("ReactApp", policy =>
-        policy.WithOrigins(allowedOrigins)
-            .AllowAnyHeader()
-            .AllowAnyMethod()
-            .AllowCredentials());
-});
+builder.Services.AddApi(builder.Configuration);
 
 var app = builder.Build();
 
@@ -103,7 +14,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 
 await using (var scope = app.Services.CreateAsyncScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
+    var db = scope.ServiceProvider.GetRequiredService<ChatAppDbContext>();
     await DatabaseInitializer.InitializeAsync(db);
 }
 

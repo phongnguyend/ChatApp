@@ -1,6 +1,6 @@
 using ChatApp.Application.Contracts;
-using ChatApp.Application.Data;
-using ChatApp.Application.Models;
+using ChatApp.Persistence;
+using ChatApp.Domain.Models;
 using ChatApp.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -9,7 +9,7 @@ namespace ChatApp.Api.Controllers;
 
 [ApiController]
 [Route("api/session")]
-public sealed class SessionsController(ChatDbContext db) : ControllerBase
+public sealed class SessionsController(ChatAppDbContext db) : ControllerBase
 {
     [HttpPost]
     public async Task<ActionResult<UserDto>> Login(

@@ -1,0 +1,17 @@
+namespace ChatApp.Domain.Models;
+
+public sealed class ChatUser
+{
+    public Guid Id { get; set; }
+    public required string Username { get; set; }
+    public required string NormalizedUsername { get; set; }
+    public required string DisplayName { get; set; }
+    public string? AvatarUrl { get; set; }
+    public string Status { get; set; } = "active";
+    public long? DocumentStorageLimitBytes { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? LastSeenAt { get; set; }
+    public ICollection<ChatMessage> Messages { get; set; } = [];
+    public ICollection<ConversationMember> ConversationMemberships { get; set; } = [];
+}

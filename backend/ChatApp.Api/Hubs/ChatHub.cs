@@ -1,7 +1,10 @@
+using ChatApp.Infrastructure.Notification;
+using ChatApp.Infrastructure.Caching;
+using ChatApp.Application.Abstractions;
 using System.Data;
 using ChatApp.Application.Contracts;
-using ChatApp.Application.Data;
-using ChatApp.Application.Models;
+using ChatApp.Persistence;
+using ChatApp.Domain.Models;
 using ChatApp.Api.Services;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -9,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 namespace ChatApp.Api.Hubs;
 
 public sealed class ChatHub(
-    ChatDbContext db,
+    ChatAppDbContext db,
     PresenceTracker presence,
     CallStateTracker calls,
     GroupMeetingStateTracker meetings,

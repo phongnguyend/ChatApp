@@ -1,4 +1,5 @@
-using ChatApp.Application.Data;
+using ChatApp.Application.Abstractions;
+using ChatApp.Persistence;
 using ChatApp.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -8,7 +9,7 @@ namespace ChatApp.Api.Controllers;
 [ApiController]
 [Route("api/calling")]
 public sealed class CallingController(
-    ChatDbContext db,
+    ChatAppDbContext db,
     ICallingProvider callingProvider) : ControllerBase
 {
     [HttpGet("access")]

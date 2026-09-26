@@ -1,6 +1,6 @@
 using ChatApp.Api.Services;
-using ChatApp.Application.Data;
-using ChatApp.Application.Models;
+using ChatApp.Persistence;
+using ChatApp.Domain.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,7 +8,7 @@ namespace ChatApp.Api.Controllers;
 
 [ApiController]
 [Route("api/user-reminders")]
-public sealed class UserRemindersController(ChatDbContext db) : ControllerBase
+public sealed class UserRemindersController(ChatAppDbContext db) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] string username,

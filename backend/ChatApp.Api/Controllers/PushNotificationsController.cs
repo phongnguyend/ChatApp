@@ -1,4 +1,5 @@
-using ChatApp.Application.Data;
+using ChatApp.Infrastructure.Notification;
+using ChatApp.Persistence;
 using ChatApp.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -8,7 +9,7 @@ namespace ChatApp.Api.Controllers;
 [ApiController]
 [Route("api/push")]
 public sealed class PushNotificationsController(
-    ChatDbContext db,
+    ChatAppDbContext db,
     AzurePushNotificationService notifications) : ControllerBase
 {
     [HttpGet("config")]
