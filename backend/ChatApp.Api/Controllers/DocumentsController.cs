@@ -499,7 +499,7 @@ public sealed partial class DocumentsController(
             .SingleOrDefaultAsync(cancellationToken);
         return Ok(new DocumentPropertiesDto("folder", folder.Id, folder.Name,
             await FolderLocation(folder.ParentFolderId, actor.Id, folder.OwnerUserId, cancellationToken),
-            folder.OwnerUser.Username, folder.OwnerUser.DisplayName, permission,
+            folder.OwnerUser.UserName, folder.OwnerUser.DisplayName, permission,
             folder.CreatedAt, folder.UpdatedAt, folder.DeletedAt, null,
             fileSummary?.Bytes ?? 0, descendantIds.Count - 1, fileSummary?.Count ?? 0));
     }
@@ -518,7 +518,7 @@ public sealed partial class DocumentsController(
         if (permission is null) return NotFound();
         return Ok(new DocumentPropertiesDto("file", file.Id, file.Name,
             await FolderLocation(file.FolderId, actor.Id, file.OwnerUserId, cancellationToken),
-            file.OwnerUser.Username, file.OwnerUser.DisplayName, permission,
+            file.OwnerUser.UserName, file.OwnerUser.DisplayName, permission,
             file.CreatedAt, file.UpdatedAt, file.DeletedAt, file.ContentType,
             file.SizeBytes, null, null));
     }
@@ -660,9 +660,9 @@ public sealed partial class DocumentsController(
         foreach (var share in shares)
         {
             if (share.Folder is { } folder && await FolderPermission(folder, actor.Id, cancellationToken) is { } folderPermission)
-                folders.Add(ToDto(folder, folderPermission, share.OwnerUser.Username));
+                folders.Add(ToDto(folder, folderPermission, share.OwnerUser.UserName));
             if (share.File is { } file && await FilePermission(file, actor.Id, cancellationToken) is { } filePermission)
-                files.Add(ToDto(file, filePermission, share.OwnerUser.Username));
+                files.Add(ToDto(file, filePermission, share.OwnerUser.UserName));
         }
         return Ok(new DocumentListingDto(null, [], folders, files));
     }
@@ -728,9 +728,9 @@ public sealed partial class DocumentsController(
         if (!await OwnsTarget(actor.Id, kind, id, cancellationToken)) return NotFound();
         var shares = await db.DocumentShares.AsNoTracking().Include(x => x.GranteeUser)
             .Where(x => (kind == "folder" ? x.FolderId == id : x.FileId == id))
-            .OrderBy(x => x.GranteeUser.DisplayName)
-            .Select(x => new DocumentShareDto(x.Id, x.GranteeUser.Username,
-                x.GranteeUser.DisplayName, x.Permission))
+            .OrderBy(x => (((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim() == "" ? x.GranteeUser.UserName : ((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim()))
+            .Select(x => new DocumentShareDto(x.Id, x.GranteeUser.UserName,
+                (((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim() == "" ? x.GranteeUser.UserName : ((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim()), x.Permission))
             .ToListAsync(cancellationToken);
         return Ok(shares);
     }
@@ -780,7 +780,7 @@ public sealed partial class DocumentsController(
         else share.Permission = request.Permission;
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return Ok(new DocumentShareDto(share.Id, grantee.Username, grantee.DisplayName, share.Permission));
+        return Ok(new DocumentShareDto(share.Id, grantee.UserName, grantee.DisplayName, share.Permission));
     }
 
     [HttpDelete("shares/{id:guid}")]
@@ -850,6 +850,7 @@ public sealed partial class DocumentsController(
         return NoContent();
     }
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpGet("public/{token}")]
     public async Task<IActionResult> PublicListing(string token, [FromQuery] Guid? folderId,
         CancellationToken cancellationToken)
@@ -879,6 +880,7 @@ public sealed partial class DocumentsController(
             files.Select(x => ToDto(x)).ToArray()));
     }
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpGet("public/{token}/qr-code")]
     public async Task<IActionResult> PublicQrCode(string token, [FromQuery] string origin,
         CancellationToken cancellationToken)
@@ -894,6 +896,7 @@ public sealed partial class DocumentsController(
         return File(qrCode.GetGraphic(8), "image/png");
     }
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpGet("public/{token}/files/{id:guid}/content")]
     public async Task<IActionResult> PublicContent(string token, Guid id,
         [FromQuery] bool download = false, CancellationToken cancellationToken = default)
@@ -953,7 +956,7 @@ public sealed partial class DocumentsController(
 
     private async Task<ChatUser?> FindOwner(string username, CancellationToken ct) =>
         await db.Users.SingleOrDefaultAsync(x =>
-            x.NormalizedUsername == Username.Normalize(username) && x.Status == "active", ct);
+            x.NormalizedUserName == Username.Normalize(username) && x.Status == "active", ct);
 
     private async Task<string> FolderLocation(Guid? folderId, Guid actorId,
         Guid ownerId, CancellationToken ct)

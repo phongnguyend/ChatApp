@@ -353,7 +353,7 @@ public sealed class LiveStreamsController(
     {
         var normalized = Username.Normalize(username);
         return await db.Users.SingleOrDefaultAsync(
-            x => x.NormalizedUsername == normalized && x.Status == "active",
+            x => x.NormalizedUserName == normalized && x.Status == "active",
             cancellationToken);
     }
 

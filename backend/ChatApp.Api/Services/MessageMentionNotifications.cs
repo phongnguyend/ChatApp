@@ -32,7 +32,7 @@ public static class MessageMentionNotifications
                 member.UserId != senderUserId &&
                 (mentionsEveryone || requestedIds.Contains(member.UserId)) &&
                 member.User.Status == "active")
-            .Select(member => new { member.UserId, member.User.Username })
+            .Select(member => new { member.UserId, Username = member.User.UserName })
             .ToArrayAsync(cancellationToken);
         var preview = content.Length > 120 ? $"{content[..117]}..." : content;
 

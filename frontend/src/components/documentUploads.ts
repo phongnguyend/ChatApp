@@ -1,3 +1,4 @@
+import { authFetch as fetch } from "../services/auth";
 type ConflictChoice = "ask" | "replace" | "keepBoth";
 
 type UploadStatus = {

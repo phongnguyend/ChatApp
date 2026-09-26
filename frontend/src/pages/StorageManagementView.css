@@ -1,11 +1,11 @@
 .chat-shell.storage-management-open .conversation-panel,
 .chat-shell.storage-management-open .people-panel { display: none; }
 
-.storage-management-view { grid-column: 2 / -1; grid-row: 1; min-width: 0; min-height: 0; padding: 30px 32px 22px; display: flex; flex-direction: column; color: var(--ink); background: var(--paper); }
+.storage-management-view { grid-column: 2 / -1; grid-row: 1; min-width: 0; min-height: 0; padding: 18px 32px 22px; display: flex; flex-direction: column; color: var(--ink); background: var(--paper); }
 .storage-management-view[hidden] { display: none; }
-.storage-management-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
-.storage-management-header .eyebrow { margin-bottom: 5px; }
-.storage-management-header h1 { margin: 0; font: 800 29px 'Manrope', sans-serif; letter-spacing: -.04em; }
+.storage-management-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.storage-management-header .eyebrow { margin: 0 0 4px; }
+.storage-management-header h1 { margin: 0; font: 800 25px 'Manrope', sans-serif; letter-spacing: -.04em; }
 .storage-management-header p:not(.eyebrow) { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
 .storage-management-header button { min-height: 38px; padding: 0 13px; border: 1px solid var(--line); border-radius: 9px; display: inline-flex; align-items: center; gap: 7px; color: var(--ink); background: var(--paper); font-size: 11px; font-weight: 700; white-space: nowrap; cursor: pointer; }
 .storage-management-header button:hover { background: var(--cream); }
@@ -54,7 +54,7 @@
 .storage-management-dialog-actions button:disabled { opacity: .5; cursor: default; }
 
 @media (max-width: 700px) {
-  .storage-management-view { padding: 20px 16px; }
+  .storage-management-view { padding: 18px 16px; }
   .storage-management-header { flex-wrap: wrap; }
   .storage-management-summary { grid-template-columns: 1fr; }
   .storage-management-summary > div { min-height: 64px; }

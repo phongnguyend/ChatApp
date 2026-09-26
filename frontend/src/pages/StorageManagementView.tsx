@@ -1,3 +1,4 @@
+import { authFetch as fetch } from "../services/auth";
 import { ArrowLeft, HardDrive, LoaderCircle, Pencil, Search, Users, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import "./StorageManagementView.css";

@@ -1,3 +1,4 @@
+import { authFetch as fetch } from "../services/auth";
 import {
   AzureCommunicationTokenCredential,
 } from "@azure/communication-common";

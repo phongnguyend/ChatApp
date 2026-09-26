@@ -7,6 +7,7 @@ namespace ChatApp.Api.Controllers;
 [Route("uploads/avatars")]
 public sealed class AvatarsController(IAvatarStorage storage) : ControllerBase
 {
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpGet("{fileName}")]
     public async Task<IActionResult> Get(
         string fileName,

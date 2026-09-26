@@ -67,7 +67,7 @@ public sealed record ConversationRemovedDto(Guid ConversationId);
 
 public sealed record UserAvatarUpdatedDto(Guid UserId, string AvatarUrl);
 
-public sealed record UpdateDisplayNameRequest(string DisplayName);
+
 
 public sealed record UserDisplayNameUpdatedDto(Guid UserId, string DisplayName);
 

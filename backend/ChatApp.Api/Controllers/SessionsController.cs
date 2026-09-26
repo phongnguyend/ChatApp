@@ -13,39 +13,11 @@ public sealed class SessionsController(ChatAppDbContext db) : ControllerBase
 {
     [HttpPost]
     public async Task<ActionResult<UserDto>> Login(
-        LoginRequest request,
         CancellationToken cancellationToken)
     {
-        if (!Username.IsValid(request.Username))
-        {
-            return BadRequest(new
-            {
-                message = "Use 2–50 letters, numbers, spaces, dots, underscores, or hyphens."
-            });
-        }
-
-        var cleaned = Username.Clean(request.Username);
-        var normalized = Username.Normalize(cleaned);
-        var user = await db.Users.SingleOrDefaultAsync(
-            x => x.NormalizedUsername == normalized,
-            cancellationToken);
-
-        if (user is null)
-        {
-            user = new ChatUser
-            {
-                Username = cleaned,
-                NormalizedUsername = normalized,
-                DisplayName = cleaned
-            };
-            db.Users.Add(user);
-        }
-        else
-        {
-            user.LastSeenAt = DateTimeOffset.UtcNow;
-            user.UpdatedAt = DateTimeOffset.UtcNow;
-        }
-
+        var userId = Guid.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
+        var user = await db.Users.SingleAsync(x => x.Id == userId, cancellationToken);
+        user.LastSeenAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
 
         var generalConversationId = await db.Conversations
@@ -79,7 +51,7 @@ public sealed class SessionsController(ChatAppDbContext db) : ControllerBase
 
         await EnsureSelfConversation(user, cancellationToken);
 
-        return Ok(new UserDto(user.Id, user.Username, user.DisplayName, user.AvatarUrl));
+        return Ok(new UserDto(user.Id, user.UserName, user.DisplayName, user.AvatarUrl));
     }
 
     private async Task EnsureSelfConversation(

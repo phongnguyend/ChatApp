@@ -6,7 +6,7 @@
   grid-row: 1;
   min-width: 0;
   min-height: 0;
-  padding: 30px 32px 22px;
+  padding: 18px 32px 22px;
   display: flex;
   flex-direction: column;
   color: var(--ink);
@@ -24,14 +24,18 @@
 .documents-modal-heading,
 .documents-modal-actions,
 .documents-preview-footer { display: flex; align-items: center; }
-.documents-header { justify-content: space-between; gap: 16px; margin-bottom: 24px; }
-.documents-header-aside { width: min(290px, 100%); display: flex; align-items: flex-end; flex-direction: column; gap: 10px; }
+.documents-header { justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; }
+.documents-header-aside { display: flex; align-items: center; gap: 20px; }
+.documents-header-aside .documents-back { order: 1; flex-shrink: 0; }
+.documents-header-aside .documents-storage-usage { width: 220px; padding: 0; border: 0; background: transparent; }
+.documents-header-aside .documents-storage-heading { margin-bottom: 6px; }
+.documents-header-aside .documents-storage-usage small { margin-top: 5px; }
 .documents-tabs { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid var(--line); overflow-x: auto; }
 .documents-tabs button { padding: 10px 13px; border: 0; border-bottom: 2px solid transparent; display: inline-flex; align-items: center; gap: 7px; color: var(--muted); background: transparent; font-size: 11px; font-weight: 800; white-space: nowrap; cursor: pointer; }
 .documents-tabs button svg { flex: 0 0 auto; }
 .documents-tabs button[aria-selected='true'] { color: #ca5b47; border-bottom-color: #ca5b47; }
-.documents-header .eyebrow { margin-bottom: 5px; }
-.documents-header h1 { margin: 0; font: 800 29px 'Manrope', sans-serif; letter-spacing: -.04em; }
+.documents-header .eyebrow { margin: 0 0 4px; }
+.documents-header h1 { margin: 0; font: 800 25px 'Manrope', sans-serif; letter-spacing: -.04em; }
 .documents-header p:not(.eyebrow) { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
 .documents-back,
 .documents-actions button,
@@ -223,7 +227,8 @@
 @media (max-width: 820px) { .documents-view { grid-column: 1 / -1; padding: 18px 16px 12px; } }
 @media (max-width: 600px) {
   .documents-header { align-items: flex-start; flex-direction: column; gap: 12px; margin-bottom: 17px; }
-  .documents-header-aside { width: 100%; align-items: stretch; }
+  .documents-header-aside { width: 100%; flex-wrap: wrap; gap: 12px; }
+  .documents-header-aside .documents-storage-usage { flex: 1; min-width: 150px; }
   .documents-toolbar, .documents-tools { align-items: stretch; flex-direction: column; }
   .documents-tools, .documents-search { width: 100%; }
   .documents-actions button { flex: 1; }

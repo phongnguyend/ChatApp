@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { randomBytes } from 'node:crypto';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
@@ -10,6 +11,7 @@ const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
 export default defineConfig({
   testDir: './tests',
+  globalSetup: './global-setup.ts',
   timeout: 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
@@ -32,6 +34,7 @@ export default defineConfig({
       reuseExistingServer: false,
       env: {
         ASPNETCORE_ENVIRONMENT: 'Development',
+        Authentication__Jwt__SigningKey: randomBytes(32).toString('base64'),
         ConnectionStrings__ChatDatabase: process.env.E2E_CONNECTION_STRING ??
           'Server=(localdb)\\mssqllocaldb;Database=ChatAppE2E;Trusted_Connection=True;TrustServerCertificate=True',
         UploadStorage__Provider: 'Local',

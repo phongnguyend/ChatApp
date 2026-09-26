@@ -1,3 +1,4 @@
+import { authFetch as fetch } from "../services/auth";
 import { ArrowLeft, FileText, LoaderCircle, NotebookPen, Pencil, Pin, PinOff, Plus, Search, Share2, Trash2, Users, X } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import "./NotesView.css";

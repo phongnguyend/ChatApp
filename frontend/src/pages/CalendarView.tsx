@@ -1,3 +1,4 @@
+import { authFetch as fetch } from "../services/auth";
 import { AlarmClock, CalendarDays, CalendarX2, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Clock3, HelpCircle, LoaderCircle, MessageCircle, Pencil, Plus, RefreshCw, UserRound, Video, X, XCircle } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import "./CalendarView.css";

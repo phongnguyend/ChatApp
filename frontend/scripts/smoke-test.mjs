@@ -1,21 +1,10 @@
+import { testAuthentication } from './test-auth.mjs'
 import { HubConnectionBuilder } from '@microsoft/signalr'
 
 const apiUrl = process.env.VITE_API_URL ?? 'http://localhost:5045'
 const suffix = Date.now().toString().slice(-6)
 
-async function login(username) {
-  const response = await fetch(`${apiUrl}/api/session`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ username }),
-  })
-
-  if (!response.ok) {
-    throw new Error(await response.text())
-  }
-
-  return response.json()
-}
+const { login, fetch, accessToken } = testAuthentication(apiUrl)
 
 const alice = await login(`Alice ${suffix}`)
 const bob = await login(`Bob ${suffix}`)
@@ -32,13 +21,13 @@ if (!general) {
 }
 
 const aliceConnection = new HubConnectionBuilder()
-  .withUrl(`${apiUrl}/hubs/chat?username=${encodeURIComponent(alice.username)}`)
+  .withUrl(`${apiUrl}/hubs/chat`, { accessTokenFactory: () => accessToken(alice.username) })
   .build()
 const bobConnection = new HubConnectionBuilder()
-  .withUrl(`${apiUrl}/hubs/chat?username=${encodeURIComponent(bob.username)}`)
+  .withUrl(`${apiUrl}/hubs/chat`, { accessTokenFactory: () => accessToken(bob.username) })
   .build()
 const dianaConnection = new HubConnectionBuilder()
-  .withUrl(`${apiUrl}/hubs/chat?username=${encodeURIComponent(diana.username)}`)
+  .withUrl(`${apiUrl}/hubs/chat`, { accessTokenFactory: () => accessToken(diana.username) })
   .build()
 
 let liveMessage

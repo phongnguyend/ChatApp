@@ -43,7 +43,7 @@ public sealed class MessagesController(
 
         var normalized = Username.Normalize(username);
         var user = await db.Users.SingleOrDefaultAsync(
-            x => x.NormalizedUsername == normalized && x.Status == "active",
+            x => x.NormalizedUserName == normalized && x.Status == "active",
             cancellationToken);
         if (user is null)
         {
@@ -98,7 +98,7 @@ public sealed class MessagesController(
     {
         var normalized = Username.Normalize(username);
         var userId = await db.Users
-            .Where(x => x.NormalizedUsername == normalized && x.Status == "active")
+            .Where(x => x.NormalizedUserName == normalized && x.Status == "active")
             .Select(x => (Guid?)x.Id)
             .SingleOrDefaultAsync(cancellationToken);
         if (userId is null)
@@ -177,7 +177,7 @@ public sealed class MessagesController(
 
         var normalized = Username.Normalize(username);
         var user = await db.Users.SingleOrDefaultAsync(
-            x => x.NormalizedUsername == normalized && x.Status == "active",
+            x => x.NormalizedUserName == normalized && x.Status == "active",
             cancellationToken);
         if (user is null)
         {
@@ -255,7 +255,7 @@ public sealed class MessagesController(
     {
         var normalized = Username.Normalize(username);
         var user = await db.Users.SingleOrDefaultAsync(
-            item => item.NormalizedUsername == normalized && item.Status == "active",
+            item => item.NormalizedUserName == normalized && item.Status == "active",
             cancellationToken);
         if (user is null) return NotFound();
 
@@ -295,7 +295,7 @@ public sealed class MessagesController(
     {
         var normalized = Username.Normalize(username);
         var user = await db.Users.SingleOrDefaultAsync(
-            item => item.NormalizedUsername == normalized && item.Status == "active",
+            item => item.NormalizedUserName == normalized && item.Status == "active",
             cancellationToken);
         if (user is null) return NotFound();
 
@@ -387,7 +387,7 @@ public sealed class MessagesController(
     {
         var normalized = Username.Normalize(username);
         var userId = await db.Users
-            .Where(item => item.NormalizedUsername == normalized && item.Status == "active")
+            .Where(item => item.NormalizedUserName == normalized && item.Status == "active")
             .Select(item => (Guid?)item.Id)
             .SingleOrDefaultAsync(cancellationToken);
         if (userId is null) return NotFound();
@@ -427,7 +427,7 @@ public sealed class MessagesController(
             message.Id,
             message.ConversationId,
             message.SenderUserId,
-            message.Sender?.Username,
+            message.Sender?.UserName,
             message.Content,
             message.MessageType,
             message.CreatedAt,

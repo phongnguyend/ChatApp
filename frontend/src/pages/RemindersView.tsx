@@ -1,3 +1,4 @@
+import { authFetch as fetch } from "../services/auth";
 import { AlarmClock, ArrowLeft, CalendarDays, Clock3, LoaderCircle, Pencil, Plus, Trash2, X } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import "./RemindersView.css";

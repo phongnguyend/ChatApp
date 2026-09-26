@@ -21,10 +21,9 @@ public sealed class ChatHub(
     AzurePushNotificationService pushNotifications,
     ILogger<ChatHub> logger) : Hub
 {
-    private const string UsernameQueryKey = "username";
     public override async Task OnConnectedAsync()
     {
-        var username = Context.GetHttpContext()?.Request.Query[UsernameQueryKey].ToString() ?? "";
+        var username = Context.User?.FindFirst("chat_username")?.Value ?? "";
         var user = await FindUser(username);
 
         if (user is null)
@@ -36,7 +35,7 @@ public sealed class ChatHub(
         presence.Connect(
             Context.ConnectionId,
             user.Id,
-            user.Username,
+            user.UserName,
             user.DisplayName,
             user.AvatarUrl);
 
@@ -217,7 +216,7 @@ public sealed class ChatHub(
                 x.Id,
                 x.ConversationId,
                 x.SenderUserId,
-                x.Sender == null ? null : x.Sender.Username,
+                x.Sender == null ? null : x.Sender.UserName,
                 x.Sender == null ? null : x.Sender.AvatarUrl,
                 x.DeletedAt == null ? x.Content : null,
                 x.MessageType,
@@ -1554,7 +1553,7 @@ public sealed class ChatHub(
         }
 
         var normalized = Username.Normalize(username);
-        return await db.Users.SingleOrDefaultAsync(x => x.NormalizedUsername == normalized);
+        return await db.Users.SingleOrDefaultAsync(x => x.NormalizedUserName == normalized);
     }
 
     public static string ConversationGroup(Guid conversationId) =>

@@ -117,9 +117,9 @@ public sealed class UserNotesController(ChatAppDbContext db) : ControllerBase
                 x => x.Id == id && x.UserId == user.Id, ct)) return NotFound();
         var shares = await db.UserNoteShares.AsNoTracking()
             .Where(x => x.NoteId == id)
-            .OrderBy(x => x.GranteeUser.DisplayName)
-            .Select(x => new UserNoteShareDto(x.Id, x.GranteeUser.Username,
-                x.GranteeUser.DisplayName, x.Permission))
+            .OrderBy(x => (((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim() == "" ? x.GranteeUser.UserName : ((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim()))
+            .Select(x => new UserNoteShareDto(x.Id, x.GranteeUser.UserName,
+                (((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim() == "" ? x.GranteeUser.UserName : ((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim()), x.Permission))
             .ToListAsync(ct);
         return Ok(shares);
     }
@@ -166,7 +166,7 @@ public sealed class UserNotesController(ChatAppDbContext db) : ControllerBase
         else share.Permission = request.Permission;
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
-        return Ok(new UserNoteShareDto(share.Id, grantee.Username,
+        return Ok(new UserNoteShareDto(share.Id, grantee.UserName,
             grantee.DisplayName, share.Permission));
     }
 
@@ -186,7 +186,7 @@ public sealed class UserNotesController(ChatAppDbContext db) : ControllerBase
 
     private async Task<ChatUser?> FindUser(string? username, CancellationToken ct) =>
         await db.Users.SingleOrDefaultAsync(x =>
-            x.NormalizedUsername == Username.Normalize(username) &&
+            x.NormalizedUserName == Username.Normalize(username) &&
             x.Status == "active", ct);
 
     private IQueryable<UserNote> ReadQuery() => db.UserNotes.AsNoTracking()
@@ -204,7 +204,7 @@ public sealed class UserNotesController(ChatAppDbContext db) : ControllerBase
     private static UserNoteDto ToDto(UserNote note, Guid userId) => new(
         note.Id, note.Title, note.Content, note.IsPinned,
         note.CreatedAt, note.UpdatedAt,
-        note.User.Username, note.User.DisplayName,
+        note.User.UserName, note.User.DisplayName,
         note.UserId == userId ? "owner" :
             note.Shares.Single(x => x.GranteeUserId == userId).Permission,
         note.UserId == userId ? note.Shares.Count : 0);

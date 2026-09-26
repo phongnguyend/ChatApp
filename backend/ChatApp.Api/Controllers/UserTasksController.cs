@@ -166,12 +166,12 @@ public sealed class UserTasksController(ChatAppDbContext db) : ControllerBase
                 x => x.Id == id && x.UserId == user.Id, ct)) return NotFound();
         var shared = await db.UserTaskShares.AsNoTracking()
             .Where(x => x.TaskId == id && x.GranteeUser.Status == "active")
-            .OrderBy(x => x.GranteeUser.DisplayName)
+            .OrderBy(x => (((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim() == "" ? x.GranteeUser.UserName : ((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim()))
             .Select(x => new UserTaskAssigneeCandidateDto(x.GranteeUserId,
-                x.GranteeUser.Username, x.GranteeUser.DisplayName))
+                x.GranteeUser.UserName, (((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim() == "" ? x.GranteeUser.UserName : ((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim())))
             .ToListAsync(ct);
         shared.Insert(0, new UserTaskAssigneeCandidateDto(user.Id,
-            user.Username, user.DisplayName));
+            user.UserName, user.DisplayName));
         return Ok(shared);
     }
 
@@ -184,9 +184,9 @@ public sealed class UserTasksController(ChatAppDbContext db) : ControllerBase
                 x => x.Id == id && x.UserId == user.Id, ct)) return NotFound();
         var shares = await db.UserTaskShares.AsNoTracking()
             .Where(x => x.TaskId == id)
-            .OrderBy(x => x.GranteeUser.DisplayName)
-            .Select(x => new UserTaskShareDto(x.Id, x.GranteeUserId, x.GranteeUser.Username,
-                x.GranteeUser.DisplayName, x.Permission))
+            .OrderBy(x => (((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim() == "" ? x.GranteeUser.UserName : ((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim()))
+            .Select(x => new UserTaskShareDto(x.Id, x.GranteeUserId, x.GranteeUser.UserName,
+                (((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim() == "" ? x.GranteeUser.UserName : ((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim()), x.Permission))
             .ToListAsync(ct);
         return Ok(shares);
     }
@@ -233,7 +233,7 @@ public sealed class UserTasksController(ChatAppDbContext db) : ControllerBase
         else share.Permission = request.Permission;
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
-        return Ok(new UserTaskShareDto(share.Id, grantee.Id, grantee.Username,
+        return Ok(new UserTaskShareDto(share.Id, grantee.Id, grantee.UserName,
             grantee.DisplayName, share.Permission));
     }
 
@@ -262,7 +262,7 @@ public sealed class UserTasksController(ChatAppDbContext db) : ControllerBase
 
     private async Task<ChatUser?> FindUser(string? username, CancellationToken ct) =>
         await db.Users.SingleOrDefaultAsync(x =>
-            x.NormalizedUsername == Username.Normalize(username) &&
+            x.NormalizedUserName == Username.Normalize(username) &&
             x.Status == "active", ct);
 
     private IQueryable<UserTask> ReadQuery() => db.UserTasks.AsNoTracking()
@@ -288,11 +288,11 @@ public sealed class UserTasksController(ChatAppDbContext db) : ControllerBase
     private static UserTaskDto ToDto(UserTask task, Guid userId) => new(
         task.Id, task.Title, task.Description, task.DueDate, task.Priority,
         task.IsCompleted, task.CompletedAt, task.CreatedAt, task.UpdatedAt,
-        task.User.Id, task.User.Username, task.User.DisplayName,
+        task.User.Id, task.User.UserName, task.User.DisplayName,
         task.UserId == userId ? "owner" :
             task.Shares.Single(x => x.GranteeUserId == userId).Permission,
         task.UserId == userId ? task.Shares.Count : 0,
-        task.AssigneeUserId, task.AssigneeUser?.Username,
+        task.AssigneeUserId, task.AssigneeUser?.UserName,
         task.AssigneeUser?.DisplayName);
 }
 

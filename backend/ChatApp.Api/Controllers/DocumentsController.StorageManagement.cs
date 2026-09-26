@@ -8,6 +8,7 @@ public sealed partial class DocumentsController
 {
     private const long MaximumStorageLimit = 100L * 1024 * 1024 * 1024 * 1024;
 
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = ChatApp.Domain.Security.AppRoles.GlobalAdmin)]
     [HttpGet("storage-management")]
     public async Task<IActionResult> StorageManagement([FromQuery] string username,
         [FromQuery] string? query, [FromQuery] int offset,
@@ -23,16 +24,16 @@ public sealed partial class DocumentsController
         if (!string.IsNullOrEmpty(term))
         {
             var normalized = Username.Normalize(term);
-            users = users.Where(x => x.NormalizedUsername.Contains(normalized) ||
-                x.DisplayName.Contains(term));
+            users = users.Where(x => x.NormalizedUserName.Contains(normalized) ||
+                (((x.FirstName ?? "") + " " + (x.LastName ?? "")).Trim() == "" ? x.UserName : ((x.FirstName ?? "") + " " + (x.LastName ?? "")).Trim()).Contains(term));
         }
 
         const int pageSize = 100;
         var totalCount = await users.CountAsync(cancellationToken);
-        var page = await users.OrderBy(x => x.NormalizedUsername)
+        var page = await users.OrderBy(x => x.NormalizedUserName)
             .Skip(offset).Take(pageSize).Select(x => new
             {
-                x.Id, x.Username, x.DisplayName, x.Status,
+                x.Id, Username = x.UserName, DisplayName = (((x.FirstName ?? "") + " " + (x.LastName ?? "")).Trim() == "" ? x.UserName : ((x.FirstName ?? "") + " " + (x.LastName ?? "")).Trim()), x.Status,
                 CustomLimitBytes = x.DocumentStorageLimitBytes,
             }).ToArrayAsync(cancellationToken);
         var ids = page.Select(x => x.Id).ToArray();
@@ -68,6 +69,7 @@ public sealed partial class DocumentsController
             defaultLimit, userCount, allDocumentBytes + allVersionBytes));
     }
 
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = ChatApp.Domain.Security.AppRoles.GlobalAdmin)]
     [HttpPut("storage-management/{userId:guid}/limit")]
     public async Task<IActionResult> SetStorageLimit(Guid userId,
         [FromQuery] string username, SetStorageLimitRequest request,

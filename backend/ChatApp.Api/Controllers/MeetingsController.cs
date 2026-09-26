@@ -59,12 +59,12 @@ public sealed class MeetingsController(
         if (!string.IsNullOrEmpty(name))
             query = query.Where(x => x.Title.Contains(name));
         if (tab == "invited" && !string.IsNullOrEmpty(organizer))
-            query = query.Where(x => x.OrganizerUser.DisplayName.Contains(organizer) ||
-                x.OrganizerUser.Username.Contains(organizer));
+            query = query.Where(x => (((x.OrganizerUser.FirstName ?? "") + " " + (x.OrganizerUser.LastName ?? "")).Trim() == "" ? x.OrganizerUser.UserName : ((x.OrganizerUser.FirstName ?? "") + " " + (x.OrganizerUser.LastName ?? "")).Trim()).Contains(organizer) ||
+                x.OrganizerUser.UserName.Contains(organizer));
         if (!string.IsNullOrEmpty(participant))
             query = query.Where(x => x.Participants.Any(person =>
-                person.User.DisplayName.Contains(participant) ||
-                person.User.Username.Contains(participant)));
+                (((person.User.FirstName ?? "") + " " + (person.User.LastName ?? "")).Trim() == "" ? person.User.UserName : ((person.User.FirstName ?? "") + " " + (person.User.LastName ?? "")).Trim()).Contains(participant) ||
+                person.User.UserName.Contains(participant)));
         var meetings = await query.OrderByDescending(x => x.StartDate)
             .ThenByDescending(x => x.StartTime)
             .ThenByDescending(x => x.Id)
@@ -399,7 +399,7 @@ public sealed class MeetingsController(
     private async Task<ChatUser?> FindUser(string username,
         CancellationToken cancellationToken) =>
         await db.Users.SingleOrDefaultAsync(x =>
-            x.NormalizedUsername == Username.Normalize(username) &&
+            x.NormalizedUserName == Username.Normalize(username) &&
             x.Status == "active", cancellationToken);
 
     private IQueryable<ScheduledMeeting> ReadQuery() =>
@@ -593,14 +593,14 @@ public sealed class MeetingsController(
         meeting.Status,
         meeting.OrganizerUserId,
         meeting.OrganizerUser.DisplayName,
-        meeting.OrganizerUser.Username,
+        meeting.OrganizerUser.UserName,
         meeting.OrganizerUserId == viewerId,
         meeting.Participants.SingleOrDefault(x => x.UserId == viewerId)
             ?.ResponseStatus,
         meeting.Participants
-            .OrderBy(x => x.User.DisplayName)
-            .Select(x => new MeetingPersonDto(x.UserId, x.User.DisplayName,
-                x.User.Username, x.ResponseStatus, x.RespondedAt))
+            .OrderBy(x => (((x.User.FirstName ?? "") + " " + (x.User.LastName ?? "")).Trim() == "" ? x.User.UserName : ((x.User.FirstName ?? "") + " " + (x.User.LastName ?? "")).Trim()))
+            .Select(x => new MeetingPersonDto(x.UserId, (((x.User.FirstName ?? "") + " " + (x.User.LastName ?? "")).Trim() == "" ? x.User.UserName : ((x.User.FirstName ?? "") + " " + (x.User.LastName ?? "")).Trim()),
+                x.User.UserName, x.ResponseStatus, x.RespondedAt))
             .ToArray(),
         meeting.CreatedAt,
         meeting.UpdatedAt,

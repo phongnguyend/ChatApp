@@ -39,8 +39,8 @@ public sealed partial class DocumentsController
                 x.Message.ConversationId,
                 ConversationType = x.Message.Conversation.Type,
                 ConversationTitle = x.Message.Conversation.Title,
-                SenderUsername = x.Message.Sender!.Username,
-                SenderDisplayName = x.Message.Sender.DisplayName,
+                SenderUsername = x.Message.Sender!.UserName,
+                SenderDisplayName = (((x.Message.Sender.FirstName ?? "") + " " + (x.Message.Sender.LastName ?? "")).Trim() == "" ? x.Message.Sender.UserName : ((x.Message.Sender.FirstName ?? "") + " " + (x.Message.Sender.LastName ?? "")).Trim()),
                 SharedAt = x.Message.CreatedAt,
             }).ToListAsync(cancellationToken);
         var hasMore = page.Count > pageSize;
@@ -50,7 +50,7 @@ public sealed partial class DocumentsController
         var directMembers = await db.ConversationMembers
             .AsNoTracking().Where(x => directIds.Contains(x.ConversationId) &&
                 x.UserId != actor.Id && x.LeftAt == null)
-            .Select(x => new { x.ConversationId, x.User.DisplayName })
+            .Select(x => new { x.ConversationId, DisplayName = (((x.User.FirstName ?? "") + " " + (x.User.LastName ?? "")).Trim() == "" ? x.User.UserName : ((x.User.FirstName ?? "") + " " + (x.User.LastName ?? "")).Trim()) })
             .ToArrayAsync(cancellationToken);
         var directNames = directMembers.GroupBy(x => x.ConversationId)
             .ToDictionary(x => x.Key, x => x.First().DisplayName);

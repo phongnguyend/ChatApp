@@ -41,7 +41,7 @@ public sealed class UserNotificationsController(ChatAppDbContext db) : Controlle
             .ThenByDescending(x => x.Id)
             .Skip(page * pageSize).Take(pageSize + 1)
             .Select(x => new UserNotificationDto(x.Id, x.Type, x.TargetId, x.ContextId,
-                x.TargetTitle, x.Details, x.ActorUser.DisplayName, x.ActorUser.Username,
+                x.TargetTitle, x.Details, (((x.ActorUser.FirstName ?? "") + " " + (x.ActorUser.LastName ?? "")).Trim() == "" ? x.ActorUser.UserName : ((x.ActorUser.FirstName ?? "") + " " + (x.ActorUser.LastName ?? "")).Trim()), x.ActorUser.UserName,
                 x.CreatedAt, x.ReadAt))
             .ToArrayAsync(ct);
         return Ok(new UserNotificationPageDto(items.Take(pageSize).ToArray(),
@@ -78,7 +78,7 @@ public sealed class UserNotificationsController(ChatAppDbContext db) : Controlle
     }
 
     private async Task<Guid?> FindUserId(string? username, CancellationToken ct) =>
-        await db.Users.Where(x => x.NormalizedUsername == Username.Normalize(username) &&
+        await db.Users.Where(x => x.NormalizedUserName == Username.Normalize(username) &&
                 x.Status == "active")
             .Select(x => (Guid?)x.Id).SingleOrDefaultAsync(ct);
 }

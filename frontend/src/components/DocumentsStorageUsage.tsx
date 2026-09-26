@@ -1,3 +1,4 @@
+import { authFetch as fetch } from "../services/auth";
 import { useEffect, useState } from "react";
 import "./DocumentsStorageUsage.css";
 

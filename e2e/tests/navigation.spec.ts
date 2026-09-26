@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createUser, login, openSection } from './helpers.js';
+import { adminEmail, adminPassword, createUser, login, openSection } from './helpers.js';
 
 test('sign in, switch theme, and navigate the work sections', async ({ page, request }) => {
   const user = await createUser(request, 'nav');
@@ -40,4 +40,41 @@ test('sign in, switch theme, and navigate the work sections', async ({ page, req
   await expect(page.locator('.sidebar')).toHaveCSS('width', '56px');
   await expect(page.locator('.conversations-panel')).toBeVisible();
   await expect(page.locator('.conversations-panel')).toHaveCSS('width', '274px');
+});
+
+
+test('account and administration pages share the existing shell and navigation', async ({ page }) => {
+  await login(page, adminEmail, adminPassword);
+  const header = await page.locator('.layout-header').elementHandle();
+  const navigation = page.getByRole('navigation', { name: 'Main sections' });
+  for (const section of ['Users', 'Activity log', 'Account settings']) {
+    await navigation.getByRole('button', { name: section, exact: true }).click();
+    await expect(page.getByRole('heading', { name: section, exact: true })).toBeVisible();
+    await expect(page.locator('.chat-shell > .account-workspace')).toBeVisible();
+    await expect(page.getByRole('main')).toHaveCount(1);
+    await expect(navigation.getByRole('button', { name: section, exact: true })).toHaveAttribute('aria-current', 'page');
+    await expect(page.locator('.conversation-panel')).toBeHidden();
+    if (section !== 'Account settings') {
+      const workspace = page.locator('.account-table-page');
+      const table = workspace.locator('.account-table-wrap');
+      await expect(table).toBeVisible();
+      await expect(workspace).toHaveCSS('overflow-y', 'hidden');
+      await expect(table).toHaveCSS('overflow-y', 'auto');
+      const headingTop = await workspace.locator('h1').evaluate(element => element.getBoundingClientRect().top);
+      await table.evaluate(element => { element.scrollTop = 200; });
+      await expect.poll(() => table.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+      expect(await workspace.locator('h1').evaluate(element => element.getBoundingClientRect().top)).toBe(headingTop);
+      expect(await workspace.evaluate(element => element.scrollHeight <= element.clientHeight + 1)).toBeTruthy();
+    }
+    expect(await header!.evaluate(element => element.isConnected)).toBeTruthy();
+    await openSection(page, 'Notes');
+    await expect(page.locator('.account-workspace')).toHaveCount(0);
+  }
+  await navigation.getByRole('button', { name: 'Chat', exact: true }).click();
+  await expect(page.locator('.conversation-panel')).toBeVisible();
+  await page.setViewportSize({ width: 900, height: 540 });
+  await navigation.getByRole('button', { name: 'Account settings', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Account settings', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Back to chat', exact: true }).click();
+  await expect(page.locator('.conversation-panel')).toBeVisible();
 });

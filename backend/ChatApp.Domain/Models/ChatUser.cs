@@ -1,11 +1,18 @@
+using Microsoft.AspNetCore.Identity;
+
 namespace ChatApp.Domain.Models;
 
-public sealed class ChatUser
+public sealed class ChatUser : IdentityUser<Guid>
 {
-    public Guid Id { get; set; }
-    public required string Username { get; set; }
-    public required string NormalizedUsername { get; set; }
-    public required string DisplayName { get; set; }
+    [System.Diagnostics.CodeAnalysis.AllowNull]
+    public override string UserName { get; set => field = value ?? string.Empty; } = string.Empty;
+    [System.Diagnostics.CodeAnalysis.AllowNull]
+    public override string NormalizedUserName { get; set => field = value ?? string.Empty; } = string.Empty;
+    public string DisplayName => string.IsNullOrWhiteSpace((FirstName ?? "") + (LastName ?? "")) ? UserName : ((FirstName ?? "") + " " + (LastName ?? "")).Trim();
+    public bool IsEnabled { get; set; } = true;
+    public bool AllowPasswordAuthentication { get; set; }
+    public string? FirstName { get; set; }
+    public string? LastName { get; set; }
     public string? AvatarUrl { get; set; }
     public string Status { get; set; } = "active";
     public long? DocumentStorageLimitBytes { get; set; }

@@ -110,7 +110,7 @@ public sealed class UserRemindersController(ChatAppDbContext db) : ControllerBas
     }
 
     private async Task<Guid?> FindUserId(string? username, CancellationToken ct) =>
-        await db.Users.Where(x => x.NormalizedUsername == Username.Normalize(username) &&
+        await db.Users.Where(x => x.NormalizedUserName == Username.Normalize(username) &&
                 x.Status == "active")
             .Select(x => (Guid?)x.Id).SingleOrDefaultAsync(ct);
 

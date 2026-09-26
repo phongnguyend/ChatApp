@@ -1,3 +1,4 @@
+import { authFetch as fetch } from "../services/auth";
 import { ArrowLeft, AtSign, Bell, CalendarDays, Check, CheckCheck, ClipboardList, FileText, FolderOpen, LoaderCircle, MessageCircle, NotebookPen, Radio, RefreshCw, Reply, UserRoundCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import "./NotificationsView.css";

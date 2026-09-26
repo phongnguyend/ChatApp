@@ -24,7 +24,7 @@ public sealed class CallingController(
         var normalized = Username.Normalize(username);
         var user = await db.Users.SingleOrDefaultAsync(
             item =>
-                item.NormalizedUsername == normalized &&
+                item.NormalizedUserName == normalized &&
                 item.Status == "active",
             cancellationToken);
         if (user is null)

@@ -35,8 +35,11 @@ test('direct conversation sends, edits, and deletes a message', async ({ browser
     await message.locator('.message-edit-form textarea').fill(edited);
     await message.getByRole('button', { name: 'Save' }).click();
     await expect(message).toContainText(edited);
-    await message.locator('.message-body').hover();
-    await message.getByRole('button', { name: 'Delete message' }).click({ force: true });
+    const deleteButton = message.getByRole('button', { name: 'Delete message' });
+    await expect(deleteButton).toBeEnabled();
+    // Keep the hover toolbar open through its supported keyboard-focus state.
+    await deleteButton.focus();
+    await deleteButton.press('Enter');
     await senderPage.getByRole('alertdialog', { name: 'Delete this message?' }).getByRole('button', { name: 'Delete message' }).click();
     await expect(message).toHaveCount(0);
   } finally {

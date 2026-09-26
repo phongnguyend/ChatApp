@@ -1,3 +1,4 @@
+import { authFetch as fetch } from "../services/auth";
 import { ArrowLeft, CalendarDays, CalendarX2, Check, CheckCircle2, Clock3, HelpCircle, LoaderCircle, MessageCircle, Pencil, Plus, Search, UserRound, Users, Video, X, XCircle } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import "./MeetingsView.css";

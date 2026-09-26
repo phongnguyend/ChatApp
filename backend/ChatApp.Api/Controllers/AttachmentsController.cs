@@ -25,7 +25,7 @@ public sealed class AttachmentsController(
                 x.Id == id &&
                 x.Message.DeletedAt == null &&
                 x.Message.Conversation.Members.Any(member =>
-                    member.User.NormalizedUsername == normalized &&
+                    member.User.NormalizedUserName == normalized &&
                     member.LeftAt == null))
             .Select(x => new
             {

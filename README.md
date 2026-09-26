@@ -5,7 +5,7 @@ A simple real-time chat application built with:
 - ASP.NET Core 10 Web API and SignalR
 - Entity Framework Core 10 with SQL Server
 - React 19, TypeScript, and Vite
-- Username-only sign-in
+- ASP.NET Identity accounts, password/Google/Microsoft sign-in, and User/Global Admin roles
 
 The app includes persistent message history, pair-unique direct messages,
 multi-person group creation, live group member management, user discovery, online
@@ -46,9 +46,8 @@ use
 
 Document storage defaults to `Documents:DefaultStorageLimitBytes` (5 GiB in
 `appsettings.json`). The Storage management screen shows each user's document
-usage, including older versions, and lets any active user set an individual
-limit or restore the default. Access permissions for this screen and API can be
-added later.
+usage, including older versions, and lets a Global Admin set an individual
+limit or restore the default. Both the screen and API require the Global Admin role.
 
 ## Project structure
 
@@ -153,7 +152,71 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`, enter a username, and join the General conversation.
+Open `http://localhost:5173` and sign in with your account to join the General conversation.
+
+### Accounts and first administrator
+
+Before starting the API, supply `Authentication__Jwt__SigningKey` as at least
+32 random bytes encoded in base64. Keep it in user secrets or your deployment's
+secret store. All API instances must use the same key. JWT issuer and audience
+default to `ChatApp` and `ChatApp.Api`; the default lifetime is 60 minutes.
+
+For local PowerShell development, set the signing key before `dotnet run`:
+
+```powershell
+$signingBytes = New-Object byte[] 32
+[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($signingBytes)
+$env:Authentication__Jwt__SigningKey = [Convert]::ToBase64String($signingBytes)
+```
+
+Startup ensures the built-in role definitions exist; it does not create users,
+set passwords, or assign permissions to existing accounts. To grant an existing
+user a role, set `@UserId` and `@RoleName` in
+[`backend/scripts/assign-user-role.sql`](backend/scripts/assign-user-role.sql)
+and run it against the migrated database. The script is idempotent and records
+new grants in the activity log. It does not change credentials or enable accounts.
+The first administrator must already have a working sign-in method (for example,
+sign in through a configured Google or Microsoft provider, then grant that user
+`Global Admin`).
+
+The account migration preserves existing chat user IDs, memberships, messages,
+and files. Legacy accounts start without credentials. In **Users**, an
+administrator can assign an email once, then enable password authentication and
+set a password. Alternatively, after email assignment, an unlinked account can
+sign in with a verified Google identity. Existing account emails are immutable.
+
+Global Admins can create/edit users, assign the fixed `User` and `Global Admin`
+roles, view lockout state, enable/disable accounts, and manage password access.
+Users cannot disable themselves or remove their own Global Admin role, and the
+last enabled administrator is protected. Authentication and user-management changes appear in the admin activity log.
+
+**Account settings** supports profile changes, password changes, and connecting
+a Microsoft identity. Five failed password attempts lock password sign-in for
+15 minutes. Password changes and sign-out invalidate existing application
+sessions across devices. Disabled accounts lose API access immediately; open
+SignalR connections are checked on every invocation and every 10 seconds.
+Role changes are reloaded on each authenticated API request.
+
+Google sign-in requires `Authentication__Google__ClientId` on the API and
+`VITE_GOOGLE_CLIENT_ID` in the frontend. Register the frontend redirect URI
+(locally `http://localhost:5173/`) and set `VITE_GOOGLE_REDIRECT_URI` if needed.
+Microsoft sign-in requires `Authentication__Microsoft__ClientId`,
+`Authentication__Microsoft__TenantId`, `VITE_MICROSOFT_CLIENT_ID`, and
+`VITE_MICROSOFT_TENANT_ID`; register the frontend redirect as an SPA and optionally
+set `VITE_MICROSOFT_REDIRECT_URI`. Microsoft accounts with an existing email must
+be explicitly connected from an authenticated profile; they are never merged by email.
+Neither provider requires copying credentials from the Webhooks project.
+
+API calls use application Bearer tokens stored in browser session storage.
+An HttpOnly cookie supports protected media GETs only; it never authorizes
+mutations. Use HTTPS in production. Prefer same-site frontend/API domains so
+browser third-party cookie restrictions do not block authenticated media.
+Public document links and avatar images remain public; username-only sessions
+and caller-supplied identity impersonation are no longer supported.
+
+Set the same secret `RecordingCallbacks__Key` on API, Background, and Azure
+Functions when using recording processing. The internal completion callback
+requires this key; application user tokens cannot authorize it.
 
 Direct calls, group meetings, live streams, and call recording require Azure
 Communication Services. Configure the API with the resource connection string;
@@ -201,6 +264,9 @@ To verify the production builds and live persistence flow:
 ```powershell
 dotnet build backend/ChatApp.slnx
 npm --prefix frontend run build
+# These scripts create accounts in the target environment; use a test database.
+$env:TEST_ADMIN_EMAIL = 'admin@example.com'
+$env:TEST_ADMIN_PASSWORD = Read-Host 'Test administrator password'
 npm --prefix frontend run test:smoke
 ```
 
@@ -1296,7 +1362,11 @@ uploads to be cleaned up without creating long-lived document relationships.
 
 The API applies pending migrations during startup with
 `Database.MigrateAsync()`. The current migration tip is
-`20260922235007_AddMessagePolls`.
+`20260926144543_RemoveStoredDisplayName`.
+
+User names are derived from `FirstName` and `LastName`, falling back to the username when both are empty. `DisplayName` remains a read-only API value and is not stored in the database. The migration preserves legacy display names in `FirstName` only where both name fields are empty, then drops `Users.DisplayName`.
+
+Identity uses `ChatUser` and the existing `Users` table. The authentication migration extends `Users` directly, preserving existing user IDs, chat handles, and conversation links. New user and role IDs are generated by SQL Server with `NEWSEQUENTIALID()`.
 
 ```powershell
 cd backend
@@ -1321,3 +1391,9 @@ dotnet ef database update `
 Review generated migrations before committing them. Keep the migration,
 designer file, and `ChatAppDbContextModelSnapshot.cs` together. Never edit a
 migration that has already been deployed; create a new migration instead.
+
+### Activity log
+
+Global Admins can open **Activity log** to search authentication and user-management events by category, event, user name or ID, and date range. The log includes sign-in success/failure, lockout, logout, account creation/profile edits, role changes, account enable/disable, password changes, password authentication settings, and external login linking. It excludes chat, document, meeting, and other feature activity. Passwords, tokens, and provider credentials are never stored in log metadata. Entries use SQL-generated IDs and preserve user identity snapshots.
+
+`backend/ChatApp.Api/appsettings.json` lists JWT, Google, Microsoft, and recording callback settings. Supply blank secrets through user-secrets or environment variables; do not commit signing keys or callback keys. Provider client and tenant IDs remain optional.

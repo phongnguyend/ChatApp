@@ -1,3 +1,11 @@
+import { Users as AccountUsersIcon, History as AccountHistoryIcon, Settings as AccountSettingsIcon } from "lucide-react";
+import { ActivityLogPage } from "./pages/ActivityLogPage";
+import { LoginPage } from "./pages/LoginPage";
+import { UsersPage } from "./pages/UsersPage";
+import { AccountPage } from "./pages/AccountPage";
+import { accountApi, initialSession, getAccessToken, loadProfile, logout, clearSession, type AccountUser } from "./services/auth";
+import { authFetch as fetch } from "./services/auth";
+import { InvitationQrCode } from "./components/InvitationQrCode";
 import {
   HubConnectionBuilder,
   HubConnectionState,
@@ -129,7 +137,6 @@ import {
   LiveStreamConversationControls,
   LiveStreams,
 } from "./components/LiveStreams";
-
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5045";
 const LIVE_CHAT_OFFLINE_ERROR =
   "Live chat is offline. Check that the server is running.";
@@ -138,12 +145,7 @@ const LiveLocationMap = lazy(async () => {
   return { default: module.LiveLocationMap };
 });
 
-type User = {
-  id: string;
-  username: string;
-  displayName: string;
-  avatarUrl: string | null;
-};
+type User = AccountUser;
 
 type Conversation = {
   id: string;
@@ -1162,125 +1164,6 @@ function ThemeSwitcher({
   );
 }
 
-function LoginScreen({
-  onLogin,
-  themeControl,
-}: {
-  onLogin: (user: User) => void;
-  themeControl: ReactNode;
-}) {
-  const [username, setUsername] = useState("");
-  const [error, setError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setError("");
-    setIsSubmitting(true);
-
-    try {
-      const response = await fetch(`${API_URL}/api/session`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username }),
-      });
-      if (!response.ok) throw new Error(await readError(response));
-      onLogin((await response.json()) as User);
-    } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "The chat service is unavailable.",
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  return (
-    <main className="login-page">
-      <section className="login-story" aria-label="Welcome to Huddle">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            <MessageCircleMore size={22} strokeWidth={2.5} />
-          </span>
-          <span>Huddle</span>
-        </div>
-        <div className="story-copy">
-          <p className="eyebrow">A calmer place to chat</p>
-          <h1>Good conversation starts with showing up.</h1>
-          <p>
-            Share an idea, ask a question, or simply say hello. Your team is
-            already here.
-          </p>
-        </div>
-        <div className="conversation-preview" aria-hidden="true">
-          <div className="preview-avatar preview-avatar-one">AK</div>
-          <div className="preview-bubble">
-            <span className="preview-name">Avery</span>
-            The new direction feels exactly right.
-          </div>
-          <div className="preview-bubble preview-reply">
-            <span className="preview-name">Mina</span>
-            Agreed — let’s share it with everyone ✨
-          </div>
-        </div>
-        <p className="story-footer">Simple, real-time, and made for people.</p>
-      </section>
-
-      <section className="login-panel">
-        {themeControl}
-        <form className="login-card" onSubmit={submit}>
-          <div className="mobile-brand brand">
-            <span className="brand-mark" aria-hidden="true">
-              <MessageCircleMore size={20} />
-            </span>
-            <span>Huddle</span>
-          </div>
-          <div>
-            <p className="eyebrow">Welcome in</p>
-            <h2>Join the conversation</h2>
-            <p className="login-subtitle">
-              Choose a name people will recognize.
-            </p>
-          </div>
-          <label htmlFor="username">Your name</label>
-          <input
-            id="username"
-            name="username"
-            autoComplete="username"
-            autoFocus
-            maxLength={50}
-            placeholder="e.g. Jamie Chen"
-            value={username}
-            onChange={(event) => setUsername(event.target.value)}
-            aria-describedby={error ? "login-error" : undefined}
-          />
-          {error && (
-            <p className="form-error" id="login-error" role="alert">
-              {error}
-            </p>
-          )}
-          <button
-            className="primary-button"
-            disabled={isSubmitting || username.trim().length < 2}
-            type="submit"
-          >
-            {isSubmitting ? (
-              <LoaderCircle className="spin" size={18} />
-            ) : (
-              "Enter Huddle"
-            )}
-          </button>
-          <p className="login-note">
-            No password needed. Just bring your good self.
-          </p>
-        </form>
-      </section>
-    </main>
-  );
-}
-
 function ChatApp({
   user,
   onLogout,
@@ -1289,9 +1172,10 @@ function ChatApp({
 }: {
   user: User;
   onLogout: () => void;
-  onUserUpdated: (user: User) => void;
+  onUserUpdated: (user: Partial<User>) => void;
   themeControl: ReactNode;
 }) {
+  const [accountView, setAccountView] = useState<"chat" | "users" | "account" | "activity">("chat");
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [conversationTab, setConversationTab] =
@@ -1459,12 +1343,13 @@ function ChatApp({
   const [avatarDialog, setAvatarDialog] = useState<"user" | "group" | null>(
     null,
   );
-  const [profileTab, setProfileTab] = useState<"avatar" | "display-name">(
+  const [profileTab, setProfileTab] = useState<"avatar" | "name">(
     "avatar",
   );
-  const [displayNameDraft, setDisplayNameDraft] = useState(user.displayName);
-  const [displayNameError, setDisplayNameError] = useState("");
-  const [isSavingDisplayName, setIsSavingDisplayName] = useState(false);
+  const [firstNameDraft, setFirstNameDraft] = useState(user.firstName ?? '');
+  const [lastNameDraft, setLastNameDraft] = useState(user.lastName ?? '');
+  const [profileNameError, setProfileNameError] = useState("");
+  const [isSavingProfileName, setIsSavingProfileName] = useState(false);
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
   const [sharedConversation, setSharedConversation] =
     useState<Conversation | null>(null);
@@ -1909,7 +1794,8 @@ function ChatApp({
     let retryTimer: number | null = null;
     const connection = new HubConnectionBuilder()
       .withUrl(
-        `${API_URL}/hubs/chat?username=${encodeURIComponent(user.username)}`,
+        `${API_URL}/hubs/chat`,
+        { accessTokenFactory: getAccessToken },
       )
       .withAutomaticReconnect([0, 1500, 4000, 8000])
       .configureLogging(LogLevel.Warning)
@@ -4177,43 +4063,24 @@ function ChatApp({
     onUserUpdated(updatedUser);
   }
 
-  async function updateDisplayName(event: FormEvent<HTMLFormElement>) {
+  async function updateProfileName(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isSavingDisplayName) return;
+    if (isSavingProfileName) return;
 
-    const displayName = displayNameDraft.trim();
-    if (displayName.length < 2 || displayName.length > 100) {
-      setDisplayNameError("Display name must be between 2 and 100 characters.");
-      return;
-    }
-
-    setIsSavingDisplayName(true);
-    setDisplayNameError("");
+    setIsSavingProfileName(true);
+    setProfileNameError("");
     try {
-      const response = await fetch(
-        `${API_URL}/api/users/display-name?username=${encodeURIComponent(
-          user.username,
-        )}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ displayName }),
-        },
-      );
-      if (!response.ok) throw new Error(await readError(response));
-
-      const updatedUser = (await response.json()) as User;
-      onUserUpdated(updatedUser);
-      setDisplayNameDraft(updatedUser.displayName);
+      await accountApi('/api/auth/me', { method: 'PUT', body: JSON.stringify({ firstName: firstNameDraft.trim(), lastName: lastNameDraft.trim(), phoneNumber: user.phoneNumber }) });
+      onUserUpdated(await loadProfile(false));
       setAvatarDialog(null);
     } catch (requestError) {
-      setDisplayNameError(
+      setProfileNameError(
         requestError instanceof Error
           ? requestError.message
-          : "Could not update your display name.",
+          : "Could not update your name.",
       );
     } finally {
-      setIsSavingDisplayName(false);
+      setIsSavingProfileName(false);
     }
   }
 
@@ -4244,7 +4111,21 @@ function ChatApp({
 
   const currentTypingUsers = activeId ? (typingUsers[activeId] ?? []) : [];
   const isOnline = status === "connected";
+  const isAccountOpen = accountView !== "chat" && (accountView === "account" || user.roles.includes("Global Admin"));
+  function openAccountSection(view: "users" | "activity" | "account") {
+    setIsCalendarOpen(false);
+    setIsMeetingsOpen(false);
+    setIsDocumentsOpen(false);
+    setIsStorageManagementOpen(false);
+    setIsTasksOpen(false);
+    setIsNotesOpen(false);
+    setIsRemindersOpen(false);
+    setIsNotificationsOpen(false);
+    setIsSidebarOpen(false);
+    setAccountView(view);
+  }
   const isChatOpen =
+    !isAccountOpen &&
     !isCalendarOpen &&
     !isMeetingsOpen &&
     !isDocumentsOpen &&
@@ -4255,7 +4136,7 @@ function ChatApp({
     !isNotificationsOpen;
 
   return (
-    <main className={`chat-shell ${isChatOpen ? "chat-open" : "section-open"} ${isCalendarOpen ? "calendar-open" : ""} ${isMeetingsOpen ? "meetings-open" : ""} ${isDocumentsOpen ? "documents-open" : ""} ${isStorageManagementOpen ? "storage-management-open" : ""} ${isTasksOpen ? "tasks-open" : ""} ${isNotesOpen ? "notes-open" : ""} ${isRemindersOpen ? "reminders-open" : ""} ${isNotificationsOpen ? "notifications-open" : ""}`}>
+    <main className={`chat-shell ${isChatOpen ? "chat-open" : "section-open"} ${isAccountOpen ? "account-open" : ""} ${isCalendarOpen ? "calendar-open" : ""} ${isMeetingsOpen ? "meetings-open" : ""} ${isDocumentsOpen ? "documents-open" : ""} ${isStorageManagementOpen ? "storage-management-open" : ""} ${isTasksOpen ? "tasks-open" : ""} ${isNotesOpen ? "notes-open" : ""} ${isRemindersOpen ? "reminders-open" : ""} ${isNotificationsOpen ? "notifications-open" : ""}`}>
       <button
         className={`mobile-scrim ${isSidebarOpen ? "visible" : ""}`}
         aria-label="Close conversation menu"
@@ -4282,8 +4163,8 @@ function ChatApp({
               }
               onClick={() => {
                 setProfileTab("avatar");
-                setDisplayNameDraft(user.displayName);
-                setDisplayNameError("");
+                setFirstNameDraft(user.firstName ?? ''); setLastNameDraft(user.lastName ?? '');
+                setProfileNameError("");
                 setAvatarDialog("user");
               }}
             >
@@ -4318,7 +4199,7 @@ function ChatApp({
         </div>
       </header>
       <aside className={`sidebar ${isSidebarOpen ? "open" : ""}`}>
-        <nav className="sidebar-rail" aria-label="Main sections">
+        <nav className="sidebar-rail" aria-label="Main sections" onClickCapture={() => setAccountView("chat")}>
           <button
             className={`sidebar-rail-button ${isNotificationsOpen ? "active" : ""}`}
             type="button"
@@ -4481,6 +4362,7 @@ function ChatApp({
               setIsSidebarOpen(false);
             }}
           ><NotebookPen size={21} /></button>
+          {user.roles.includes("Global Admin") && (
           <button
             className={`sidebar-rail-button ${isStorageManagementOpen ? "active" : ""}`}
             type="button"
@@ -4499,6 +4381,12 @@ function ChatApp({
               setIsSidebarOpen(false);
             }}
           ><HardDrive size={21} /></button>
+          )}
+          {user.roles.includes("Global Admin") && <>
+            <button className={`sidebar-rail-button ${isAccountOpen && accountView === "users" ? "active" : ""}`} aria-label="Users" title="Users" aria-current={isAccountOpen && accountView === "users" ? "page" : undefined} onClick={() => openAccountSection("users")}><AccountUsersIcon size={21} /></button>
+            <button className={`sidebar-rail-button ${isAccountOpen && accountView === "activity" ? "active" : ""}`} aria-label="Activity log" title="Activity log" aria-current={isAccountOpen && accountView === "activity" ? "page" : undefined} onClick={() => openAccountSection("activity")}><AccountHistoryIcon size={21} /></button>
+          </>}
+          <button className={`sidebar-rail-button ${isAccountOpen && accountView === "account" ? "active" : ""}`} aria-label="Account settings" title="Account settings" aria-current={isAccountOpen && accountView === "account" ? "page" : undefined} onClick={() => openAccountSection("account")}><AccountSettingsIcon size={21} /></button>
         </nav>
 
       </aside>
@@ -4745,6 +4633,9 @@ function ChatApp({
         onBack={() => setIsRemindersOpen(false)}
         hidden={!isRemindersOpen}
       />
+      {isAccountOpen && accountView === "users" && <UsersPage currentUser={user} onBack={() => setAccountView("chat")} />}
+      {isAccountOpen && accountView === "activity" && <ActivityLogPage onBack={() => setAccountView("chat")} />}
+      {isAccountOpen && accountView === "account" && <AccountPage user={user} onBack={() => setAccountView("chat")} onSaved={onUserUpdated} />}
       <NotificationsView
         apiUrl={API_URL}
         currentUsername={user.username}
@@ -6950,8 +6841,7 @@ function ChatApp({
               </button>
             </div>
 
-            <img
-              className="join-link-qr-code"
+            <InvitationQrCode
               src={joinQrCodeUrl}
               alt={`QR code to join ${conversationDisplayTitle(sharedConversation, "conversation")}`}
             />
@@ -7095,7 +6985,7 @@ function ChatApp({
 
       {isLogoutDialogOpen && (
         <div className="modal-backdrop" role="presentation">
-          <div className="modal-card confirmation-dialog">
+          <div role="dialog" aria-modal="true" aria-label="Sign out" className="modal-card confirmation-dialog">
             <div className="modal-header">
               <div>
                 <p className="eyebrow">Account</p>
@@ -7111,7 +7001,7 @@ function ChatApp({
               </button>
             </div>
 
-            <p>You’ll return to the username sign-in screen.</p>
+            <p>You’ll return to the sign-in screen.</p>
 
             <div className="modal-actions">
               <button
@@ -7159,7 +7049,7 @@ function ChatApp({
                   aria-label="Close"
                   onClick={() => {
                     setAvatarDialog(null);
-                    setDisplayNameError("");
+                    setProfileNameError("");
                   }}
                 >
                   <X size={20} />
@@ -7179,23 +7069,23 @@ function ChatApp({
                     aria-selected={profileTab === "avatar"}
                     onClick={() => {
                       setProfileTab("avatar");
-                      setDisplayNameError("");
+                      setProfileNameError("");
                     }}
                   >
                     Avatar
                   </button>
                   <button
-                    className={profileTab === "display-name" ? "active" : ""}
+                    className={profileTab === "name" ? "active" : ""}
                     type="button"
                     role="tab"
-                    aria-selected={profileTab === "display-name"}
+                    aria-selected={profileTab === "name"}
                     onClick={() => {
-                      setProfileTab("display-name");
-                      setDisplayNameDraft(user.displayName);
-                      setDisplayNameError("");
+                      setProfileTab("name");
+                      setFirstNameDraft(user.firstName ?? ''); setLastNameDraft(user.lastName ?? '');
+                      setProfileNameError("");
                     }}
                   >
-                    Display name
+                    Name
                   </button>
                 </div>
               )}
@@ -7227,36 +7117,28 @@ function ChatApp({
               ) : (
                 <form
                   className="profile-name-form"
-                  onSubmit={updateDisplayName}
+                  onSubmit={updateProfileName}
                 >
-                  <label htmlFor="profile-display-name">Display name</label>
-                  <input
-                    id="profile-display-name"
-                    autoFocus
-                    maxLength={100}
-                    value={displayNameDraft}
-                    onChange={(event) => {
-                      setDisplayNameDraft(event.target.value);
-                      setDisplayNameError("");
-                    }}
-                    placeholder="Enter your display name"
-                  />
+                  <label htmlFor="profile-first-name">First name</label>
+                  <input id="profile-first-name" autoFocus autoComplete="given-name" maxLength={100} value={firstNameDraft} onChange={event => { setFirstNameDraft(event.target.value); setProfileNameError(''); }} />
+                  <label htmlFor="profile-last-name">Last name</label>
+                  <input id="profile-last-name" autoComplete="family-name" maxLength={100} value={lastNameDraft} onChange={event => { setLastNameDraft(event.target.value); setProfileNameError(''); }} />
                   <p className="profile-name-note">
                     Your username @{user.username} will stay the same.
                   </p>
-                  {displayNameError && (
-                    <p className="form-error">{displayNameError}</p>
+                  {profileNameError && (
+                    <p className="form-error">{profileNameError}</p>
                   )}
                   <button
                     className="primary-button"
                     type="submit"
                     disabled={
-                      isSavingDisplayName ||
-                      displayNameDraft.trim().length < 2 ||
-                      displayNameDraft.trim() === user.displayName
+                      isSavingProfileName ||
+                      
+                      (firstNameDraft.trim() === (user.firstName ?? '') && lastNameDraft.trim() === (user.lastName ?? ''))
                     }
                   >
-                    {isSavingDisplayName ? "Saving..." : "Save display name"}
+                    {isSavingProfileName ? "Saving..." : "Save name"}
                   </button>
                 </form>
               )}
@@ -7771,6 +7653,34 @@ function ChatApp({
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
+  const updateUser = useCallback((updated: Partial<User>) => {
+    setUser(current => current ? { ...current, ...updated } : null);
+  }, []);
+  const signedInUserId = user?.id;
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState("");
+  useEffect(() => {
+    let active = true;
+    const expired = () => { setUser(null); setAuthError("Your session expired. Please sign in again."); };
+    window.addEventListener("chatapp-auth-expired", expired);
+    initialSession.then(async result => {
+      if (result?.error && active) setAuthError(result.error);
+      if (getAccessToken()) {
+        try { const profile = await loadProfile(); if (active) setUser(profile); }
+        catch { clearSession(); }
+      }
+      if (active) setAuthLoading(false);
+    });
+    return () => { active = false; window.removeEventListener("chatapp-auth-expired", expired); };
+  }, []);
+  useEffect(() => {
+    if (!signedInUserId) return;
+    const timer = window.setInterval(async () => {
+      try { const profile = await loadProfile(false); setUser(profile); }
+      catch { /* authFetch clears revoked sessions */ }
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [signedInUserId]);
   const [themePreference, setThemePreference] = useState(getThemePreference);
 
   useEffect(() => {
@@ -7796,15 +7706,16 @@ function App() {
   const publicToken = new URLSearchParams(window.location.search).get("publicDocument");
   if (publicToken) return <PublicDocumentsView apiUrl={API_URL} token={publicToken} />;
 
+  if (authLoading) return <main className="login-page"><p role="status">Loading your session...</p></main>;
   return user ? (
     <ChatApp
       user={user}
-      onLogout={() => setUser(null)}
-      onUserUpdated={setUser}
+      onLogout={() => { void logout().finally(() => { setUser(null); }); }}
+      onUserUpdated={updateUser}
       themeControl={themeControl}
     />
   ) : (
-    <LoginScreen onLogin={setUser} themeControl={themeControl} />
+    <LoginPage onLogin={setUser} themeControl={themeControl} initialError={authError} />
   );
 }
 

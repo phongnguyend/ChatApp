@@ -36,7 +36,7 @@ public sealed partial class DocumentsController
             var permission = await FolderPermission(folder, actor.Id, cancellationToken);
             if (permission is null) continue;
             folders.Add(ToDto(folder, permission,
-                folder.OwnerUserId == actor.Id ? null : folder.OwnerUser.Username));
+                folder.OwnerUserId == actor.Id ? null : folder.OwnerUser.UserName));
             locations[folder.Id] = await FolderLocation(folder.ParentFolderId, actor.Id,
                 folder.OwnerUserId, cancellationToken);
         }
@@ -45,7 +45,7 @@ public sealed partial class DocumentsController
             var permission = await FilePermission(file, actor.Id, cancellationToken);
             if (permission is null) continue;
             files.Add(ToDto(file, permission,
-                file.OwnerUserId == actor.Id ? null : file.OwnerUser.Username));
+                file.OwnerUserId == actor.Id ? null : file.OwnerUser.UserName));
             locations[file.Id] = await FolderLocation(file.FolderId, actor.Id,
                 file.OwnerUserId, cancellationToken);
         }

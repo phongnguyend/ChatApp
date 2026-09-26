@@ -11,9 +11,9 @@ public static partial class Username
     public static bool IsValid(string? value)
     {
         var cleaned = Clean(value);
-        return cleaned.Length is >= 2 and <= 50 && ValidCharacters().IsMatch(cleaned);
+        return cleaned.Length is >= 2 and <= 256 && ValidCharacters().IsMatch(cleaned);
     }
 
-    [GeneratedRegex(@"^[\p{L}\p{N}][\p{L}\p{N}_. -]*$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^[\p{L}\p{N}][\p{L}\p{N}_@.+ -]*$", RegexOptions.CultureInvariant)]
     private static partial Regex ValidCharacters();
 }

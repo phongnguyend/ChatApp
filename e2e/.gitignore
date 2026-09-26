@@ -3,3 +3,5 @@ node_modules/
 playwright-report/
 test-results/
 uploads/
+Seed/bin/
+Seed/obj/

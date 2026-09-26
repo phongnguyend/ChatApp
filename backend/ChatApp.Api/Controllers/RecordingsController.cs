@@ -22,11 +22,17 @@ public sealed class RecordingsController(
     ICallingProvider callingProvider,
     IHubContext<ChatHub> hubContext) : ControllerBase
 {
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpPost("internal/completed")]
     public async Task<IActionResult> NotifyRecordingCompleted(
         RecordingCompletedNotificationRequest request,
         CancellationToken cancellationToken)
     {
+        var configuredKey = HttpContext.RequestServices.GetRequiredService<IConfiguration>()["RecordingCallbacks:Key"];
+        var suppliedKey = Request.Headers["X-Recording-Callback-Key"].ToString();
+        if (string.IsNullOrWhiteSpace(configuredKey) || !System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+            System.Text.Encoding.UTF8.GetBytes(configuredKey), System.Text.Encoding.UTF8.GetBytes(suppliedKey)))
+            return Unauthorized();
         var recording = await db.SessionRecordings
             .Include(item => item.StartedByUser)
             .SingleOrDefaultAsync(
@@ -267,13 +273,13 @@ public sealed class RecordingsController(
                 item.Id == recordingId &&
                 item.Conversation.Members.Any(member =>
                     member.LeftAt == null &&
-                    member.User.NormalizedUsername == normalized))
+                    member.User.NormalizedUserName == normalized))
             .Select(item => new RecordingStateDto(
                 item.Id,
                 item.ConversationId,
                 item.SessionId,
                 item.StartedByUserId,
-                item.StartedByUser.DisplayName,
+                (((item.StartedByUser.FirstName ?? "") + " " + (item.StartedByUser.LastName ?? "")).Trim() == "" ? item.StartedByUser.UserName : ((item.StartedByUser.FirstName ?? "") + " " + (item.StartedByUser.LastName ?? "")).Trim()),
                 item.StartedAt,
                 item.Status))
             .SingleOrDefaultAsync(cancellationToken);
@@ -292,7 +298,7 @@ public sealed class RecordingsController(
             member =>
                 member.ConversationId == conversationId &&
                 member.LeftAt == null &&
-                member.User.NormalizedUsername == normalized,
+                member.User.NormalizedUserName == normalized,
             cancellationToken);
         if (!isMember)
         {
@@ -350,7 +356,7 @@ public sealed class RecordingsController(
                 item.Id == recordingId &&
                 item.Conversation.Members.Any(member =>
                     member.LeftAt == null &&
-                    member.User.NormalizedUsername == normalized))
+                    member.User.NormalizedUserName == normalized))
             .SingleOrDefaultAsync(cancellationToken);
         if (recording is null)
         {
@@ -489,7 +495,7 @@ public sealed class RecordingsController(
         var normalized = Username.Normalize(username);
         return db.Users.SingleOrDefaultAsync(
             user =>
-                user.NormalizedUsername == normalized &&
+                user.NormalizedUserName == normalized &&
                 user.Status == "active",
             cancellationToken);
     }

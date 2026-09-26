@@ -1,15 +1,11 @@
+import { testAuthentication } from './test-auth.mjs'
 import { HubConnectionBuilder } from '@microsoft/signalr'
 
 const apiUrl = process.argv[2] ?? process.env.VITE_API_URL ?? 'http://localhost:5045'
 const username = `Live Test ${Date.now()}`
 
-const loginResponse = await fetch(`${apiUrl}/api/session`, {
-  method: 'POST',
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ username }),
-})
-if (!loginResponse.ok) throw new Error(await loginResponse.text())
-const user = await loginResponse.json()
+const { login, fetch, accessToken } = testAuthentication(apiUrl)
+const user = await login(username)
 
 const conversationResponse = await fetch(
   `${apiUrl}/api/conversations?username=${encodeURIComponent(user.username)}`,
@@ -23,7 +19,8 @@ if (!conversation) throw new Error('General conversation was not found.')
 
 const connection = new HubConnectionBuilder()
   .withUrl(
-    `${apiUrl}/hubs/chat?username=${encodeURIComponent(user.username)}`,
+    `${apiUrl}/hubs/chat`,
+    { accessTokenFactory: () => accessToken(user.username) },
   )
   .build()
 

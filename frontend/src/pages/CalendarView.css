@@ -8,7 +8,7 @@
   grid-row: 1;
   min-width: 0;
   min-height: 0;
-  padding: 30px 32px 18px;
+  padding: 18px 32px 18px;
   display: flex;
   flex-direction: column;
   color: var(--ink);
@@ -31,7 +31,7 @@
 
 .calendar-toolbar {
   align-items: flex-start;
-  margin-bottom: 25px;
+  margin-bottom: 16px;
 }
 
 .calendar-content {
@@ -172,7 +172,7 @@ html[data-theme='dark'] .mini-month-days button.selected-week.week-start { borde
 html[data-theme='dark'] .mini-month-days button.selected-week.week-end { border-right-color: #7eb2f1; }
 
 .calendar-toolbar .eyebrow {
-  margin-bottom: 5px;
+  margin: 0 0 4px;
 }
 
 .calendar-toolbar-actions { justify-content: flex-end; flex-wrap: wrap; }
@@ -181,7 +181,7 @@ html[data-theme='dark'] .mini-month-days button.selected-week.week-end { border-
 .calendar-toolbar h1 {
   margin: 0;
   font-family: 'Manrope', sans-serif;
-  font-size: 29px;
+  font-size: 25px;
   letter-spacing: -0.04em;
 }
 

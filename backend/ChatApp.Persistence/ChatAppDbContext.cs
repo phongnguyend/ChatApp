@@ -1,12 +1,14 @@
 using ChatApp.Domain.Models;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace ChatApp.Persistence;
 
 public sealed class ChatAppDbContext(DbContextOptions<ChatAppDbContext> options)
-    : DbContext(options)
+    : IdentityDbContext<ChatUser, IdentityRole<Guid>, Guid>(options)
 {
-    public DbSet<ChatUser> Users => Set<ChatUser>();
+    public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
     public DbSet<Conversation> Conversations => Set<Conversation>();
     public DbSet<ConversationMember> ConversationMembers => Set<ConversationMember>();
     public DbSet<ChatMessage> Messages => Set<ChatMessage>();
@@ -45,6 +47,27 @@ public sealed class ChatAppDbContext(DbContextOptions<ChatAppDbContext> options)
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        base.OnModelCreating(modelBuilder);
+        modelBuilder.Entity<IdentityRole<Guid>>().Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
+        modelBuilder.Entity<ChatUser>().Property(x => x.FirstName).HasMaxLength(100);
+        modelBuilder.Entity<ChatUser>().Property(x => x.LastName).HasMaxLength(100);
+        modelBuilder.Entity<ChatUser>().HasIndex(x => x.NormalizedEmail).IsUnique()
+            .HasFilter("[NormalizedEmail] IS NOT NULL");
+        modelBuilder.Entity<ActivityLog>(entity =>
+        {
+            entity.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
+            entity.Property(x => x.EventType).HasMaxLength(64);
+            entity.Property(x => x.ActorUsername).HasMaxLength(256);
+            entity.Property(x => x.EntityType).HasMaxLength(64);
+            entity.Property(x => x.EntityId).HasMaxLength(128);
+            entity.Property(x => x.EntityName).HasMaxLength(256);
+            entity.Property(x => x.Metadata).HasColumnType("nvarchar(max)").HasDefaultValueSql("N'{}'");
+            entity.ToTable("ActivityLogs", table => table.HasCheckConstraint("CK_ActivityLogs_Metadata_Json", "ISJSON([Metadata]) = 1"));
+            entity.HasIndex(x => new { x.OccurredAt, x.Id });
+            entity.HasIndex(x => new { x.EntityType, x.EntityId, x.OccurredAt });
+            entity.HasIndex(x => new { x.EventType, x.OccurredAt });
+            // Snapshot user IDs and names; deleting an account must not erase activity history.
+        });
         ConfigureUsers(modelBuilder);
         ConfigureConversations(modelBuilder);
         ConfigureConversationMembers(modelBuilder);
@@ -67,6 +90,23 @@ public sealed class ChatAppDbContext(DbContextOptions<ChatAppDbContext> options)
         ConfigureUserNotifications(modelBuilder);
         ConfigureUserNotes(modelBuilder);
         ConfigureDocuments(modelBuilder);
+    }
+
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        foreach (var entry in ChangeTracker.Entries<ChatUser>()
+            .Where(x => x.State is EntityState.Added or EntityState.Modified).ToArray())
+        {
+            var user = entry.Entity;
+            if (entry.State == EntityState.Added) user.Status = user.IsEnabled ? "active" : "suspended";
+            if (entry.State == EntityState.Modified && entry.Property(x => x.IsEnabled).IsModified &&
+                entry.Property(x => x.IsEnabled).OriginalValue != user.IsEnabled)
+            {
+                user.SecurityStamp = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+                user.Status = user.IsEnabled ? "active" : "suspended";
+            }
+        }
+        return await base.SaveChangesAsync(cancellationToken);
     }
 
     private static void ConfigureUserNotes(ModelBuilder modelBuilder)
@@ -297,10 +337,10 @@ public sealed class ChatAppDbContext(DbContextOptions<ChatAppDbContext> options)
         });
         entity.HasKey(x => x.Id);
         entity.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
-        entity.Property(x => x.Username).HasMaxLength(50).IsRequired();
-        entity.Property(x => x.NormalizedUsername).HasMaxLength(50).IsRequired();
-        entity.HasIndex(x => x.NormalizedUsername).IsUnique();
-        entity.Property(x => x.DisplayName).HasMaxLength(100).IsRequired();
+        entity.Property(x => x.UserName).HasColumnName("Username").HasMaxLength(256).IsRequired();
+        entity.Property(x => x.NormalizedUserName).HasColumnName("NormalizedUsername").HasMaxLength(256).IsRequired();
+        entity.HasIndex(x => x.NormalizedUserName).HasDatabaseName("IX_Users_NormalizedUsername").IsUnique();
+        entity.Ignore(x => x.DisplayName);
         entity.Property(x => x.AvatarUrl).HasColumnType("nvarchar(max)");
         entity.Property(x => x.Status).HasMaxLength(20).HasDefaultValue("active");
         entity.Property(x => x.CreatedAt).HasPrecision(3);

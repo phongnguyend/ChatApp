@@ -83,6 +83,8 @@ public static class DependencyInjection
         {
             var baseUrl = configuration["Api:BaseUrl"] ?? "http://localhost:5045";
             client.BaseAddress = new Uri(baseUrl, UriKind.Absolute);
+            var callbackKey = configuration["RecordingCallbacks:Key"];
+            if (!string.IsNullOrWhiteSpace(callbackKey)) client.DefaultRequestHeaders.Add("X-Recording-Callback-Key", callbackKey);
         });
         return services;
     }

@@ -1,3 +1,4 @@
+import { authFetch as fetch } from "../services/auth";
 import { Bell, BellOff, BellRing, LoaderCircle } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
@@ -22,6 +23,7 @@ export function PushNotificationButton({
   onError,
 }: PushNotificationButtonProps) {
   const [state, setState] = useState<PushState>('loading')
+  const [unavailableReason, setUnavailableReason] = useState('')
   const [config, setConfig] = useState<PushConfig | null>(null)
 
   const registerWithApi = useCallback(
@@ -94,14 +96,10 @@ export function PushNotificationButton({
         } else {
           setState('off')
         }
-      } catch (error) {
+      } catch {
         if (!cancelled) {
           setState('unavailable')
-          onError(
-            error instanceof Error
-              ? error.message
-              : 'Could not initialize push notifications.',
-          )
+          setUnavailableReason('Push notifications are temporarily unavailable. Chat is still available.')
         }
       }
     }
@@ -169,9 +167,9 @@ export function PushNotificationButton({
   const isWorking = state === 'loading' || state === 'working'
   const isUnavailable = state === 'unavailable'
   const title = isUnavailable
-    ? config?.enabled === false
+    ? unavailableReason || (config?.enabled === false
       ? 'Configure Azure Notification Hubs to enable push notifications'
-      : 'Push notifications are not supported in this browser'
+      : 'Push notifications are not supported in this browser')
     : isOn
       ? 'Turn off push notifications'
       : 'Turn on push notifications'
@@ -245,14 +243,6 @@ function hasMatchingApplicationServerKey(
 }
 
 async function readPushError(response: Response) {
-  const contentType = response.headers.get('content-type') ?? ''
-  if (contentType.includes('json')) {
-    const body = (await response.json()) as {
-      message?: string
-      detail?: string
-      title?: string
-    }
-    return body.message ?? body.detail ?? body.title ?? 'Azure push request failed.'
-  }
-  return (await response.text()) || 'Azure push request failed.'
+  if (response.status === 401) return 'Please sign in again to manage notifications.'
+  return 'Push notifications are temporarily unavailable. Please try again later.'
 }

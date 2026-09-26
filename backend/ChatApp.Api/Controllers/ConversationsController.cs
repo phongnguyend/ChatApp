@@ -65,7 +65,7 @@ public sealed class ConversationsController(
         var normalized = Username.Normalize(username);
         var now = DateTimeOffset.UtcNow;
         var userId = await db.Users
-            .Where(x => x.NormalizedUsername == normalized)
+            .Where(x => x.NormalizedUserName == normalized)
             .Select(x => (Guid?)x.Id)
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -88,8 +88,8 @@ public sealed class ConversationsController(
                 x.Conversation.Type == "direct"
                     ? x.Conversation.Members
                         .Where(member => member.UserId != userId && member.LeftAt == null)
-                        .Select(member => member.User.DisplayName)
-                        .FirstOrDefault() ?? x.User.DisplayName
+                        .Select(member => (((member.User.FirstName ?? "") + " " + (member.User.LastName ?? "")).Trim() == "" ? member.User.UserName : ((member.User.FirstName ?? "") + " " + (member.User.LastName ?? "")).Trim()))
+                        .FirstOrDefault() ?? (((x.User.FirstName ?? "") + " " + (x.User.LastName ?? "")).Trim() == "" ? x.User.UserName : ((x.User.FirstName ?? "") + " " + (x.User.LastName ?? "")).Trim())
                     : x.Conversation.Title,
                 x.Conversation.Type == "direct"
                     ? x.Conversation.Members.Any(
@@ -125,7 +125,7 @@ public sealed class ConversationsController(
                 x.Conversation.LastMessage.DeletedAt != null ||
                 x.Conversation.LastMessage.Sender == null
                     ? null
-                    : x.Conversation.LastMessage.Sender.DisplayName,
+                    : (((x.Conversation.LastMessage.Sender.FirstName ?? "") + " " + (x.Conversation.LastMessage.Sender.LastName ?? "")).Trim() == "" ? x.Conversation.LastMessage.Sender.UserName : ((x.Conversation.LastMessage.Sender.FirstName ?? "") + " " + (x.Conversation.LastMessage.Sender.LastName ?? "")).Trim()),
                 x.Conversation.LastMessageAt,
                 x.UnreadCount,
                 x.Conversation.Members.Count(member => member.LeftAt == null),
@@ -143,8 +143,8 @@ public sealed class ConversationsController(
                         .Where(member =>
                             member.UserId != userId &&
                             member.LeftAt == null)
-                        .Select(member => member.User.Username)
-                        .FirstOrDefault() ?? x.User.Username
+                        .Select(member => member.User.UserName)
+                        .FirstOrDefault() ?? x.User.UserName
                     : null))
             .ToListAsync(cancellationToken);
 
@@ -164,7 +164,7 @@ public sealed class ConversationsController(
             .SingleOrDefaultAsync(
                 x =>
                     x.ConversationId == id &&
-                    x.User.NormalizedUsername == normalized &&
+                    x.User.NormalizedUserName == normalized &&
                     x.LeftAt == null,
                 cancellationToken);
         if (membership is null)
@@ -218,7 +218,7 @@ public sealed class ConversationsController(
         }
 
         var creator = await db.Users.SingleOrDefaultAsync(
-            x => x.NormalizedUsername == normalized,
+            x => x.NormalizedUserName == normalized,
             cancellationToken);
         if (creator is null)
         {
@@ -228,7 +228,7 @@ public sealed class ConversationsController(
         var selectedUsers = await db.Users
             .Where(x =>
                 x.Status == "active" &&
-                selectedUsernames.Contains(x.NormalizedUsername))
+                selectedUsernames.Contains(x.NormalizedUserName))
             .ToListAsync(cancellationToken);
         if (selectedUsers.Count != selectedUsernames.Length)
         {
@@ -303,11 +303,11 @@ public sealed class ConversationsController(
 
         var users = await db.Users
             .Where(x =>
-                x.NormalizedUsername == currentNormalized ||
-                x.NormalizedUsername == targetNormalized)
+                x.NormalizedUserName == currentNormalized ||
+                x.NormalizedUserName == targetNormalized)
             .ToListAsync(cancellationToken);
-        var currentUser = users.SingleOrDefault(x => x.NormalizedUsername == currentNormalized);
-        var targetUser = users.SingleOrDefault(x => x.NormalizedUsername == targetNormalized);
+        var currentUser = users.SingleOrDefault(x => x.NormalizedUserName == currentNormalized);
+        var targetUser = users.SingleOrDefault(x => x.NormalizedUserName == targetNormalized);
 
         if (currentUser is null)
         {
@@ -357,7 +357,7 @@ public sealed class ConversationsController(
             var result = ToDirectDto(
                 existing.Conversation,
                 targetUser.Id,
-                targetUser.Username,
+                targetUser.UserName,
                 targetUser.DisplayName,
                 targetUser.AvatarUrl,
                 existing.Conversation.Members
@@ -412,7 +412,7 @@ public sealed class ConversationsController(
         var created = ToDirectDto(
             conversation,
             targetUser.Id,
-            targetUser.Username,
+            targetUser.UserName,
             targetUser.DisplayName,
             targetUser.AvatarUrl);
         await AddConnectedUsersToDirectConversation(
@@ -440,7 +440,7 @@ public sealed class ConversationsController(
     {
         var normalized = Username.Normalize(username);
         var requesterId = await db.Users
-            .Where(x => x.NormalizedUsername == normalized)
+            .Where(x => x.NormalizedUserName == normalized)
             .Select(x => (Guid?)x.Id)
             .SingleOrDefaultAsync(cancellationToken);
         if (requesterId is null)
@@ -505,7 +505,7 @@ public sealed class ConversationsController(
 
         var normalized = Username.Normalize(username);
         var requester = await db.Users.SingleOrDefaultAsync(
-            x => x.NormalizedUsername == normalized,
+            x => x.NormalizedUserName == normalized,
             cancellationToken);
         if (requester is null)
         {
@@ -614,7 +614,7 @@ public sealed class ConversationsController(
     {
         var normalized = Username.Normalize(username);
         var requester = await db.Users.SingleOrDefaultAsync(
-            x => x.NormalizedUsername == normalized,
+            x => x.NormalizedUserName == normalized,
             cancellationToken);
         if (requester is null)
         {
@@ -784,7 +784,7 @@ public sealed class ConversationsController(
                 x.Id,
                 x.ConversationId,
                 x.SenderUserId,
-                x.Sender == null ? null : x.Sender.Username,
+                x.Sender == null ? null : x.Sender.UserName,
                 x.Sender == null ? null : x.Sender.AvatarUrl,
                 x.DeletedAt == null ? x.Content : null,
                 x.MessageType,
@@ -814,12 +814,12 @@ public sealed class ConversationsController(
                             group.Key,
                             group.Count(),
                             group.Any(reaction =>
-                                reaction.User.NormalizedUsername == normalizedUsername),
+                                reaction.User.NormalizedUserName == normalizedUsername),
                             group
                                 .OrderBy(reaction => reaction.CreatedAt)
                                 .Select(reaction => new MessageReactionUserDto(
                                     reaction.UserId,
-                                    reaction.User.DisplayName,
+                                    (((reaction.User.FirstName ?? "") + " " + (reaction.User.LastName ?? "")).Trim() == "" ? reaction.User.UserName : ((reaction.User.FirstName ?? "") + " " + (reaction.User.LastName ?? "")).Trim()),
                                     reaction.User.AvatarUrl))
                                 .ToList()))
                         .ToList()
@@ -855,7 +855,7 @@ public sealed class ConversationsController(
                                 option.SortOrder,
                                 option.Votes.Count,
                                 option.Votes.Any(vote =>
-                                    vote.User.NormalizedUsername == normalizedUsername)))
+                                    vote.User.NormalizedUserName == normalizedUsername)))
                             .ToList())
                     : null))
             .ToList();
@@ -893,7 +893,7 @@ public sealed class ConversationsController(
 
         var normalized = Username.Normalize(username);
         var sender = await db.Users.SingleOrDefaultAsync(
-            user => user.NormalizedUsername == normalized && user.Status == "active",
+            user => user.NormalizedUserName == normalized && user.Status == "active",
             cancellationToken);
         if (sender is null ||
             !await db.ConversationMembers.AnyAsync(
@@ -991,7 +991,7 @@ public sealed class ConversationsController(
             message.Id,
             id,
             sender.Id,
-            sender.Username,
+            sender.UserName,
             sender.AvatarUrl,
             question,
             message.MessageType,
@@ -1035,7 +1035,7 @@ public sealed class ConversationsController(
                 message.Id,
                 message.ConversationId,
                 message.SenderUserId,
-                message.Sender == null ? null : message.Sender.Username,
+                message.Sender == null ? null : message.Sender.UserName,
                 message.Content,
                 message.MessageType,
                 message.CreatedAt,
@@ -1061,7 +1061,7 @@ public sealed class ConversationsController(
     {
         var normalized = Username.Normalize(username);
         var sender = await db.Users.SingleOrDefaultAsync(
-            x => x.NormalizedUsername == normalized && x.Status == "active",
+            x => x.NormalizedUserName == normalized && x.Status == "active",
             cancellationToken);
         if (sender is null)
         {
@@ -1107,7 +1107,7 @@ public sealed class ConversationsController(
                 x.Id,
                 x.ConversationId,
                 x.SenderUserId,
-                x.Sender == null ? null : x.Sender.Username,
+                x.Sender == null ? null : x.Sender.UserName,
                 x.Sender == null ? null : x.Sender.AvatarUrl,
                 x.DeletedAt == null ? x.Content : null,
                 x.MessageType,
@@ -1291,7 +1291,7 @@ public sealed class ConversationsController(
                 message.Id,
                 message.ConversationId,
                 sender.Id,
-                sender.Username,
+                sender.UserName,
                 sender.AvatarUrl,
                 message.Content,
                 message.MessageType,
@@ -1366,7 +1366,7 @@ public sealed class ConversationsController(
 
         var normalized = Username.Normalize(username);
         var requester = await db.Users.SingleOrDefaultAsync(
-            x => x.NormalizedUsername == normalized && x.Status == "active",
+            x => x.NormalizedUserName == normalized && x.Status == "active",
             cancellationToken);
         if (requester is null)
         {
@@ -1485,7 +1485,7 @@ public sealed class ConversationsController(
     {
         var normalized = Username.Normalize(username);
         var requester = await db.Users.SingleOrDefaultAsync(
-            x => x.NormalizedUsername == normalized && x.Status == "active",
+            x => x.NormalizedUserName == normalized && x.Status == "active",
             cancellationToken);
         if (requester is null)
         {
@@ -1624,7 +1624,7 @@ public sealed class ConversationsController(
     {
         var normalized = Username.Normalize(username);
         var requester = await db.Users.SingleOrDefaultAsync(
-            x => x.NormalizedUsername == normalized,
+            x => x.NormalizedUserName == normalized,
             cancellationToken);
         if (requester is null)
         {
@@ -1662,7 +1662,7 @@ public sealed class ConversationsController(
         var selectedUsers = await db.Users
             .Where(x =>
                 x.Status == "active" &&
-                selectedUsernames.Contains(x.NormalizedUsername))
+                selectedUsernames.Contains(x.NormalizedUserName))
             .ToListAsync(cancellationToken);
         if (selectedUsers.Count != selectedUsernames.Length)
         {
@@ -1827,7 +1827,7 @@ public sealed class ConversationsController(
                 UnreadCount = targetUnreadCount,
                 IsMuted = targetIsMuted,
                 DirectUserId = currentUser.Id,
-                DirectUsername = currentUser.Username
+                DirectUsername = currentUser.UserName
             };
             await hubContext.Clients.Clients(targetConnections)
                 .SendAsync(
@@ -1907,7 +1907,7 @@ public sealed class ConversationsController(
         return await db.ConversationMembers.AnyAsync(
             x =>
                 x.ConversationId == conversationId &&
-                x.User.NormalizedUsername == normalized &&
+                x.User.NormalizedUserName == normalized &&
                 x.LeftAt == null,
             cancellationToken);
     }
@@ -1920,12 +1920,12 @@ public sealed class ConversationsController(
             .AsNoTracking()
             .Where(x => x.ConversationId == conversationId && x.LeftAt == null)
             .OrderBy(x => x.Role == "owner" ? 0 : x.Role == "admin" ? 1 : 2)
-            .ThenBy(x => x.User.DisplayName)
+            .ThenBy(x => (((x.User.FirstName ?? "") + " " + (x.User.LastName ?? "")).Trim() == "" ? x.User.UserName : ((x.User.FirstName ?? "") + " " + (x.User.LastName ?? "")).Trim()))
             .Select(x => new
             {
                 x.User.Id,
-                x.User.Username,
-                x.User.DisplayName,
+                Username = x.User.UserName,
+                DisplayName = (((x.User.FirstName ?? "") + " " + (x.User.LastName ?? "")).Trim() == "" ? x.User.UserName : ((x.User.FirstName ?? "") + " " + (x.User.LastName ?? "")).Trim()),
                 x.User.AvatarUrl,
                 x.Role
             })

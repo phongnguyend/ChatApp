@@ -1,3 +1,4 @@
+import { authFetch as fetch } from "../services/auth";
 /* oxlint-disable react/only-export-components -- recording UI and its reusable lifecycle hook share private event types */
 import { Circle, CircleStop, LoaderCircle } from "lucide-react";
 import {

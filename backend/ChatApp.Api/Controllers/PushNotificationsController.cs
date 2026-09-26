@@ -10,7 +10,8 @@ namespace ChatApp.Api.Controllers;
 [Route("api/push")]
 public sealed class PushNotificationsController(
     ChatAppDbContext db,
-    AzurePushNotificationService notifications) : ControllerBase
+    AzurePushNotificationService notifications,
+    ILogger<PushNotificationsController> logger) : ControllerBase
 {
     [HttpGet("config")]
     public ActionResult GetConfig() => Ok(new
@@ -39,7 +40,7 @@ public sealed class PushNotificationsController(
         var normalized = Username.Normalize(username);
         var userId = await db.Users
             .Where(user =>
-                user.NormalizedUsername == normalized &&
+                user.NormalizedUserName == normalized &&
                 user.Status == "active")
             .Select(user => (Guid?)user.Id)
             .SingleOrDefaultAsync(cancellationToken);
@@ -48,13 +49,21 @@ public sealed class PushNotificationsController(
             return NotFound();
         }
 
-        await notifications.RegisterAsync(
-            userId.Value,
-            request.InstallationId,
-            request.Endpoint,
-            request.P256dh,
-            request.Auth,
-            cancellationToken);
+        try
+        {
+            await notifications.RegisterAsync(
+                userId.Value,
+                request.InstallationId,
+                request.Endpoint,
+                request.P256dh,
+                request.Auth,
+                cancellationToken);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(exception, "Could not register browser notifications.");
+            return Problem("Push notifications are temporarily unavailable.", statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
         return NoContent();
     }
 
@@ -76,7 +85,7 @@ public sealed class PushNotificationsController(
         var normalized = Username.Normalize(username);
         var exists = await db.Users.AnyAsync(
             user =>
-                user.NormalizedUsername == normalized &&
+                user.NormalizedUserName == normalized &&
                 user.Status == "active",
             cancellationToken);
         if (!exists)
@@ -84,7 +93,15 @@ public sealed class PushNotificationsController(
             return NotFound();
         }
 
-        await notifications.UnregisterAsync(installationId, cancellationToken);
+        try
+        {
+            await notifications.UnregisterAsync(installationId, cancellationToken);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(exception, "Could not unregister browser notifications.");
+            return Problem("Push notifications are temporarily unavailable.", statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
         return NoContent();
     }
 

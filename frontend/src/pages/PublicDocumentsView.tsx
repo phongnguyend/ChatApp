@@ -1,3 +1,4 @@
+import { authFetch as fetch } from "../services/auth";
 import { ArrowLeft, ChevronRight, Download, FileImage, FileText, Folder, Link2, LoaderCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import "./PublicDocumentsView.css";
