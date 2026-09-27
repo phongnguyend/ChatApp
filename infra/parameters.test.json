@@ -17,9 +17,6 @@
     "communicationServicesDataLocation": {
       "value": "Asia Pacific"
     },
-    "sqlAdministratorLogin": {
-      "value": "chatappadmin"
-    },
     "resourceTags": {
       "value": {
         "Project": "ChatApp"

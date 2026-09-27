@@ -1,0 +1,106 @@
+name: Deploy infrastructure
+run-name: Deploy infrastructure (${{ inputs.environment }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: true
+        default: dev
+        type: choice
+        options:
+          - local
+          - dev
+          - test
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: infra-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy Azure resources
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: ${{ inputs.environment }}
+    env:
+      DEPLOYMENT_ENVIRONMENT: ${{ inputs.environment }}
+      RESOURCE_GROUP_OVERRIDE: ${{ vars.AZURE_RESOURCE_GROUP }}
+      AZURE_CORE_OUTPUT: none
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Validate and deploy infrastructure
+        shell: bash
+        env:
+          SQL_ENTRA_ADMINISTRATOR_PRINCIPAL_TYPE: ${{ vars.SQL_ENTRA_ADMINISTRATOR_PRINCIPAL_TYPE }}
+          SQL_ENTRA_ADMINISTRATOR_NAME: ${{ vars.SQL_ENTRA_ADMINISTRATOR_NAME }}
+          SQL_ENTRA_ADMINISTRATOR_OBJECT_ID: ${{ vars.SQL_ENTRA_ADMINISTRATOR_OBJECT_ID }}
+          BROWSER_PUSH_SUBJECT: ${{ secrets.BROWSER_PUSH_SUBJECT }}
+          BROWSER_PUSH_VAPID_PRIVATE_KEY: ${{ secrets.BROWSER_PUSH_VAPID_PRIVATE_KEY }}
+          BROWSER_PUSH_VAPID_PUBLIC_KEY: ${{ secrets.BROWSER_PUSH_VAPID_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          for name in SQL_ENTRA_ADMINISTRATOR_PRINCIPAL_TYPE SQL_ENTRA_ADMINISTRATOR_NAME SQL_ENTRA_ADMINISTRATOR_OBJECT_ID BROWSER_PUSH_SUBJECT BROWSER_PUSH_VAPID_PRIVATE_KEY BROWSER_PUSH_VAPID_PUBLIC_KEY; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing environment setting: $name"
+              exit 1
+            fi
+          done
+
+          case "$SQL_ENTRA_ADMINISTRATOR_PRINCIPAL_TYPE" in
+            User|Group) ;;
+            *) echo "::error::SQL_ENTRA_ADMINISTRATOR_PRINCIPAL_TYPE must be User or Group"; exit 1 ;;
+          esac
+
+          parameter_file="infra/parameters.${DEPLOYMENT_ENVIRONMENT}.json"
+          jq -e --arg environment "$DEPLOYMENT_ENVIRONMENT" \
+            '.parameters.environmentName.value == $environment' "$parameter_file" > /dev/null
+          workload=$(jq -r '.parameters.workloadName.value | ascii_downcase' "$parameter_file")
+          location=$(jq -r '.parameters.location.value' "$parameter_file")
+          resource_group="${RESOURCE_GROUP_OVERRIDE:-${workload}-${DEPLOYMENT_ENVIRONMENT}}"
+          deployment_name="${workload}-${DEPLOYMENT_ENVIRONMENT}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          umask 077
+          secure_parameters=$(mktemp "$RUNNER_TEMP/infra-parameters.XXXXXX.json")
+          trap 'rm -f -- "$secure_parameters"' EXIT
+          jq '.parameters += {
+            sqlEntraAdministratorPrincipalType: {value: env.SQL_ENTRA_ADMINISTRATOR_PRINCIPAL_TYPE},
+            sqlEntraAdministratorName: {value: env.SQL_ENTRA_ADMINISTRATOR_NAME},
+            sqlEntraAdministratorObjectId: {value: env.SQL_ENTRA_ADMINISTRATOR_OBJECT_ID},
+            browserPushSubject: {value: env.BROWSER_PUSH_SUBJECT},
+            browserPushVapidPrivateKey: {value: env.BROWSER_PUSH_VAPID_PRIVATE_KEY},
+            browserPushVapidPublicKey: {value: env.BROWSER_PUSH_VAPID_PUBLIC_KEY}
+          }' "$parameter_file" > "$secure_parameters"
+
+          az bicep build --file infra/main.bicep --outfile "$RUNNER_TEMP/infra-template.json"
+          az group create --name "$resource_group" --location "$location" \
+            --tags "Workload=$workload" "Environment=$DEPLOYMENT_ENVIRONMENT" "ManagedBy=Bicep" \
+            --output none
+          az deployment group validate --resource-group "$resource_group" \
+            --template-file "$RUNNER_TEMP/infra-template.json" --parameters "@$secure_parameters" --output none
+          az deployment group create --name "$deployment_name" --resource-group "$resource_group" \
+            --mode Incremental --template-file "$RUNNER_TEMP/infra-template.json" \
+            --parameters "@$secure_parameters" --query properties.outputs --output json > "$RUNNER_TEMP/infra-outputs.json"
+
+          {
+            printf '### Infrastructure deployed\n\nEnvironment: `%s`\n\nResource group: `%s`\n\n' "$DEPLOYMENT_ENVIRONMENT" "$resource_group"
+            printf '```json\n'
+            cat "$RUNNER_TEMP/infra-outputs.json"
+            printf '\n```\n'
+          } >> "$GITHUB_STEP_SUMMARY"

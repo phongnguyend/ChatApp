@@ -37,6 +37,11 @@ stages:
               inlineScript: |
                 set -euo pipefail
 
+                case "$SQL_ENTRA_ADMINISTRATOR_PRINCIPAL_TYPE" in
+                  User|Group) ;;
+                  *) echo "SQL_ENTRA_ADMINISTRATOR_PRINCIPAL_TYPE must be User or Group"; exit 1 ;;
+                esac
+
                 parameter_file="$(Build.SourcesDirectory)/infra/parameters.${{ parameters.environment }}.json"
                 workload_name=$(jq -r '.parameters.workloadName.value | ascii_downcase' "$parameter_file")
 
@@ -48,7 +53,9 @@ stages:
 
                 deployment_parameters=(
                   "@$parameter_file"
-                  "sqlAdministratorPassword=$SQL_ADMINISTRATOR_PASSWORD"
+                  "sqlEntraAdministratorPrincipalType=$SQL_ENTRA_ADMINISTRATOR_PRINCIPAL_TYPE"
+                  "sqlEntraAdministratorName=$SQL_ENTRA_ADMINISTRATOR_NAME"
+                  "sqlEntraAdministratorObjectId=$SQL_ENTRA_ADMINISTRATOR_OBJECT_ID"
                   "browserPushSubject=$BROWSER_PUSH_SUBJECT"
                   "browserPushVapidPrivateKey=$BROWSER_PUSH_VAPID_PRIVATE_KEY"
                   "browserPushVapidPublicKey=$BROWSER_PUSH_VAPID_PUBLIC_KEY"
@@ -70,7 +77,9 @@ stages:
             env:
               RESOURCE_GROUP_NAME: $(resourceGroupName)
               RESOURCE_GROUP_LOCATION: $(resourceGroupLocation)
-              SQL_ADMINISTRATOR_PASSWORD: $(sqlAdministratorPassword)
+              SQL_ENTRA_ADMINISTRATOR_PRINCIPAL_TYPE: $(sqlEntraAdministratorPrincipalType)
+              SQL_ENTRA_ADMINISTRATOR_NAME: $(sqlEntraAdministratorName)
+              SQL_ENTRA_ADMINISTRATOR_OBJECT_ID: $(sqlEntraAdministratorObjectId)
               BROWSER_PUSH_SUBJECT: $(azureNotificationsSubject)
               BROWSER_PUSH_VAPID_PRIVATE_KEY: $(azureNotificationsVapidPrivateKey)
               BROWSER_PUSH_VAPID_PUBLIC_KEY: $(azureNotificationsVapidPublicKey)

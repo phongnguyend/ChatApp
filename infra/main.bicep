@@ -25,12 +25,21 @@ param staticWebAppLocation string = 'eastus2'
 @description('Geography where Azure Communication Services stores data at rest.')
 param communicationServicesDataLocation string = 'Asia Pacific'
 
-@description('Administrator login for the Azure SQL logical server.')
-param sqlAdministratorLogin string = 'chatappadmin'
+@description('Display name of the Microsoft Entra user or group that administers Azure SQL.')
+@minLength(1)
+param sqlEntraAdministratorName string
 
-@secure()
-@description('Administrator password for the Azure SQL logical server.')
-param sqlAdministratorPassword string
+@description('Object ID of the Microsoft Entra user or group that administers Azure SQL.')
+@minLength(36)
+@maxLength(36)
+param sqlEntraAdministratorObjectId string
+
+@description('Type of Microsoft Entra SQL administrator: a person (User) or a group (Group).')
+@allowed([
+  'User'
+  'Group'
+])
+param sqlEntraAdministratorPrincipalType string = 'Group'
 
 @description('Name of the private blob container used for application uploads.')
 @minLength(3)
@@ -149,8 +158,14 @@ resource sqlServer 'Microsoft.Sql/servers@2023-08-01-preview' = {
   name: sqlServerName
   location: location
   properties: {
-    administratorLogin: sqlAdministratorLogin
-    administratorLoginPassword: sqlAdministratorPassword
+    administrators: {
+      administratorType: 'ActiveDirectory'
+      principalType: sqlEntraAdministratorPrincipalType
+      login: sqlEntraAdministratorName
+      sid: sqlEntraAdministratorObjectId
+      tenantId: subscription().tenantId
+      azureADOnlyAuthentication: true
+    }
     minimalTlsVersion: '1.2'
     publicNetworkAccess: 'Enabled'
     restrictOutboundNetworkAccess: 'Disabled'
@@ -491,7 +506,7 @@ resource apiApp 'Microsoft.Web/sites@2023-12-01' = if (deployAppHosting) {
       connectionStrings: [
         {
           name: 'ChatDatabase'
-          connectionString: 'Server=tcp:${sqlServer.properties.fullyQualifiedDomainName},1433;Initial Catalog=${sqlDatabase.name};Persist Security Info=False;User ID=${sqlAdministratorLogin};Password=${sqlAdministratorPassword};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;'
+          connectionString: 'Server=tcp:${sqlServer.properties.fullyQualifiedDomainName},1433;Initial Catalog=${sqlDatabase.name};Authentication=Active Directory Managed Identity;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;'
           type: 'SQLAzure'
         }
       ]
@@ -539,7 +554,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = if (deployAppHosting) {
         }
         {
           name: 'ConnectionStrings__ChatDatabase'
-          value: 'Server=tcp:${sqlServer.properties.fullyQualifiedDomainName},1433;Initial Catalog=${sqlDatabase.name};Persist Security Info=False;User ID=${sqlAdministratorLogin};Password=${sqlAdministratorPassword};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;'
+          value: 'Server=tcp:${sqlServer.properties.fullyQualifiedDomainName},1433;Initial Catalog=${sqlDatabase.name};Authentication=Active Directory Managed Identity;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;'
         }
         {
           name: 'Api__BaseUrl'
@@ -639,3 +654,7 @@ output serviceBusDebugSubscriptionName string = serviceBusDebugSubscription.name
 output communicationRecordingSystemTopicName string = communicationRecordingSystemTopic.name
 output logAnalyticsWorkspaceName string = logAnalyticsWorkspace.name
 output appInsightsName string = appInsights.name
+
+// Use these object IDs when granting contained database users access.
+output apiPrincipalId string = deployAppHosting ? apiApp!.identity.principalId : ''
+output functionPrincipalId string = deployAppHosting ? functionApp!.identity.principalId : ''

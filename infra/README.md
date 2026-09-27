@@ -49,7 +49,7 @@ Run from the repository root. Choose an environment parameter file:
 | `parameters.dev.json` | Full development stack |
 | `parameters.test.json` | Full test stack |
 
-The files contain resource names, regions, and messaging settings. SQL passwords and VAPID credentials are supplied separately; do not add credentials to these tracked files. Environment prefixes isolate resource names. Use a separate resource group for each environment.
+The files contain resource names, regions, and messaging settings. The SQL Entra administrator identity and VAPID credentials are supplied separately; do not add credentials to these tracked files. Environment prefixes isolate resource names. Use a separate resource group for each environment.
 
 Create a resource group and deploy the selected file:
 
@@ -60,9 +60,12 @@ $resourceGroupName = "chatapp-$deploymentEnvironment"
 $resourceLocation = (Get-Content $parameterFile -Raw | ConvertFrom-Json).parameters.location.value
 az group create --name $resourceGroupName --location $resourceLocation
 
-$secureSqlPassword = Read-Host `
-  "SQL administrator password" `
-  -AsSecureString
+$sqlEntraAdministratorPrincipalType = $env:SQL_ENTRA_ADMINISTRATOR_PRINCIPAL_TYPE
+if ($sqlEntraAdministratorPrincipalType -notin @('User', 'Group')) {
+  throw "Set SQL_ENTRA_ADMINISTRATOR_PRINCIPAL_TYPE to User or Group."
+}
+$sqlEntraAdministratorName = Read-Host "SQL Entra administrator user or group display name"
+$sqlEntraAdministratorObjectId = Read-Host "SQL Entra administrator user or group object ID"
 $browserPushSubject = Read-Host `
   "VAPID subject (for example, mailto:admin@example.com)"
 $secureVapidPrivateKey = Read-Host `
@@ -70,18 +73,12 @@ $secureVapidPrivateKey = Read-Host `
   -AsSecureString
 $browserPushVapidPublicKey = Read-Host "VAPID public key"
 
-$passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR(
-  $secureSqlPassword
-)
 $vapidPrivateKeyPointer = `
   [Runtime.InteropServices.Marshal]::SecureStringToBSTR(
     $secureVapidPrivateKey
   )
 
 try {
-  $sqlPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR(
-    $passwordPointer
-  )
   $browserPushVapidPrivateKey = `
     [Runtime.InteropServices.Marshal]::PtrToStringBSTR(
       $vapidPrivateKeyPointer
@@ -93,25 +90,43 @@ try {
     --template-file ./infra/main.bicep `
     --parameters `
       "@$parameterFile" `
-      sqlAdministratorPassword=$sqlPassword `
+      sqlEntraAdministratorPrincipalType=$sqlEntraAdministratorPrincipalType `
+      sqlEntraAdministratorName=$sqlEntraAdministratorName `
+      sqlEntraAdministratorObjectId=$sqlEntraAdministratorObjectId `
       browserPushSubject=$browserPushSubject `
       browserPushVapidPrivateKey=$browserPushVapidPrivateKey `
       browserPushVapidPublicKey=$browserPushVapidPublicKey
 }
 finally {
-  [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($passwordPointer)
   [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($vapidPrivateKeyPointer)
-  Remove-Variable sqlPassword -ErrorAction SilentlyContinue
   Remove-Variable browserPushVapidPrivateKey -ErrorAction SilentlyContinue
 }
 ```
 
-The password is read without echoing it and removed from the PowerShell session
+The VAPID private key is read without echoing it and removed from the PowerShell session
 after Azure CLI completes. The account running the deployment must be allowed to
 create role assignments.
 
 If `eastus2` is not an appropriate Static Web Apps region for the subscription,
 override `staticWebAppLocation`.
+
+## Azure SQL identity authentication
+
+The API and Function App use their system-assigned managed identities with `Authentication=Active Directory Managed Identity`; no SQL username or password is stored in their connection strings. SQL uses Microsoft Entra-only authentication with the user or group provided by `sqlEntraAdministratorName` and `sqlEntraAdministratorObjectId` as administrator. Set the deployment environment's principal type to `User` for a person or `Group` for a group: GitHub uses the environment variable `SQL_ENTRA_ADMINISTRATOR_PRINCIPAL_TYPE`; Azure DevOps uses `sqlEntraAdministratorPrincipalType` in the environment variable group. Both pipelines require and validate this value. For manual deployment, set `$env:SQL_ENTRA_ADMINISTRATOR_PRINCIPAL_TYPE` before running the example above. The tracked parameter files do not contain this setting. Supply the matching user's or group's display name and **object ID** from the subscription's tenant. For a group, add the people who will administer the database before deploying.
+
+**Before first application deployment**, connect to the database identified by `sqlServerFullyQualifiedDomainName` and `sqlDatabaseName` using SSMS with Microsoft Entra MFA authentication as the configured administrator user or a member of the configured administrator group. Add your IP to the SQL firewall if connecting from your machine. Edit and run [grant-sql-access.sql](grant-sql-access.sql), using the `apiAppName` and `functionAppName` outputs. It creates contained users and grants read/write access; the API also receives DDL permissions because it applies EF migrations at startup. Infrastructure deployment alone does not create these database users.
+
+Run the script as a human Entra administrator able to resolve application identities in the directory. If automated under a service principal instead, SQL's server identity needs directory lookup permissions; this template does not provision those. The script is safe to rerun for unchanged identities. If an app's managed identity is recreated, have the database administrator remap its database user to the new identity; matching the old name is insufficient. The `apiPrincipalId` and `functionPrincipalId` outputs identify the current identities.
+
+For local Azure SQL access, sign in with `az login` and use:
+
+```text
+Server=tcp:<sqlServerFullyQualifiedDomainName>,1433;Initial Catalog=<sqlDatabaseName>;Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;
+```
+
+Use a developer identity with database access (for example, the configured administrator user or a member of the administrator group in these development environments). LocalDB connection strings remain unchanged. The local environment creates no hosted app identities, so skip the hosted-user script there.
+
+For existing servers, enabling Entra-only authentication disables password-based SQL clients. Configure the Entra administrator and database users before switching application traffic. See [Microsoft's Entra-only provisioning guidance](https://learn.microsoft.com/en-us/azure/azure-sql/database/authentication-azure-ad-only-authentication-create-server?view=azuresql) and [contained database users](https://learn.microsoft.com/en-us/sql/t-sql/statements/create-user-transact-sql?view=sql-server-ver17).
 
 ## Local development resources
 
@@ -177,6 +192,51 @@ npm --prefix ./frontend run build
 Use the Static Web App deployment token in the frontend deployment workflow to
 upload `frontend/dist`. Keep that token in the CI system's secret store.
 
+## Generate browser push VAPID keys
+
+With Node.js and npm installed, run this command to generate a matching key pair:
+
+```powershell
+npx --yes web-push generate-vapid-keys --json
+```
+
+The command prints JSON containing `publicKey` and `privateKey`. Copy the values without the surrounding quotes into the selected GitHub environment under **Settings → Environments → local/dev/test → Environment secrets**:
+
+| Generated value | GitHub environment secret | Azure DevOps variable |
+| --- | --- | --- |
+| `privateKey` | `BROWSER_PUSH_VAPID_PRIVATE_KEY` | `azureNotificationsVapidPrivateKey` (secret) |
+| `publicKey` | `BROWSER_PUSH_VAPID_PUBLIC_KEY` | `azureNotificationsVapidPublicKey` |
+
+Set `BROWSER_PUSH_SUBJECT` (Azure DevOps: `azureNotificationsSubject`) to a contact URI for the app owner or administrator, such as `mailto:admin@example.com`. Replace the example with your actual contact address; it is not a generated key or the application's login URL.
+
+Generate one pair per environment and retain it for subsequent deployments. Do not regenerate keys on every deployment: existing browser subscriptions are associated with the public key and may need to be recreated after a key change. Keep the private key in your secret store, never in the tracked parameter files or source control. The public key is intentionally used by browser clients.
+
+See the [web-push command-line documentation](https://github.com/web-push-libs/web-push#command-line) and [Azure Notification Hubs browser push documentation](https://learn.microsoft.com/en-us/azure/notification-hubs/browser-push).
+
+## GitHub Actions deployment
+
+Run **Actions → Deploy infrastructure → Run workflow**, then select `local`, `dev`, or `test`. The workflow is `.github/workflows/infra.yml`; it validates and deploys `main.bicep` using the matching parameter file. Local creates Azure dependencies only. Dev and test include application hosting. Application code is not published by this workflow.
+
+Create GitHub environments named `local`, `dev`, and `test`. Configure these environment settings under **Secrets** or **Variables** as indicated:
+
+| Setting | Type | Value |
+| --- | --- | --- |
+| `AZURE_CLIENT_ID` | Secret | Azure deployment identity's application/client ID |
+| `AZURE_TENANT_ID` | Secret | Microsoft Entra tenant ID |
+| `AZURE_SUBSCRIPTION_ID` | Secret | Target subscription ID |
+| `SQL_ENTRA_ADMINISTRATOR_NAME` | Variable | SQL administrator user's or group's display name |
+| `SQL_ENTRA_ADMINISTRATOR_OBJECT_ID` | Variable | SQL administrator user's or group's Entra object ID |
+| `SQL_ENTRA_ADMINISTRATOR_PRINCIPAL_TYPE` | Variable | `User` for a person or `Group` for a group |
+| `BROWSER_PUSH_SUBJECT` | Secret | VAPID contact URI, such as `mailto:admin@example.com` |
+| `BROWSER_PUSH_VAPID_PRIVATE_KEY` | Secret | VAPID private key |
+| `BROWSER_PUSH_VAPID_PUBLIC_KEY` | Secret | Matching VAPID public key |
+
+No SQL password secret is required.
+
+Configure Azure federated credentials for the GitHub environments, with subject `repo:OWNER/REPOSITORY:environment:local` (and corresponding `dev` and `test` subjects), issuer `https://token.actions.githubusercontent.com`, and audience `api://AzureADTokenExchange`. The workflow uses [Azure Login's OIDC authentication](https://github.com/Azure/login#login-with-openid-connect-oidc-recommended), so no Azure client secret is needed. Grant the deployment identity permission to create resources and role assignments, including permission to create the resource group if it does not exist.
+
+The resource group defaults to `<workloadName>-<environmentName>`. Set the optional GitHub environment variable `AZURE_RESOURCE_GROUP` to use an existing/custom group. Resource locations and other non-secret settings come from the parameter file. The workflow writes credentials to a restricted temporary parameter file and removes it when the deployment step exits. Successful resource outputs appear in the run summary. Runs for the same environment are serialized, and active deployments are not canceled by a newer run.
+
 ## Azure DevOps pipeline
 
 `azure-pipelines.yml` validates and deploys `main.bicep`. When manually running
@@ -196,7 +256,9 @@ each required environment variable group with these variables:
 | `azureServiceConnection`            | `sc-chatapp-dev`                 | Azure Resource Manager service connection        |
 | `resourceGroupName`                 | `chatapp-dev`                    | Created by the pipeline when absent              |
 | `resourceGroupLocation`             | `southeastasia`                  | Location of the resource group metadata          |
-| `sqlAdministratorPassword`          | `(secret)`                       | Mark this variable as secret                     |
+| `sqlEntraAdministratorPrincipalType` | `Group` | Required: `User` or `Group` |
+| `sqlEntraAdministratorName` | `chatapp-sql-admins` | Entra administrator user or group display name |
+| `sqlEntraAdministratorObjectId` | `(user or group object ID)` | Entra administrator user or group object ID |
 | `apiAppName`                        | `chatapp-dev-api-...`            | App Service name used by the release pipeline    |
 | `functionAppName`                   | `chatapp-dev-functions-...`      | Function App name used by the release pipeline   |
 | `staticWebAppName`                  | `chatapp-dev-web-...`            | Static Web App name used by the release pipeline |
