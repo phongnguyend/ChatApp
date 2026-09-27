@@ -31,6 +31,7 @@ jobs:
     env:
       DEPLOYMENT_ENVIRONMENT: ${{ inputs.environment }}
       RESOURCE_GROUP_OVERRIDE: ${{ vars.AZURE_RESOURCE_GROUP }}
+      RESOURCE_GROUP_LOCATION_OVERRIDE: ${{ vars.AZURE_RESOURCE_GROUP_LOCATION }}
       AZURE_CORE_OUTPUT: none
     steps:
       - name: Check out repository
@@ -72,8 +73,9 @@ jobs:
           jq -e --arg environment "$DEPLOYMENT_ENVIRONMENT" \
             '.parameters.environmentName.value == $environment' "$parameter_file" > /dev/null
           workload=$(jq -r '.parameters.workloadName.value | ascii_downcase' "$parameter_file")
-          location=$(jq -r '.parameters.location.value' "$parameter_file")
+          resource_location=$(jq -r '.parameters.location.value' "$parameter_file")
           resource_group="${RESOURCE_GROUP_OVERRIDE:-${workload}-${DEPLOYMENT_ENVIRONMENT}}"
+          resource_group_location="${RESOURCE_GROUP_LOCATION_OVERRIDE:-$resource_location}"
           deployment_name="${workload}-${DEPLOYMENT_ENVIRONMENT}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
           umask 077
@@ -89,7 +91,7 @@ jobs:
           }' "$parameter_file" > "$secure_parameters"
 
           az bicep build --file infra/main.bicep --outfile "$RUNNER_TEMP/infra-template.json"
-          az group create --name "$resource_group" --location "$location" \
+          az group create --name "$resource_group" --location "$resource_group_location" \
             --tags "Workload=$workload" "Environment=$DEPLOYMENT_ENVIRONMENT" "ManagedBy=Bicep" \
             --output none
           az deployment group validate --resource-group "$resource_group" \

@@ -51,61 +51,105 @@ Run from the repository root. Choose an environment parameter file:
 
 The files contain resource names, regions, and messaging settings. The SQL Entra administrator identity and VAPID credentials are supplied separately; do not add credentials to these tracked files. Environment prefixes isolate resource names. Use a separate resource group for each environment.
 
+## Generate browser push VAPID keys
+
+With Node.js and npm installed, run this command to generate a matching key pair:
+
+```powershell
+npx --yes web-push generate-vapid-keys --json
+```
+
+The command prints JSON containing `publicKey` and `privateKey`. Copy the values without the surrounding quotes into the selected GitHub environment under **Settings → Environments → local/dev/test → Environment secrets**:
+
+| Generated value | GitHub environment secret | Azure DevOps variable |
+| --- | --- | --- |
+| `privateKey` | `BROWSER_PUSH_VAPID_PRIVATE_KEY` | `azureNotificationsVapidPrivateKey` (secret) |
+| `publicKey` | `BROWSER_PUSH_VAPID_PUBLIC_KEY` | `azureNotificationsVapidPublicKey` |
+
+Set `BROWSER_PUSH_SUBJECT` (Azure DevOps: `azureNotificationsSubject`) to a contact URI for the app owner or administrator, such as `mailto:admin@example.com`. Replace the example with your actual contact address; it is not a generated key or the application's login URL.
+
+Generate one pair per environment and retain it for subsequent deployments. Do not regenerate keys on every deployment: existing browser subscriptions are associated with the public key and may need to be recreated after a key change. Keep the private key in your secret store, never in the tracked parameter files or source control. The public key is intentionally used by browser clients.
+
+See the [web-push command-line documentation](https://github.com/web-push-libs/web-push#command-line) and [Azure Notification Hubs browser push documentation](https://learn.microsoft.com/en-us/azure/notification-hubs/browser-push).
+
+## Manual PowerShell deployment
+
 Create a resource group and deploy the selected file:
+
+Optionally set `$env:AZURE_RESOURCE_GROUP` and `$env:AZURE_RESOURCE_GROUP_LOCATION` in your shell. These use the same defaults as the GitHub workflow: `<workloadName>-<environmentName>` and the parameter file's `location`. For an existing resource group, use its current region. This sets the group's metadata region; individual resource regions still come from the parameter file.
+
+Replace the example values below, then execute this block in the same PowerShell session as the deployment script:
+
+```powershell
+# Optional overrides: set to '' to use the defaults described above.
+$env:AZURE_RESOURCE_GROUP = 'chatapp-dev'
+$env:AZURE_RESOURCE_GROUP_LOCATION = 'southeastasia'
+
+# SQL administrator: use the matching user's or group's display name and object ID.
+$env:SQL_ENTRA_ADMINISTRATOR_NAME = '<user-or-group-display-name>'
+$env:SQL_ENTRA_ADMINISTRATOR_OBJECT_ID = '<user-or-group-object-id>'
+$env:SQL_ENTRA_ADMINISTRATOR_PRINCIPAL_TYPE = 'User' # User or Group
+
+# Use the matching key pair from the VAPID generation section above.
+$env:BROWSER_PUSH_SUBJECT = 'mailto:admin@example.com'
+$env:BROWSER_PUSH_VAPID_PRIVATE_KEY = '<privateKey>'
+$env:BROWSER_PUSH_VAPID_PUBLIC_KEY = '<publicKey>'
+```
+
+Use the VAPID key pair generated above. GitHub environment settings are not automatically available in your local shell. The script checks required settings before creating resources and does not prompt for input. Sign in to Azure and select the target subscription beforehand.
 
 ```powershell
 $deploymentEnvironment = 'dev' # local, dev, or test
-$parameterFile = "./infra/parameters.$deploymentEnvironment.json"
-$resourceGroupName = "chatapp-$deploymentEnvironment"
-$resourceLocation = (Get-Content $parameterFile -Raw | ConvertFrom-Json).parameters.location.value
-az group create --name $resourceGroupName --location $resourceLocation
-
-$sqlEntraAdministratorPrincipalType = $env:SQL_ENTRA_ADMINISTRATOR_PRINCIPAL_TYPE
-if ($sqlEntraAdministratorPrincipalType -notin @('User', 'Group')) {
+$requiredSettings = @(
+  'SQL_ENTRA_ADMINISTRATOR_NAME',
+  'SQL_ENTRA_ADMINISTRATOR_OBJECT_ID',
+  'SQL_ENTRA_ADMINISTRATOR_PRINCIPAL_TYPE',
+  'BROWSER_PUSH_SUBJECT',
+  'BROWSER_PUSH_VAPID_PRIVATE_KEY',
+  'BROWSER_PUSH_VAPID_PUBLIC_KEY'
+)
+foreach ($setting in $requiredSettings) {
+  if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($setting))) {
+    throw "Missing environment setting: $setting"
+  }
+}
+if ($env:SQL_ENTRA_ADMINISTRATOR_PRINCIPAL_TYPE -cnotin @('User', 'Group')) {
   throw "Set SQL_ENTRA_ADMINISTRATOR_PRINCIPAL_TYPE to User or Group."
 }
-$sqlEntraAdministratorName = Read-Host "SQL Entra administrator user or group display name"
-$sqlEntraAdministratorObjectId = Read-Host "SQL Entra administrator user or group object ID"
-$browserPushSubject = Read-Host `
-  "VAPID subject (for example, mailto:admin@example.com)"
-$secureVapidPrivateKey = Read-Host `
-  "VAPID private key" `
-  -AsSecureString
-$browserPushVapidPublicKey = Read-Host "VAPID public key"
 
-$vapidPrivateKeyPointer = `
-  [Runtime.InteropServices.Marshal]::SecureStringToBSTR(
-    $secureVapidPrivateKey
-  )
-
-try {
-  $browserPushVapidPrivateKey = `
-    [Runtime.InteropServices.Marshal]::PtrToStringBSTR(
-      $vapidPrivateKeyPointer
-    )
-
-  az deployment group create `
-    --name $resourceGroupName `
-    --resource-group $resourceGroupName `
-    --template-file ./infra/main.bicep `
-    --parameters `
-      "@$parameterFile" `
-      sqlEntraAdministratorPrincipalType=$sqlEntraAdministratorPrincipalType `
-      sqlEntraAdministratorName=$sqlEntraAdministratorName `
-      sqlEntraAdministratorObjectId=$sqlEntraAdministratorObjectId `
-      browserPushSubject=$browserPushSubject `
-      browserPushVapidPrivateKey=$browserPushVapidPrivateKey `
-      browserPushVapidPublicKey=$browserPushVapidPublicKey
+$parameterFile = "./infra/parameters.$deploymentEnvironment.json"
+$deploymentParameters = (Get-Content $parameterFile -Raw | ConvertFrom-Json).parameters
+$workloadName = $deploymentParameters.workloadName.value.ToLowerInvariant()
+$resourceGroupName = $env:AZURE_RESOURCE_GROUP
+if ([string]::IsNullOrEmpty($resourceGroupName)) {
+  $resourceGroupName = "$workloadName-$deploymentEnvironment"
 }
-finally {
-  [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($vapidPrivateKeyPointer)
-  Remove-Variable browserPushVapidPrivateKey -ErrorAction SilentlyContinue
+$resourceGroupLocation = $env:AZURE_RESOURCE_GROUP_LOCATION
+if ([string]::IsNullOrEmpty($resourceGroupLocation)) {
+  $resourceGroupLocation = $deploymentParameters.location.value
 }
+az group create `
+  --name $resourceGroupName `
+  --location $resourceGroupLocation `
+  --tags "Workload=$workloadName" "Environment=$deploymentEnvironment" "ManagedBy=Bicep"
+if ($LASTEXITCODE -ne 0) { throw "Resource group creation failed." }
+
+az deployment group create `
+  --name $resourceGroupName `
+  --resource-group $resourceGroupName `
+  --template-file ./infra/main.bicep `
+  --parameters `
+    "@$parameterFile" `
+    "sqlEntraAdministratorPrincipalType=$env:SQL_ENTRA_ADMINISTRATOR_PRINCIPAL_TYPE" `
+    "sqlEntraAdministratorName=$env:SQL_ENTRA_ADMINISTRATOR_NAME" `
+    "sqlEntraAdministratorObjectId=$env:SQL_ENTRA_ADMINISTRATOR_OBJECT_ID" `
+    "browserPushSubject=$env:BROWSER_PUSH_SUBJECT" `
+    "browserPushVapidPrivateKey=$env:BROWSER_PUSH_VAPID_PRIVATE_KEY" `
+    "browserPushVapidPublicKey=$env:BROWSER_PUSH_VAPID_PUBLIC_KEY"
+if ($LASTEXITCODE -ne 0) { throw "Infrastructure deployment failed." }
 ```
 
-The VAPID private key is read without echoing it and removed from the PowerShell session
-after Azure CLI completes. The account running the deployment must be allowed to
-create role assignments.
+The account running the deployment must be allowed to create role assignments.
 
 If `eastus2` is not an appropriate Static Web Apps region for the subscription,
 override `staticWebAppLocation`.
@@ -192,27 +236,6 @@ npm --prefix ./frontend run build
 Use the Static Web App deployment token in the frontend deployment workflow to
 upload `frontend/dist`. Keep that token in the CI system's secret store.
 
-## Generate browser push VAPID keys
-
-With Node.js and npm installed, run this command to generate a matching key pair:
-
-```powershell
-npx --yes web-push generate-vapid-keys --json
-```
-
-The command prints JSON containing `publicKey` and `privateKey`. Copy the values without the surrounding quotes into the selected GitHub environment under **Settings → Environments → local/dev/test → Environment secrets**:
-
-| Generated value | GitHub environment secret | Azure DevOps variable |
-| --- | --- | --- |
-| `privateKey` | `BROWSER_PUSH_VAPID_PRIVATE_KEY` | `azureNotificationsVapidPrivateKey` (secret) |
-| `publicKey` | `BROWSER_PUSH_VAPID_PUBLIC_KEY` | `azureNotificationsVapidPublicKey` |
-
-Set `BROWSER_PUSH_SUBJECT` (Azure DevOps: `azureNotificationsSubject`) to a contact URI for the app owner or administrator, such as `mailto:admin@example.com`. Replace the example with your actual contact address; it is not a generated key or the application's login URL.
-
-Generate one pair per environment and retain it for subsequent deployments. Do not regenerate keys on every deployment: existing browser subscriptions are associated with the public key and may need to be recreated after a key change. Keep the private key in your secret store, never in the tracked parameter files or source control. The public key is intentionally used by browser clients.
-
-See the [web-push command-line documentation](https://github.com/web-push-libs/web-push#command-line) and [Azure Notification Hubs browser push documentation](https://learn.microsoft.com/en-us/azure/notification-hubs/browser-push).
-
 ## GitHub Actions deployment
 
 Run **Actions → Deploy infrastructure → Run workflow**, then select `local`, `dev`, or `test`. The workflow is `.github/workflows/infra.yml`; it validates and deploys `main.bicep` using the matching parameter file. Local creates Azure dependencies only. Dev and test include application hosting. Application code is not published by this workflow.
@@ -224,6 +247,8 @@ Create GitHub environments named `local`, `dev`, and `test`. Configure these env
 | `AZURE_CLIENT_ID` | Secret | Azure deployment identity's application/client ID |
 | `AZURE_TENANT_ID` | Secret | Microsoft Entra tenant ID |
 | `AZURE_SUBSCRIPTION_ID` | Secret | Target subscription ID |
+| `AZURE_RESOURCE_GROUP` | Variable | Optional resource group name; defaults to `<workloadName>-<environmentName>` |
+| `AZURE_RESOURCE_GROUP_LOCATION` | Variable | Optional resource group metadata region; defaults to `location` in the environment parameter file |
 | `SQL_ENTRA_ADMINISTRATOR_NAME` | Variable | SQL administrator user's or group's display name |
 | `SQL_ENTRA_ADMINISTRATOR_OBJECT_ID` | Variable | SQL administrator user's or group's Entra object ID |
 | `SQL_ENTRA_ADMINISTRATOR_PRINCIPAL_TYPE` | Variable | `User` for a person or `Group` for a group |
@@ -235,7 +260,7 @@ No SQL password secret is required.
 
 Configure Azure federated credentials for the GitHub environments, with subject `repo:OWNER/REPOSITORY:environment:local` (and corresponding `dev` and `test` subjects), issuer `https://token.actions.githubusercontent.com`, and audience `api://AzureADTokenExchange`. The workflow uses [Azure Login's OIDC authentication](https://github.com/Azure/login#login-with-openid-connect-oidc-recommended), so no Azure client secret is needed. Grant the deployment identity permission to create resources and role assignments, including permission to create the resource group if it does not exist.
 
-The resource group defaults to `<workloadName>-<environmentName>`. Set the optional GitHub environment variable `AZURE_RESOURCE_GROUP` to use an existing/custom group. Resource locations and other non-secret settings come from the parameter file. The workflow writes credentials to a restricted temporary parameter file and removes it when the deployment step exits. Successful resource outputs appear in the run summary. Runs for the same environment are serialized, and active deployments are not canceled by a newer run.
+The resource group defaults to `<workloadName>-<environmentName>`. Set the optional GitHub environment variable `AZURE_RESOURCE_GROUP` to use an existing/custom group and `AZURE_RESOURCE_GROUP_LOCATION` to choose its metadata region. For an existing group, use its current region. When omitted, the group region defaults to `location` in the environment parameter file. Individual resource locations remain controlled by the parameter file. The workflow writes credentials to a restricted temporary parameter file and removes it when the deployment step exits. Successful resource outputs appear in the run summary. Runs for the same environment are serialized, and active deployments are not canceled by a newer run.
 
 ## Azure DevOps pipeline
 
@@ -248,26 +273,31 @@ naming convention:
 chatapp-infra-{environment}
 ```
 
-For example, selecting `test` loads `chatapp-infra-test`. Create and authorize
-each required environment variable group with these variables:
+For example, selecting `test` loads `chatapp-infra-test`. Create and authorize each environment's variable group with the following **required infrastructure inputs**. Use these exact Azure DevOps variable names; the YAML maps them to shell environment variables internally.
 
-| Variable                            | Example                          | Notes                                            |
-| ----------------------------------- | -------------------------------- | ------------------------------------------------ |
-| `azureServiceConnection`            | `sc-chatapp-dev`                 | Azure Resource Manager service connection        |
-| `resourceGroupName`                 | `chatapp-dev`                    | Created by the pipeline when absent              |
-| `resourceGroupLocation`             | `southeastasia`                  | Location of the resource group metadata          |
-| `sqlEntraAdministratorPrincipalType` | `Group` | Required: `User` or `Group` |
-| `sqlEntraAdministratorName` | `chatapp-sql-admins` | Entra administrator user or group display name |
-| `sqlEntraAdministratorObjectId` | `(user or group object ID)` | Entra administrator user or group object ID |
-| `apiAppName`                        | `chatapp-dev-api-...`            | App Service name used by the release pipeline    |
-| `functionAppName`                   | `chatapp-dev-functions-...`      | Function App name used by the release pipeline   |
-| `staticWebAppName`                  | `chatapp-dev-web-...`            | Static Web App name used by the release pipeline |
-| `staticWebAppUrl`                   | `https://...azurestaticapps.net` | Static Web App production URL                    |
-| `azureNotificationsSubject`         | `mailto:admin@example.com`       | Web Push VAPID subject                           |
-| `azureNotificationsVapidPrivateKey` | `(secret)`                       | VAPID private key; mark as secret                |
-| `azureNotificationsVapidPublicKey`  | `(public key)`                   | Public VAPID key used by browser clients         |
+| Variable | Kind | Example / purpose |
+| --- | --- | --- |
+| `azureServiceConnection` | Variable | `sc-chatapp-dev`: authorized Azure Resource Manager service connection |
+| `resourceGroupName` | Variable | `chatapp-dev`: resource group to create or deploy into |
+| `resourceGroupLocation` | Variable | `southeastasia`: resource group metadata region; use its current region for an existing group |
+| `sqlEntraAdministratorPrincipalType` | Variable | `User` for a person or `Group` for a group |
+| `sqlEntraAdministratorName` | Variable | SQL administrator user's or group's Entra display name |
+| `sqlEntraAdministratorObjectId` | Variable | Matching user's or group's Entra object ID |
+| `azureNotificationsSubject` | Variable | VAPID contact URI, such as `mailto:admin@example.com` |
+| `azureNotificationsVapidPrivateKey` | Secret | VAPID private key; enable **Keep this value secret** |
+| `azureNotificationsVapidPublicKey` | Variable | Matching public VAPID key |
 
-The pipeline loads `infra/parameters.{environment}.json`. Edit that file for non-secret resource settings; the variable group supplies deployment context and credentials. Hosting output variables are only needed for application release pipelines, not local dependency deployments.
+Unlike the GitHub workflow, the Azure DevOps pipeline requires explicit `resourceGroupName` and `resourceGroupLocation` values; it does not supply defaults. Individual resource regions and other resource settings come from `infra/parameters.{environment}.json`. No SQL password or separate Azure client credentials are required in the variable group: SQL uses Entra authentication, and the deployment uses `azureServiceConnection`.
+
+For application releases through the root `azure-pipelines.release.yml`, also add these **release-only variables** to the same variable group after infrastructure deployment:
+
+| Variable | Kind | Value |
+| --- | --- | --- |
+| `apiAppName` | Variable | Infrastructure deployment's `apiAppName` output |
+| `functionAppName` | Variable | Infrastructure deployment's `functionAppName` output |
+| `staticWebAppName` | Variable | Infrastructure deployment's `staticWebAppName` output |
+
+The infrastructure pipeline prints these outputs but does not automatically save them to the variable group. Release also reuses `azureServiceConnection` and `resourceGroupName`. These hosting variables are unnecessary for `local`, which deploys dependencies only. `staticWebAppUrl` is not consumed by either pipeline and does not need to be configured. The release pipeline retrieves `staticWebAppDeploymentToken` from Azure and stores it as a secret pipeline variable during the run; do not add it manually.
 
 The service principal behind `azureServiceConnection` needs permission to
 create resources in the subscription and create the storage and Service Bus role
