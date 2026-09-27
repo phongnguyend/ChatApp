@@ -262,6 +262,30 @@ Configure Azure federated credentials for the GitHub environments, with subject 
 
 The resource group defaults to `<workloadName>-<environmentName>`. Set the optional GitHub environment variable `AZURE_RESOURCE_GROUP` to use an existing/custom group and `AZURE_RESOURCE_GROUP_LOCATION` to choose its metadata region. For an existing group, use its current region. When omitted, the group region defaults to `location` in the environment parameter file. Individual resource locations remain controlled by the parameter file. The workflow writes credentials to a restricted temporary parameter file and removes it when the deployment step exits. Successful resource outputs appear in the run summary. Runs for the same environment are serialized, and active deployments are not canceled by a newer run.
 
+## GitHub Actions application release
+
+Run **Actions ? Release applications ? Run workflow**, choose the source branch or tag, then select `dev` or `test`. The workflow is [release.yml](../.github/workflows/release.yml). It builds the API and Azure Functions with .NET 10 and the frontend with Node.js 24, then deploys all three to the selected environment. Releases for the same environment are serialized.
+
+Deploy infrastructure and run [grant-sql-access.sql](grant-sql-access.sql) before the first release. Reuse the environment's `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID` secrets and OIDC federation from the infrastructure workflow. The Azure identity needs permission to deploy App Service and Functions and retrieve the Static Web App deployment token.
+
+Configure these GitHub environment variables:
+
+| Variable | Value |
+| --- | --- |
+| `AZURE_RESOURCE_GROUP` | Optional; defaults to `<workloadName>-<environmentName>` from the parameter file |
+| `AZURE_API_APP_NAME` | Required: infrastructure output `apiAppName` |
+| `AZURE_FUNCTION_APP_NAME` | Required: infrastructure output `functionAppName` |
+| `AZURE_STATIC_WEB_APP_NAME` | Required: infrastructure output `staticWebAppName` |
+| `VITE_GOOGLE_CLIENT_ID` | Optional Google sign-in client ID; match backend provider settings |
+| `VITE_GOOGLE_REDIRECT_URI` | Optional Google redirect URI registered for the deployed frontend |
+| `VITE_MICROSOFT_CLIENT_ID` | Optional Microsoft sign-in client ID; match backend provider settings |
+| `VITE_MICROSOFT_TENANT_ID` | Optional Microsoft sign-in tenant ID |
+| `VITE_MICROSOFT_REDIRECT_URI` | Optional Microsoft redirect URI registered for the deployed frontend |
+
+Copy the app names from infrastructure outputs into the selected environment's variables; the infrastructure workflow does not save them automatically. The release resolves the API URL from Azure for `VITE_API_URL` and retrieves and masks the Static Web App deployment token during the run. No publish-profile or deployment-token secret is needed. The frontend is published to the selected Static Web App's production endpoint, including when releasing from a different source branch.
+
+The workflow builds all applications before deploying, checks the API's `/health` endpoint after deployment, and reports application URLs in the run summary. It does not run the E2E suite or roll back a partially completed release. Infrastructure settings and SQL permissions are managed separately.
+
 ## Azure DevOps pipeline
 
 `azure-pipelines.yml` validates and deploys `main.bicep`. When manually running
