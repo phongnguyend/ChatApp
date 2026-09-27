@@ -5,10 +5,16 @@ targetScope = 'resourceGroup'
 @maxLength(20)
 param workloadName string = 'chatapp'
 
-@description('Deployment environment name, such as dev, test, or prod.')
+@description('Deployment environment name, such as local, dev, or test.')
 @minLength(2)
 @maxLength(8)
 param environmentName string = 'dev'
+
+@description('Deploy application hosting. Set false when running the API, background worker, and frontend locally.')
+param deployAppHosting bool = true
+
+@description('Additional resource tags. Workload, Environment, ManagedBy, and Component are maintained by this template.')
+param resourceTags object = {}
 
 @description('Azure region for the App Service, Storage account, and SQL database.')
 param location string = resourceGroup().location
@@ -29,7 +35,7 @@ param sqlAdministratorPassword string
 @description('Name of the private blob container used for application uploads.')
 @minLength(3)
 @maxLength(63)
-param uploadsContainerName string = 'chatapp-uploads'
+param uploadsContainerName string = 'uploads'
 
 @description('Name of the Service Bus topic used for application messaging.')
 @minLength(1)
@@ -65,13 +71,21 @@ param browserPushVapidPublicKey string
 
 var uniqueSuffix = uniqueString(resourceGroup().id)
 var resourceNamePrefix = toLower('${workloadName}-${environmentName}')
+var commonTags = union(resourceTags, {
+  Workload: toLower(workloadName)
+  Environment: toLower(environmentName)
+  ManagedBy: 'Bicep'
+})
 var appServicePlanName = '${resourceNamePrefix}-plan'
 var apiAppName = take('${resourceNamePrefix}-api-${uniqueSuffix}', 60)
 var functionAppName = take('${resourceNamePrefix}-functions-${uniqueSuffix}', 60)
 var staticWebAppName = take('${resourceNamePrefix}-web-${uniqueSuffix}', 60)
-var storageAccountName = 'st${uniqueString(resourceGroup().id, workloadName, environmentName)}'
+// Storage names allow only 3-24 lowercase letters/digits; reserve eight for uniqueness.
+var storageEnvironment = toLower(replace(environmentName, '-', ''))
+var storageWorkload = take(toLower(replace(workloadName, '-', '')), 16 - length(storageEnvironment))
+var storageAccountName = '${storageWorkload}${storageEnvironment}${take(uniqueSuffix, 8)}'
 var sqlServerName = take('${resourceNamePrefix}-sql-${uniqueSuffix}', 63)
-var sqlDatabaseName = 'chatapp'
+var sqlDatabaseName = '${resourceNamePrefix}-db'
 var notificationHubNamespaceName = take('${resourceNamePrefix}-nh-${uniqueSuffix}', 50)
 var notificationHubName = take('${resourceNamePrefix}-notifications', 265)
 var communicationServiceName = take('${resourceNamePrefix}-acs-${uniqueSuffix}', 63)
@@ -93,6 +107,7 @@ var serviceBusDataReceiverRoleDefinitionId = subscriptionResourceId(
 )
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+  tags: union(commonTags, { Component: 'storage' })
   name: storageAccountName
   location: location
   kind: 'StorageV2'
@@ -130,6 +145,7 @@ resource uploadsContainer 'Microsoft.Storage/storageAccounts/blobServices/contai
 }
 
 resource sqlServer 'Microsoft.Sql/servers@2023-08-01-preview' = {
+  tags: union(commonTags, { Component: 'sql-server' })
   name: sqlServerName
   location: location
   properties: {
@@ -152,6 +168,7 @@ resource allowAzureServices 'Microsoft.Sql/servers/firewallRules@2023-08-01-prev
 }
 
 resource sqlDatabase 'Microsoft.Sql/servers/databases@2023-08-01-preview' = {
+  tags: union(commonTags, { Component: 'database' })
   parent: sqlServer
   name: sqlDatabaseName
   location: location
@@ -165,7 +182,8 @@ resource sqlDatabase 'Microsoft.Sql/servers/databases@2023-08-01-preview' = {
   }
 }
 
-resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = {
+resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = if (deployAppHosting) {
+  tags: union(commonTags, { Component: 'hosting' })
   name: appServicePlanName
   location: location
   kind: 'linux'
@@ -179,7 +197,8 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = {
   }
 }
 
-resource staticWebApp 'Microsoft.Web/staticSites@2023-12-01' = {
+resource staticWebApp 'Microsoft.Web/staticSites@2023-12-01' = if (deployAppHosting) {
+  tags: union(commonTags, { Component: 'frontend' })
   name: staticWebAppName
   location: staticWebAppLocation
   sku: {
@@ -193,6 +212,7 @@ resource staticWebApp 'Microsoft.Web/staticSites@2023-12-01' = {
 }
 
 resource notificationHubNamespace 'Microsoft.NotificationHubs/namespaces@2023-09-01' = {
+  tags: union(commonTags, { Component: 'notifications' })
   name: notificationHubNamespaceName
   location: location
   sku: {
@@ -205,6 +225,7 @@ resource notificationHubNamespace 'Microsoft.NotificationHubs/namespaces@2023-09
 }
 
 resource notificationHub 'Microsoft.NotificationHubs/namespaces/notificationHubs@2023-09-01' = {
+  tags: union(commonTags, { Component: 'notification-hub' })
   parent: notificationHubNamespace
   name: notificationHubName
   location: location
@@ -222,7 +243,7 @@ resource notificationHub 'Microsoft.NotificationHubs/namespaces/notificationHubs
 
 resource notificationHubApiAuthorizationRule 'Microsoft.NotificationHubs/namespaces/notificationHubs/authorizationRules@2023-09-01' = {
   parent: notificationHub
-  name: 'ApiFullAccess'
+  name: '${resourceNamePrefix}-api-access'
   properties: {
     rights: [
       'Listen'
@@ -233,6 +254,7 @@ resource notificationHubApiAuthorizationRule 'Microsoft.NotificationHubs/namespa
 }
 
 resource communicationService 'Microsoft.Communication/communicationServices@2025-05-01' = {
+  tags: union(commonTags, { Component: 'calling' })
   name: communicationServiceName
   location: 'global'
   identity: {
@@ -246,6 +268,7 @@ resource communicationService 'Microsoft.Communication/communicationServices@202
 }
 
 resource serviceBusNamespace 'Microsoft.ServiceBus/namespaces@2024-01-01' = {
+  tags: union(commonTags, { Component: 'messaging' })
   name: serviceBusNamespaceName
   location: location
   sku: {
@@ -279,6 +302,7 @@ resource serviceBusDebugSubscription 'Microsoft.ServiceBus/namespaces/topics/sub
 }
 
 resource communicationRecordingSystemTopic 'Microsoft.EventGrid/systemTopics@2025-02-15' = {
+  tags: union(commonTags, { Component: 'recording-events' })
   name: communicationRecordingSystemTopicName
   location: 'global'
   identity: {
@@ -302,7 +326,7 @@ resource communicationRecordingEventGridSender 'Microsoft.Authorization/roleAssi
 
 resource communicationRecordingEventSubscription 'Microsoft.EventGrid/systemTopics/eventSubscriptions@2025-02-15' = {
   parent: communicationRecordingSystemTopic
-  name: 'recording-files-to-service-bus'
+  name: '${resourceNamePrefix}-recordings-to-bus'
   properties: {
     deliveryWithResourceIdentity: {
       destination: {
@@ -333,6 +357,7 @@ resource communicationRecordingEventSubscription 'Microsoft.EventGrid/systemTopi
 }
 
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
+  tags: union(commonTags, { Component: 'logs' })
   name: logAnalyticsWorkspaceName
   location: location
   properties: {
@@ -344,6 +369,7 @@ resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09
 }
 
 resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
+  tags: union(commonTags, { Component: 'monitoring' })
   name: appInsightsName
   location: location
   kind: 'web'
@@ -353,7 +379,8 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
   }
 }
 
-resource apiApp 'Microsoft.Web/sites@2023-12-01' = {
+resource apiApp 'Microsoft.Web/sites@2023-12-01' = if (deployAppHosting) {
+  tags: union(commonTags, { Component: 'api' })
   name: apiAppName
   location: location
   kind: 'app,linux'
@@ -398,7 +425,7 @@ resource apiApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'AllowedOrigins__0'
-          value: 'https://${staticWebApp.properties.defaultHostname}'
+          value: 'https://${staticWebApp!.properties.defaultHostname}'
         }
         {
           name: 'Notification__Provider'
@@ -406,7 +433,7 @@ resource apiApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'Notification__AzureNotificationHub__FrontendBaseUrl'
-          value: 'https://${staticWebApp.properties.defaultHostname}'
+          value: 'https://${staticWebApp!.properties.defaultHostname}'
         }
         {
           name: 'Notification__AzureNotificationHub__ConnectionString'
@@ -478,7 +505,8 @@ resource apiApp 'Microsoft.Web/sites@2023-12-01' = {
   }
 }
 
-resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
+resource functionApp 'Microsoft.Web/sites@2023-12-01' = if (deployAppHosting) {
+  tags: union(commonTags, { Component: 'background' })
   name: functionAppName
   location: location
   kind: 'functionapp,linux'
@@ -515,7 +543,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'Api__BaseUrl'
-          value: 'https://${apiApp.properties.defaultHostName}'
+          value: 'https://${apiApp!.properties.defaultHostName}'
         }
         {
           name: 'ServiceBusConnection__fullyQualifiedNamespace'
@@ -543,11 +571,11 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
   }
 }
 
-resource apiBlobDataContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource apiBlobDataContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployAppHosting) {
   name: guid(storageAccount.id, apiApp.id, blobDataContributorRoleDefinitionId)
   scope: storageAccount
   properties: {
-    principalId: apiApp.identity.principalId
+    principalId: apiApp!.identity.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: blobDataContributorRoleDefinitionId
   }
@@ -563,41 +591,41 @@ resource communicationServiceBlobDataContributor 'Microsoft.Authorization/roleAs
   }
 }
 
-resource apiServiceBusDataSender 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource apiServiceBusDataSender 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployAppHosting) {
   name: guid(serviceBusNamespace.id, apiApp.id, serviceBusDataSenderRoleDefinitionId)
   scope: serviceBusNamespace
   properties: {
-    principalId: apiApp.identity.principalId
+    principalId: apiApp!.identity.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: serviceBusDataSenderRoleDefinitionId
   }
 }
 
-resource apiServiceBusDataReceiver 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource apiServiceBusDataReceiver 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployAppHosting) {
   name: guid(serviceBusNamespace.id, apiApp.id, serviceBusDataReceiverRoleDefinitionId)
   scope: serviceBusNamespace
   properties: {
-    principalId: apiApp.identity.principalId
+    principalId: apiApp!.identity.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: serviceBusDataReceiverRoleDefinitionId
   }
 }
 
-resource functionServiceBusDataReceiver 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource functionServiceBusDataReceiver 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployAppHosting) {
   name: guid(serviceBusNamespace.id, functionApp.id, serviceBusDataReceiverRoleDefinitionId)
   scope: serviceBusNamespace
   properties: {
-    principalId: functionApp.identity.principalId
+    principalId: functionApp!.identity.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: serviceBusDataReceiverRoleDefinitionId
   }
 }
 
-output apiAppName string = apiApp.name
-output apiUrl string = 'https://${apiApp.properties.defaultHostName}'
-output functionAppName string = functionApp.name
-output staticWebAppName string = staticWebApp.name
-output staticWebAppUrl string = 'https://${staticWebApp.properties.defaultHostname}'
+output apiAppName string = deployAppHosting ? apiApp.name : ''
+output apiUrl string = deployAppHosting ? 'https://${apiApp!.properties.defaultHostName}' : ''
+output functionAppName string = deployAppHosting ? functionApp.name : ''
+output staticWebAppName string = deployAppHosting ? staticWebApp.name : ''
+output staticWebAppUrl string = deployAppHosting ? 'https://${staticWebApp!.properties.defaultHostname}' : ''
 output storageAccountName string = storageAccount.name
 output sqlServerFullyQualifiedDomainName string = sqlServer.properties.fullyQualifiedDomainName
 output sqlDatabaseName string = sqlDatabase.name

@@ -12,8 +12,6 @@ parameters:
       - local
       - dev
       - test
-      - staging
-      - prod
 
 variables:
   - group: ${{ format('chatapp-infra-{0}', parameters.environment) }}
@@ -39,20 +37,18 @@ stages:
               inlineScript: |
                 set -euo pipefail
 
+                parameter_file="$(Build.SourcesDirectory)/infra/parameters.${{ parameters.environment }}.json"
+                workload_name=$(jq -r '.parameters.workloadName.value | ascii_downcase' "$parameter_file")
+
                 az group create \
                   --name "$RESOURCE_GROUP_NAME" \
                   --location "$RESOURCE_GROUP_LOCATION" \
+                  --tags "Workload=$workload_name" "Environment=${{ parameters.environment }}" "ManagedBy=Bicep" \
                   --output none
 
                 deployment_parameters=(
-                  "workloadName=$WORKLOAD_NAME"
-                  "environmentName=$ENVIRONMENT_NAME"
-                  "location=$AZURE_LOCATION"
-                  "staticWebAppLocation=$STATIC_WEB_APP_LOCATION"
-                  "communicationServicesDataLocation=$COMMUNICATION_SERVICES_DATA_LOCATION"
-                  "sqlAdministratorLogin=$SQL_ADMINISTRATOR_LOGIN"
+                  "@$parameter_file"
                   "sqlAdministratorPassword=$SQL_ADMINISTRATOR_PASSWORD"
-                  "uploadsContainerName=$UPLOADS_CONTAINER_NAME"
                   "browserPushSubject=$BROWSER_PUSH_SUBJECT"
                   "browserPushVapidPrivateKey=$BROWSER_PUSH_VAPID_PRIVATE_KEY"
                   "browserPushVapidPublicKey=$BROWSER_PUSH_VAPID_PUBLIC_KEY"
@@ -74,14 +70,7 @@ stages:
             env:
               RESOURCE_GROUP_NAME: $(resourceGroupName)
               RESOURCE_GROUP_LOCATION: $(resourceGroupLocation)
-              WORKLOAD_NAME: $(workloadName)
-              ENVIRONMENT_NAME: ${{ parameters.environment }}
-              AZURE_LOCATION: $(location)
-              STATIC_WEB_APP_LOCATION: $(staticWebAppLocation)
-              COMMUNICATION_SERVICES_DATA_LOCATION: $(communicationServicesDataLocation)
-              SQL_ADMINISTRATOR_LOGIN: $(sqlAdministratorLogin)
               SQL_ADMINISTRATOR_PASSWORD: $(sqlAdministratorPassword)
-              UPLOADS_CONTAINER_NAME: $(uploadsContainerName)
               BROWSER_PUSH_SUBJECT: $(azureNotificationsSubject)
               BROWSER_PUSH_VAPID_PRIVATE_KEY: $(azureNotificationsVapidPrivateKey)
               BROWSER_PUSH_VAPID_PUBLIC_KEY: $(azureNotificationsVapidPublicKey)
