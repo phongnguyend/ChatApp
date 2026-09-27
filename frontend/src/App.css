@@ -4253,17 +4253,6 @@ input.visually-hidden {
   box-shadow: 0 2px 8px rgba(35, 42, 39, 0.08);
 }
 
-.profile-tabs {
-  margin-top: -4px;
-}
-
-.profile-name-note {
-  margin: 9px 0 0;
-  color: #8e918b;
-  font-size: 11px;
-  line-height: 1.5;
-}
-
 .search-field {
   position: relative;
 }

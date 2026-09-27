@@ -97,14 +97,41 @@ test('session persists on reload and password change signs the user out', async 
   await page.reload();
   await expect(page.getByRole('navigation', { name: 'Main sections' })).toBeVisible();
   await page.getByRole('button', { name: 'Edit your profile' }).click();
-  await page.getByRole('tab', { name: 'Name', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Account settings', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Profile photo', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Take photo', exact: true })).toBeVisible();
+  let avatarRequests = 0;
+  page.on('request', req => { if (req.method() === 'POST' && req.url().includes('/api/users/avatar')) avatarRequests++; });
+  const photo = {
+    name: 'profile.png', mimeType: 'image/png',
+    buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j2ioAAAAASUVORK5CYII=', 'base64'),
+  };
+  await page.locator('.profile-avatar-editor input[type=file]').setInputFiles(photo);
+  await expect(page.getByRole('button', { name: 'Save photo', exact: true })).toBeVisible();
+  await expect(page.locator('.avatar-picker-preview img')).toHaveAttribute('src', /^blob:/);
+  expect(avatarRequests).toBe(0);
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Save photo', exact: true })).toHaveCount(0);
+  await expect(page.locator('.account-avatar img')).toHaveCount(0);
+  expect(avatarRequests).toBe(0);
+  await page.locator('.profile-avatar-editor input[type=file]').setInputFiles(photo);
+  await expect.poll(() => page.locator('.account-workspace').evaluate(element => element.scrollHeight - element.clientHeight)).toBeLessThanOrEqual(1);
+  await page.route('**/api/users/avatar?*', route => route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ message: 'Photo upload failed.' }) }), { times: 1 });
+  await page.getByRole('button', { name: 'Save photo', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Photo upload failed.');
+  await expect(page.locator('.avatar-picker-preview img')).toHaveAttribute('src', /^blob:/);
+  await page.getByRole('button', { name: 'Save photo', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Profile photo updated.');
+  await expect(page.locator('.account-avatar img')).toBeVisible();
   await page.getByLabel('First name', { exact: true }).fill('Profile');
   await page.getByLabel('Last name', { exact: true }).fill('Updated');
-  await page.getByRole('button', { name: 'Save name', exact: true }).click();
+  await page.getByRole('button', { name: 'Save profile', exact: true }).click();
   await expect(page.locator('.layout-user strong')).toHaveText('Profile Updated');
   await page.reload();
   await expect(page.locator('.layout-user strong')).toHaveText('Profile Updated');
   await page.getByRole('button', { name: 'Account settings', exact: true }).click();
+  await expect(page.locator('.account-avatar img')).toBeVisible();
+  await expect.poll(() => page.locator('.account-workspace').evaluate(element => element.scrollHeight - element.clientHeight)).toBeLessThanOrEqual(1);
   await page.screenshot({ path: test.info().outputPath('account.png') });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(async () => page.locator('.sidebar').evaluate(element => element.getBoundingClientRect().right)).toBeLessThanOrEqual(0);
@@ -115,6 +142,7 @@ test('session persists on reload and password change signs the user out', async 
   await page.getByLabel('First name').fill('Updated');
   await page.getByRole('button', { name: 'Save profile' }).click();
   await expect(page.getByRole('status')).toHaveText('Profile saved.');
+  await expect.poll(() => page.locator('.account-workspace').evaluate(element => element.scrollHeight - element.clientHeight)).toBeLessThanOrEqual(1);
   await page.getByLabel('Current password').fill(userPassword);
   await page.getByLabel('New password').fill('Updated-User-Password!42');
   await page.getByRole('button', { name: 'Change password', exact: true }).click();

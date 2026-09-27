@@ -3,7 +3,7 @@ import { ActivityLogPage } from "./pages/ActivityLogPage";
 import { LoginPage } from "./pages/LoginPage";
 import { UsersPage } from "./pages/UsersPage";
 import { AccountPage } from "./pages/AccountPage";
-import { accountApi, initialSession, getAccessToken, loadProfile, logout, clearSession, type AccountUser } from "./services/auth";
+import { initialSession, getAccessToken, loadProfile, logout, clearSession, type AccountUser } from "./services/auth";
 import { authFetch as fetch } from "./services/auth";
 import { InvitationQrCode } from "./components/InvitationQrCode";
 import {
@@ -1340,16 +1340,9 @@ function ChatApp({
     useState<Conversation | null>(null);
   const [leaveError, setLeaveError] = useState("");
   const [isLeaving, setIsLeaving] = useState(false);
-  const [avatarDialog, setAvatarDialog] = useState<"user" | "group" | null>(
+  const [avatarDialog, setAvatarDialog] = useState<"group" | null>(
     null,
   );
-  const [profileTab, setProfileTab] = useState<"avatar" | "name">(
-    "avatar",
-  );
-  const [firstNameDraft, setFirstNameDraft] = useState(user.firstName ?? '');
-  const [lastNameDraft, setLastNameDraft] = useState(user.lastName ?? '');
-  const [profileNameError, setProfileNameError] = useState("");
-  const [isSavingProfileName, setIsSavingProfileName] = useState(false);
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
   const [sharedConversation, setSharedConversation] =
     useState<Conversation | null>(null);
@@ -4063,27 +4056,6 @@ function ChatApp({
     onUserUpdated(updatedUser);
   }
 
-  async function updateProfileName(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (isSavingProfileName) return;
-
-    setIsSavingProfileName(true);
-    setProfileNameError("");
-    try {
-      await accountApi('/api/auth/me', { method: 'PUT', body: JSON.stringify({ firstName: firstNameDraft.trim(), lastName: lastNameDraft.trim(), phoneNumber: user.phoneNumber }) });
-      onUserUpdated(await loadProfile(false));
-      setAvatarDialog(null);
-    } catch (requestError) {
-      setProfileNameError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Could not update your name.",
-      );
-    } finally {
-      setIsSavingProfileName(false);
-    }
-  }
-
   async function uploadGroupAvatar(file: File) {
     if (!activeConversation || activeConversation.type !== "group") {
       throw new Error("Choose a group conversation first.");
@@ -4161,12 +4133,7 @@ function ChatApp({
                   ? { backgroundColor: avatarColor(user.username) }
                   : undefined
               }
-              onClick={() => {
-                setProfileTab("avatar");
-                setFirstNameDraft(user.firstName ?? ''); setLastNameDraft(user.lastName ?? '');
-                setProfileNameError("");
-                setAvatarDialog("user");
-              }}
+              onClick={() => openAccountSection("account")}
             >
               <AvatarContent avatarUrl={user.avatarUrl} name={user.displayName} />
               <i className="presence-dot" aria-label="Online" />
@@ -4635,7 +4602,7 @@ function ChatApp({
       />
       {isAccountOpen && accountView === "users" && <UsersPage currentUser={user} onBack={() => setAccountView("chat")} />}
       {isAccountOpen && accountView === "activity" && <ActivityLogPage onBack={() => setAccountView("chat")} />}
-      {isAccountOpen && accountView === "account" && <AccountPage user={user} onBack={() => setAccountView("chat")} onSaved={onUserUpdated} />}
+      {isAccountOpen && accountView === "account" && <AccountPage user={user} avatarUrl={avatarSource(user.avatarUrl)} onAvatarSelected={uploadUserAvatar} onBack={() => setAccountView("chat")} onSaved={onUserUpdated} />}
       <NotificationsView
         apiUrl={API_URL}
         currentUsername={user.username}
@@ -7026,125 +6993,28 @@ function ChatApp({
         </div>
       )}
 
-      {avatarDialog &&
-        (avatarDialog === "user" || activeConversation?.type === "group") && (
-          <div className="modal-backdrop" role="presentation">
-            <div className="modal-card avatar-dialog">
-              <div className="modal-header">
-                <div>
-                  <p className="eyebrow">
-                    {avatarDialog === "user"
-                      ? "Your profile"
-                      : "Group settings"}
-                  </p>
-                  <h2>
-                    {avatarDialog === "user"
-                      ? "Edit your profile"
-                      : "Update group avatar"}
-                  </h2>
-                </div>
-                <button
-                  className="icon-button"
-                  type="button"
-                  aria-label="Close"
-                  onClick={() => {
-                    setAvatarDialog(null);
-                    setProfileNameError("");
-                  }}
-                >
-                  <X size={20} />
-                </button>
+      {avatarDialog === "group" && activeConversation?.type === "group" && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal-card avatar-dialog">
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">Group settings</p>
+                <h2>Update group avatar</h2>
               </div>
-
-              {avatarDialog === "user" && (
-                <div
-                  className="dialog-tabs profile-tabs"
-                  role="tablist"
-                  aria-label="Profile settings"
-                >
-                  <button
-                    className={profileTab === "avatar" ? "active" : ""}
-                    type="button"
-                    role="tab"
-                    aria-selected={profileTab === "avatar"}
-                    onClick={() => {
-                      setProfileTab("avatar");
-                      setProfileNameError("");
-                    }}
-                  >
-                    Avatar
-                  </button>
-                  <button
-                    className={profileTab === "name" ? "active" : ""}
-                    type="button"
-                    role="tab"
-                    aria-selected={profileTab === "name"}
-                    onClick={() => {
-                      setProfileTab("name");
-                      setFirstNameDraft(user.firstName ?? ''); setLastNameDraft(user.lastName ?? '');
-                      setProfileNameError("");
-                    }}
-                  >
-                    Name
-                  </button>
-                </div>
-              )}
-
-              {avatarDialog === "group" || profileTab === "avatar" ? (
-                <AvatarPicker
-                  imageUrl={avatarSource(
-                    avatarDialog === "user"
-                      ? user.avatarUrl
-                      : activeConversation?.avatarUrl,
-                  )}
-                  fallback={initials(
-                    avatarDialog === "user"
-                      ? user.displayName
-                      : (activeConversation?.title ?? "Group"),
-                  )}
-                  label={
-                    avatarDialog === "user"
-                      ? user.displayName
-                      : (activeConversation?.title ?? "Group")
-                  }
-                  capture={avatarDialog === "user" ? "user" : "environment"}
-                  onSelect={
-                    avatarDialog === "user"
-                      ? uploadUserAvatar
-                      : uploadGroupAvatar
-                  }
-                />
-              ) : (
-                <form
-                  className="profile-name-form"
-                  onSubmit={updateProfileName}
-                >
-                  <label htmlFor="profile-first-name">First name</label>
-                  <input id="profile-first-name" autoFocus autoComplete="given-name" maxLength={100} value={firstNameDraft} onChange={event => { setFirstNameDraft(event.target.value); setProfileNameError(''); }} />
-                  <label htmlFor="profile-last-name">Last name</label>
-                  <input id="profile-last-name" autoComplete="family-name" maxLength={100} value={lastNameDraft} onChange={event => { setLastNameDraft(event.target.value); setProfileNameError(''); }} />
-                  <p className="profile-name-note">
-                    Your username @{user.username} will stay the same.
-                  </p>
-                  {profileNameError && (
-                    <p className="form-error">{profileNameError}</p>
-                  )}
-                  <button
-                    className="primary-button"
-                    type="submit"
-                    disabled={
-                      isSavingProfileName ||
-                      
-                      (firstNameDraft.trim() === (user.firstName ?? '') && lastNameDraft.trim() === (user.lastName ?? ''))
-                    }
-                  >
-                    {isSavingProfileName ? "Saving..." : "Save name"}
-                  </button>
-                </form>
-              )}
+              <button className="icon-button" type="button" aria-label="Close" onClick={() => setAvatarDialog(null)}>
+                <X size={20} />
+              </button>
             </div>
+            <AvatarPicker
+              imageUrl={avatarSource(activeConversation.avatarUrl)}
+              fallback={initials(activeConversation.title ?? "Group")}
+              label={activeConversation.title ?? "Group"}
+              capture="environment"
+              onSelect={uploadGroupAvatar}
+            />
           </div>
-        )}
+        </div>
+      )}
 
       {isPollDialogOpen && (
         <div className="modal-backdrop" role="presentation">
