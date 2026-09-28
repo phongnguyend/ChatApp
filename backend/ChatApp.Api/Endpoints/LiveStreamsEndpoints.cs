@@ -104,7 +104,10 @@ public sealed class LiveStreamsEndpoints(
         CancellationToken cancellationToken)
     {
         var user = await FindUser(username, cancellationToken);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
 
         var sessions = await BaseQuery()
             .Where(x => x.EndedAt == null)
@@ -132,7 +135,10 @@ public sealed class LiveStreamsEndpoints(
         CancellationToken cancellationToken)
     {
         var user = await FindUser(username, cancellationToken);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
 
         var conversations = await db.Conversations
             .AsNoTracking()
@@ -167,7 +173,10 @@ public sealed class LiveStreamsEndpoints(
             return BadRequest(new { message = "Live stream names must contain 2–200 characters." });
         }
         var user = await FindUser(username, cancellationToken);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
 
         var conversation = new Conversation
         {
@@ -196,7 +205,11 @@ public sealed class LiveStreamsEndpoints(
         CancellationToken cancellationToken)
     {
         var user = await FindUser(username, cancellationToken);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         if (!callingProvider.ManagesMedia ||
             !callingProvider.ManagesRecording)
         {
@@ -215,8 +228,15 @@ public sealed class LiveStreamsEndpoints(
             .Include(x => x.CreatedByUser)
             .Include(x => x.Members)
             .SingleOrDefaultAsync(x => x.Id == conversationId, cancellationToken);
-        if (conversation is null || conversation.Type != "live_stream") return NotFound();
-        if (conversation.CreatedByUserId != user.Id) return Forbid();
+        if (conversation is null || conversation.Type != "live_stream")
+        {
+            return NotFound();
+        }
+
+        if (conversation.CreatedByUserId != user.Id)
+        {
+            return Forbid();
+        }
 
         if (await db.LiveStreamSessions.AnyAsync(
                 x => x.HostUserId == user.Id && x.EndedAt == null,
@@ -263,15 +283,26 @@ public sealed class LiveStreamsEndpoints(
         CancellationToken cancellationToken)
     {
         var user = await FindUser(username, cancellationToken);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         await using var transaction = await db.Database.BeginTransactionAsync(
             IsolationLevel.Serializable,
             cancellationToken);
         var session = await BaseQuery().SingleOrDefaultAsync(
             x => x.ConversationId == conversationId && x.EndedAt == null,
             cancellationToken);
-        if (session is null) return NotFound();
-        if (session.HostUserId != user.Id) return Forbid();
+        if (session is null)
+        {
+            return NotFound();
+        }
+
+        if (session.HostUserId != user.Id)
+        {
+            return Forbid();
+        }
 
         var recording = await db.SessionRecordings.SingleOrDefaultAsync(
             item =>
@@ -293,7 +324,11 @@ public sealed class LiveStreamsEndpoints(
 
         var now = DateTimeOffset.UtcNow;
         session.EndedAt = now;
-        if (recording is not null) recording.Status = "processing";
+        if (recording is not null)
+        {
+            recording.Status = "processing";
+        }
+
         var systemMessage = await AddSystemMessage(
             session.Conversation,
             $"{user.DisplayName} stopped the live stream.",
@@ -331,11 +366,18 @@ public sealed class LiveStreamsEndpoints(
         CancellationToken cancellationToken)
     {
         var user = await FindUser(username, cancellationToken);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         var session = await BaseQuery().SingleOrDefaultAsync(
             x => x.ConversationId == conversationId && x.EndedAt == null,
             cancellationToken);
-        if (session is null) return NotFound(new { message = "The live stream has ended." });
+        if (session is null)
+        {
+            return NotFound(new { message = "The live stream has ended." });
+        }
 
         var membership = session.Conversation.Members.SingleOrDefault(x => x.UserId == user.Id);
         if (membership is null)
@@ -365,7 +407,11 @@ public sealed class LiveStreamsEndpoints(
         CancellationToken cancellationToken)
     {
         var user = await FindUser(username, cancellationToken);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         var membership = await db.ConversationMembers
             .Include(x => x.Conversation)
             .Where(x =>
@@ -441,7 +487,11 @@ public sealed class LiveStreamsEndpoints(
         CancellationToken cancellationToken)
     {
         var user = await FindUser(username, cancellationToken);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         if (!await db.ConversationMembers.AnyAsync(
                 x =>
                     x.ConversationId == conversationId &&
@@ -463,7 +513,10 @@ public sealed class LiveStreamsEndpoints(
                     x.ConversationId == conversationId &&
                     (!requireActiveSession || x.EndedAt == null),
                 cancellationToken);
-        if (session is null) return NotFound();
+        if (session is null)
+        {
+            return NotFound();
+        }
 
         var message = await AddSystemMessage(
             session.Conversation,
@@ -476,7 +529,10 @@ public sealed class LiveStreamsEndpoints(
                 session,
                 user,
                 cancellationToken);
-            if (recordingError is not null) return recordingError;
+            if (recordingError is not null)
+            {
+                return recordingError;
+            }
         }
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);

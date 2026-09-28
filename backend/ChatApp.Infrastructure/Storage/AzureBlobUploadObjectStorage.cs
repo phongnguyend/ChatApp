@@ -223,7 +223,11 @@ public sealed class AzureBlobUploadObjectStorage : IUploadObjectStorage
 
         var blobName = Uri.UnescapeDataString(
             uri.AbsolutePath[(containerPath.Length + 1)..]);
-        if (string.IsNullOrWhiteSpace(blobName)) return false;
+        if (string.IsNullOrWhiteSpace(blobName))
+        {
+            return false;
+        }
+
         blobClient = container.GetBlobClient(blobName);
         return true;
     }

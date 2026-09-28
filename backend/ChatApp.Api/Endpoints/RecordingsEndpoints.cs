@@ -94,7 +94,10 @@ public sealed class RecordingsEndpoints(
         var suppliedKey = httpContext.Request.Headers["X-Recording-Callback-Key"].ToString();
         if (string.IsNullOrWhiteSpace(configuredKey) || !System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
             System.Text.Encoding.UTF8.GetBytes(configuredKey), System.Text.Encoding.UTF8.GetBytes(suppliedKey)))
+        {
             return Unauthorized();
+        }
+
         var recording = await db.SessionRecordings
             .Include(item => item.StartedByUser)
             .SingleOrDefaultAsync(
@@ -137,6 +140,7 @@ public sealed class RecordingsEndpoints(
                 .Select(member => member.UserId)
                 .ToArrayAsync(cancellationToken);
             foreach (var recipientId in recipients)
+            {
                 db.UserNotifications.Add(new UserNotification
                 {
                     UserId = recipientId,
@@ -147,6 +151,8 @@ public sealed class RecordingsEndpoints(
                     TargetTitle = message.Attachments.First().FileName,
                     Details = "The recording is ready to view or download.",
                 });
+            }
+
             await db.SaveChangesAsync(cancellationToken);
         }
 

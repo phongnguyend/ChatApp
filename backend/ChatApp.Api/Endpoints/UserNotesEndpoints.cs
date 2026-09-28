@@ -97,7 +97,11 @@ public sealed class UserNotesEndpoints(ChatAppDbContext db)
     public async Task<IResult> List([FromQuery] string username, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         var notes = await ReadQuery()
             .Where(x => x.UserId == user.Id ||
                 x.Shares.Any(share => share.GranteeUserId == user.Id))
@@ -112,7 +116,11 @@ public sealed class UserNotesEndpoints(ChatAppDbContext db)
         CancellationToken ct)
     {
         var user = await FindUser(username, ct);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         var note = await ReadQuery().SingleOrDefaultAsync(
             x => x.Id == id && (x.UserId == user.Id ||
                 x.Shares.Any(share => share.GranteeUserId == user.Id)), ct);
@@ -123,9 +131,17 @@ public sealed class UserNotesEndpoints(ChatAppDbContext db)
         SaveUserNoteRequest request, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         var error = Validate(request);
-        if (error is not null) return BadRequest(new { message = error });
+        if (error is not null)
+        {
+            return BadRequest(new { message = error });
+        }
+
         var note = new UserNote
         {
             UserId = user.Id,
@@ -143,14 +159,26 @@ public sealed class UserNotesEndpoints(ChatAppDbContext db)
         SaveUserNoteRequest request, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         var error = Validate(request);
-        if (error is not null) return BadRequest(new { message = error });
+        if (error is not null)
+        {
+            return BadRequest(new { message = error });
+        }
+
         var note = await db.UserNotes.Include(x => x.User).Include(x => x.Shares)
             .SingleOrDefaultAsync(x => x.Id == id && (x.UserId == user.Id ||
                 x.Shares.Any(share => share.GranteeUserId == user.Id &&
                     share.Permission == "editor")), ct);
-        if (note is null) return NotFound();
+        if (note is null)
+        {
+            return NotFound();
+        }
+
         note.Title = request.Title!.Trim();
         note.Content = request.Content?.Trim() ?? "";
         note.UpdatedAt = DateTimeOffset.UtcNow;
@@ -162,10 +190,18 @@ public sealed class UserNotesEndpoints(ChatAppDbContext db)
         SetUserNotePinRequest request, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         var note = await db.UserNotes.Include(x => x.User).Include(x => x.Shares)
             .SingleOrDefaultAsync(x => x.Id == id && x.UserId == user.Id, ct);
-        if (note is null) return NotFound();
+        if (note is null)
+        {
+            return NotFound();
+        }
+
         note.IsPinned = request.IsPinned;
         note.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
@@ -176,10 +212,18 @@ public sealed class UserNotesEndpoints(ChatAppDbContext db)
         CancellationToken ct)
     {
         var user = await FindUser(username, ct);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         var note = await db.UserNotes.SingleOrDefaultAsync(
             x => x.Id == id && x.UserId == user.Id, ct);
-        if (note is null) return NotFound();
+        if (note is null)
+        {
+            return NotFound();
+        }
+
         db.UserNotes.Remove(note);
         await db.SaveChangesAsync(ct);
         return NoContent();
@@ -190,7 +234,11 @@ public sealed class UserNotesEndpoints(ChatAppDbContext db)
     {
         var user = await FindUser(username, ct);
         if (user is null || !await db.UserNotes.AnyAsync(
-                x => x.Id == id && x.UserId == user.Id, ct)) return NotFound();
+                x => x.Id == id && x.UserId == user.Id, ct))
+        {
+            return NotFound();
+        }
+
         var shares = await db.UserNoteShares.AsNoTracking()
             .Where(x => x.NoteId == id)
             .OrderBy(x => (((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim() == "" ? x.GranteeUser.UserName : ((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim()))
@@ -204,15 +252,31 @@ public sealed class UserNotesEndpoints(ChatAppDbContext db)
         SaveUserNoteShareRequest request, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
-        if (user is null) return NotFound();
-        if (request.Permission is not ("viewer" or "editor"))
-            return BadRequest(new { message = "Choose Viewer or Editor." });
-        if (!await db.UserNotes.AnyAsync(x => x.Id == id && x.UserId == user.Id, ct))
+        if (user is null)
+        {
             return NotFound();
+        }
+
+        if (request.Permission is not ("viewer" or "editor"))
+        {
+            return BadRequest(new { message = "Choose Viewer or Editor." });
+        }
+
+        if (!await db.UserNotes.AnyAsync(x => x.Id == id && x.UserId == user.Id, ct))
+        {
+            return NotFound();
+        }
+
         var grantee = await FindUser(request.RecipientUsername, ct);
-        if (grantee is null) return BadRequest(new { message = "Choose an active person." });
+        if (grantee is null)
+        {
+            return BadRequest(new { message = "Choose an active person." });
+        }
+
         if (grantee.Id == user.Id)
+        {
             return BadRequest(new { message = "You already own this note." });
+        }
 
         await using var transaction = await db.Database.BeginTransactionAsync(
             IsolationLevel.Serializable, ct);
@@ -238,7 +302,11 @@ public sealed class UserNotesEndpoints(ChatAppDbContext db)
                 TargetTitle = noteTitle,
             });
         }
-        else share.Permission = request.Permission;
+        else
+        {
+            share.Permission = request.Permission;
+        }
+
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         return Ok(new UserNoteShareDto(share.Id, grantee.UserName,
@@ -249,10 +317,18 @@ public sealed class UserNotesEndpoints(ChatAppDbContext db)
         [FromQuery] string username, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         var share = await db.UserNoteShares.SingleOrDefaultAsync(x =>
             x.Id == shareId && x.NoteId == id && x.Note.UserId == user.Id, ct);
-        if (share is null) return NotFound();
+        if (share is null)
+        {
+            return NotFound();
+        }
+
         db.UserNoteShares.Remove(share);
         await db.SaveChangesAsync(ct);
         return NoContent();
@@ -269,9 +345,15 @@ public sealed class UserNotesEndpoints(ChatAppDbContext db)
     private static string? Validate(SaveUserNoteRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Title) || request.Title.Trim().Length > 200)
+        {
             return "Enter a title of at most 200 characters.";
+        }
+
         if (request.Content?.Length > 20000)
+        {
             return "Note content must be at most 20,000 characters.";
+        }
+
         return null;
     }
 

@@ -98,7 +98,11 @@ public sealed class ChatAppDbContext(DbContextOptions<ChatAppDbContext> options)
             .Where(x => x.State is EntityState.Added or EntityState.Modified).ToArray())
         {
             var user = entry.Entity;
-            if (entry.State == EntityState.Added) user.Status = user.IsEnabled ? "active" : "suspended";
+            if (entry.State == EntityState.Added)
+            {
+                user.Status = user.IsEnabled ? "active" : "suspended";
+            }
+
             if (entry.State == EntityState.Modified && entry.Property(x => x.IsEnabled).IsModified &&
                 entry.Property(x => x.IsEnabled).OriginalValue != user.IsEnabled)
             {

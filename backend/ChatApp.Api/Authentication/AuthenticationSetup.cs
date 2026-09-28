@@ -39,7 +39,9 @@ public static class AuthenticationSetup
                 OnMessageReceived = context =>
                 {
                     if (context.Request.Path.StartsWithSegments("/hubs/chat"))
+                    {
                         context.Token = context.Request.Query["access_token"];
+                    }
                     // Browser media elements cannot supply an Authorization header. The cookie
                     // is accepted only for read-only media, never for API mutations or sessions.
                     else if (HttpMethods.IsGet(context.Request.Method) &&
@@ -47,27 +49,46 @@ public static class AuthenticationSetup
                          context.Request.Path.StartsWithSegments("/api/avatars") ||
                          (context.Request.Path.StartsWithSegments("/api/documents") &&
                           (context.Request.Path.Value!.EndsWith("/content") || context.Request.Path.Value.EndsWith("/qr-code")))))
+                    {
                         context.Token = context.Request.Headers.Authorization.Count == 0
                             ? context.Request.Cookies["chatapp-media"] : null;
+                    }
+
                     return Task.CompletedTask;
                 },
                 OnTokenValidated = async context =>
                 {
                     if (!Guid.TryParse(context.Principal?.FindFirstValue("sub"), out var id))
-                    { context.Fail("Invalid session."); return; }
+                    {
+                        context.Fail("Invalid session.");
+                        return;
+                    }
                     var manager = context.HttpContext.RequestServices.GetRequiredService<UserManager<ChatUser>>();
                     var user = await manager.FindByIdAsync(id.ToString());
                     if (user is null || !user.IsEnabled || string.IsNullOrEmpty(user.SecurityStamp) ||
                         user.SecurityStamp != context.Principal?.FindFirstValue("security_stamp"))
-                    { context.Fail("Session expired or revoked."); return; }
+                    {
+                        context.Fail("Session expired or revoked.");
+                        return;
+                    }
                     var chat = user;
-                    if (chat.Status != "active") { context.Fail("Account unavailable."); return; }
+                    if (chat.Status != "active")
+                    {
+                        context.Fail("Account unavailable.");
+                        return;
+                    }
                     var identity = (ClaimsIdentity)context.Principal!.Identity!;
                     foreach (var claim in identity.FindAll(ClaimTypes.NameIdentifier).Concat(identity.FindAll("role")).ToArray())
+                    {
                         identity.RemoveClaim(claim);
+                    }
+
                     identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, id.ToString()));
                     identity.AddClaim(new Claim("chat_username", chat.UserName));
-                    foreach (var role in await manager.GetRolesAsync(user)) identity.AddClaim(new Claim("role", role));
+                    foreach (var role in await manager.GetRolesAsync(user))
+                    {
+                        identity.AddClaim(new Claim("role", role));
+                    }
                 }
             };
         });
@@ -83,7 +104,9 @@ public static class AuthenticationSetup
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
             options.AddFixedWindowLimiter("password-auth", limiter =>
             {
-                limiter.PermitLimit = 60; limiter.Window = TimeSpan.FromMinutes(1); limiter.QueueLimit = 0;
+                limiter.PermitLimit = 60;
+                limiter.Window = TimeSpan.FromMinutes(1);
+                limiter.QueueLimit = 0;
             });
         });
         builder.Services.AddSingleton<AuthenticatedHubFilter>();
@@ -94,11 +117,19 @@ public static class AuthenticationSetup
     {
         var roles = services.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
         foreach (var role in new[] { AppRoles.User, AppRoles.GlobalAdmin })
-            if (!await roles.RoleExistsAsync(role)) Ensure(await roles.CreateAsync(new IdentityRole<Guid>(role)));
+        {
+            if (!await roles.RoleExistsAsync(role))
+            {
+                Ensure(await roles.CreateAsync(new IdentityRole<Guid>(role)));
+            }
+        }
     }
 
     private static void Ensure(IdentityResult result)
     {
-        if (!result.Succeeded) throw new InvalidOperationException(string.Join(" ", result.Errors.Select(x => x.Description)));
+        if (!result.Succeeded)
+        {
+            throw new InvalidOperationException(string.Join(" ", result.Errors.Select(x => x.Description)));
+        }
     }
 }

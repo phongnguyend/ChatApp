@@ -42,7 +42,10 @@ public sealed class LiveLocationExpiryService(
         var shares = await db.LiveLocationShares
             .Where(x => x.IsActive && x.ExpiresAt <= now)
             .ToListAsync(cancellationToken);
-        if (shares.Count == 0) return;
+        if (shares.Count == 0)
+        {
+            return;
+        }
 
         foreach (var share in shares)
         {

@@ -106,7 +106,11 @@ public sealed class AzureCommunicationServicesCallingProvider(
         var state = await recording.GetStateAsync(
             providerRecordingId,
             cancellationToken);
-        if (state.Value.RecordingState != RecordingState.Active) return;
+        if (state.Value.RecordingState != RecordingState.Active)
+        {
+            return;
+        }
+
         await recording.StopAsync(providerRecordingId, cancellationToken);
     }
 

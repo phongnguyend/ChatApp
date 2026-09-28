@@ -30,14 +30,26 @@ app.Use(async (context, next) =>
         return;
     }
     var bodySize = context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
-    if (limit is not null && bodySize is { IsReadOnly: false }) bodySize.MaxRequestBodySize = limit.MaxRequestBodySize;
+    if (limit is not null && bodySize is { IsReadOnly: false })
+    {
+        bodySize.MaxRequestBodySize = limit.MaxRequestBodySize;
+    }
+
     await next(context);
 });
 app.MapPasswordSignIn();
 app.MapAccounts();
 app.MapActivityLog();
-if (!string.IsNullOrWhiteSpace(builder.Configuration["Authentication:Google:ClientId"])) app.MapGoogleSignIn();
-if (!string.IsNullOrWhiteSpace(builder.Configuration["Authentication:Microsoft:ClientId"])) app.MapMicrosoftSignIn();
+if (!string.IsNullOrWhiteSpace(builder.Configuration["Authentication:Google:ClientId"]))
+{
+    app.MapGoogleSignIn();
+}
+
+if (!string.IsNullOrWhiteSpace(builder.Configuration["Authentication:Microsoft:ClientId"]))
+{
+    app.MapMicrosoftSignIn();
+}
+
 app.MapApplicationEndpoints();
 app.MapHub<ChatHub>("/hubs/chat", options => options.CloseOnAuthenticationExpiration = true).RequireAuthorization();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" })).AllowAnonymous();

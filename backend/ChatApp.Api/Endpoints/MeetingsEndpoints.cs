@@ -112,39 +112,71 @@ public sealed class MeetingsEndpoints(
         CancellationToken cancellationToken = default)
     {
         var user = await FindUser(username, cancellationToken);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         if (tab is not ("created" or "invited") || page < 0 || page > 10000)
+        {
             return BadRequest(new { message = "Choose a valid meeting tab and page." });
+        }
+
         if ((!string.IsNullOrWhiteSpace(from) && !TryDate(from, out _)) ||
             (!string.IsNullOrWhiteSpace(to) && !TryDate(to, out _)))
+        {
             return BadRequest(new { message = "Choose valid filter dates." });
+        }
+
         var start = string.IsNullOrWhiteSpace(from)
             ? (DateOnly?)null : DateOnly.ParseExact(from, "yyyy-MM-dd", CultureInfo.InvariantCulture);
         var end = string.IsNullOrWhiteSpace(to)
             ? (DateOnly?)null : DateOnly.ParseExact(to, "yyyy-MM-dd", CultureInfo.InvariantCulture);
         if (start > end)
+        {
             return BadRequest(new { message = "The end date must be on or after the start date." });
+        }
+
         name = name?.Trim();
         organizer = organizer?.Trim();
         participant = participant?.Trim();
         if (name?.Length > 200 || organizer?.Length > 100 || participant?.Length > 100)
+        {
             return BadRequest(new { message = "A meeting search term is too long." });
+        }
 
         const int pageSize = 50;
         var query = ReadQuery().Where(x => tab == "created"
             ? x.OrganizerUserId == user.Id
             : x.Participants.Any(membership => membership.UserId == user.Id));
-        if (start.HasValue) query = query.Where(x => x.EndDate >= start.Value);
-        if (end.HasValue) query = query.Where(x => x.StartDate <= end.Value);
+        if (start.HasValue)
+        {
+            query = query.Where(x => x.EndDate >= start.Value);
+        }
+
+        if (end.HasValue)
+        {
+            query = query.Where(x => x.StartDate <= end.Value);
+        }
+
         if (!string.IsNullOrEmpty(name))
+        {
             query = query.Where(x => x.Title.Contains(name));
+        }
+
         if (tab == "invited" && !string.IsNullOrEmpty(organizer))
+        {
             query = query.Where(x => (((x.OrganizerUser.FirstName ?? "") + " " + (x.OrganizerUser.LastName ?? "")).Trim() == "" ? x.OrganizerUser.UserName : ((x.OrganizerUser.FirstName ?? "") + " " + (x.OrganizerUser.LastName ?? "")).Trim()).Contains(organizer) ||
                 x.OrganizerUser.UserName.Contains(organizer));
+        }
+
         if (!string.IsNullOrEmpty(participant))
+        {
             query = query.Where(x => x.Participants.Any(person =>
                 (((person.User.FirstName ?? "") + " " + (person.User.LastName ?? "")).Trim() == "" ? person.User.UserName : ((person.User.FirstName ?? "") + " " + (person.User.LastName ?? "")).Trim()).Contains(participant) ||
                 person.User.UserName.Contains(participant)));
+        }
+
         var meetings = await query.OrderByDescending(x => x.StartDate)
             .ThenByDescending(x => x.StartTime)
             .ThenByDescending(x => x.Id)
@@ -163,10 +195,16 @@ public sealed class MeetingsEndpoints(
         CancellationToken cancellationToken)
     {
         var user = await FindUser(username, cancellationToken);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         if (!TryDate(from, out var start) || !TryDate(to, out var end) ||
             end < start || end.DayNumber - start.DayNumber > 366)
+        {
             return BadRequest(new { message = "Choose a valid date range of at most one year." });
+        }
 
         var meetings = await ReadQuery()
             .Where(x => x.StartDate <= end && x.EndDate >= start &&
@@ -186,10 +224,18 @@ public sealed class MeetingsEndpoints(
         CancellationToken cancellationToken)
     {
         var user = await FindUser(username, cancellationToken);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         var meeting = await ReadQuery().SingleOrDefaultAsync(x => x.Id == id,
             cancellationToken);
-        if (meeting is null || !CanView(meeting, user.Id)) return NotFound();
+        if (meeting is null || !CanView(meeting, user.Id))
+        {
+            return NotFound();
+        }
+
         return Ok(ToDto(meeting, user.Id));
     }
 
@@ -199,14 +245,20 @@ public sealed class MeetingsEndpoints(
         CancellationToken cancellationToken)
     {
         var user = await FindUser(username, cancellationToken);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
 
         await using var transaction = await db.Database.BeginTransactionAsync(
             cancellationToken);
         await LockConversationCreation(id, cancellationToken);
         var meeting = await WriteQuery().SingleOrDefaultAsync(x => x.Id == id,
             cancellationToken);
-        if (meeting is null || !CanView(meeting, user.Id)) return NotFound();
+        if (meeting is null || !CanView(meeting, user.Id))
+        {
+            return NotFound();
+        }
 
         Conversation conversation;
         if (meeting.ConversationId is null)
@@ -234,7 +286,10 @@ public sealed class MeetingsEndpoints(
         var requesterMembership = conversation.Members.SingleOrDefault(x =>
             x.UserId == user.Id);
         if (requesterMembership is null)
+        {
             return Conflict(new { message = "The meeting conversation could not be opened." });
+        }
+
         requesterMembership.IsArchived = false;
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -249,14 +304,23 @@ public sealed class MeetingsEndpoints(
         CancellationToken cancellationToken)
     {
         var organizer = await FindUser(username, cancellationToken);
-        if (organizer is null) return NotFound();
+        if (organizer is null)
+        {
+            return NotFound();
+        }
+
         var validation = Validate(request);
         if (validation.Error is not null)
+        {
             return BadRequest(new { message = validation.Error });
+        }
+
         var (people, peopleError) = await FindPeople(request.People, organizer.Id,
             cancellationToken);
         if (peopleError is not null)
+        {
             return BadRequest(new { message = peopleError });
+        }
 
         var values = validation.Values!;
         var meeting = new ScheduledMeeting
@@ -306,24 +370,43 @@ public sealed class MeetingsEndpoints(
         CancellationToken cancellationToken)
     {
         var user = await FindUser(username, cancellationToken);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         await using var transaction = await db.Database.BeginTransactionAsync(
             cancellationToken);
         await LockConversationCreation(id, cancellationToken);
         var meeting = await WriteQuery().SingleOrDefaultAsync(x => x.Id == id,
             cancellationToken);
-        if (meeting is null || !CanView(meeting, user.Id)) return NotFound();
+        if (meeting is null || !CanView(meeting, user.Id))
+        {
+            return NotFound();
+        }
+
         if (meeting.OrganizerUserId != user.Id)
+        {
             return Json(new { message = "Only the organizer can edit this meeting." }, statusCode: 403);
+        }
+
         if (meeting.Status == "cancelled")
+        {
             return Conflict(new { message = "Cancelled meetings cannot be edited." });
+        }
+
         var validation = Validate(request);
         if (validation.Error is not null)
+        {
             return BadRequest(new { message = validation.Error });
+        }
+
         var (people, peopleError) = await FindPeople(request.People, user.Id,
             cancellationToken);
         if (peopleError is not null)
+        {
             return BadRequest(new { message = peopleError });
+        }
 
         var values = validation.Values!;
         var scheduleChanged = meeting.StartDate != values.StartDate ||
@@ -343,14 +426,22 @@ public sealed class MeetingsEndpoints(
         var requestedIds = people!.Select(x => x.Id).ToHashSet();
         foreach (var existing in meeting.Participants.ToArray())
         {
-            if (requestedIds.Contains(existing.UserId)) continue;
+            if (requestedIds.Contains(existing.UserId))
+            {
+                continue;
+            }
+
             meeting.Participants.Remove(existing);
             db.ScheduledMeetingParticipants.Remove(existing);
         }
         var existingIds = meeting.Participants.Select(x => x.UserId).ToHashSet();
         foreach (var person in people!)
         {
-            if (existingIds.Contains(person.Id)) continue;
+            if (existingIds.Contains(person.Id))
+            {
+                continue;
+            }
+
             meeting.Participants.Add(new ScheduledMeetingParticipant
             {
                 MeetingId = meeting.Id,
@@ -401,8 +492,11 @@ public sealed class MeetingsEndpoints(
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         if (conversationChanges is not null && meeting.ConversationId is Guid linkedId)
+        {
             await PublishConversationChanges(linkedId, conversationChanges,
                 cancellationToken);
+        }
+
         return Ok(ToDto(meeting, user.Id));
     }
 
@@ -412,18 +506,30 @@ public sealed class MeetingsEndpoints(
         CancellationToken cancellationToken)
     {
         var user = await FindUser(username, cancellationToken);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         var meeting = await WriteQuery().SingleOrDefaultAsync(x => x.Id == id,
             cancellationToken);
-        if (meeting is null || !CanView(meeting, user.Id)) return NotFound();
+        if (meeting is null || !CanView(meeting, user.Id))
+        {
+            return NotFound();
+        }
+
         if (meeting.OrganizerUserId != user.Id)
+        {
             return Json(new { message = "Only the organizer can cancel this meeting." }, statusCode: 403);
+        }
+
         if (meeting.Status != "cancelled")
         {
             meeting.Status = "cancelled";
             meeting.CancelledAt = DateTimeOffset.UtcNow;
             meeting.UpdatedAt = meeting.CancelledAt.Value;
             foreach (var participant in meeting.Participants)
+            {
                 db.UserNotifications.Add(new UserNotification
                 {
                     UserId = participant.UserId,
@@ -433,6 +539,8 @@ public sealed class MeetingsEndpoints(
                     TargetTitle = meeting.Title,
                     Details = ScheduleSummary(meeting),
                 });
+            }
+
             await db.SaveChangesAsync(cancellationToken);
         }
         return Ok(ToDto(meeting, user.Id));
@@ -445,20 +553,35 @@ public sealed class MeetingsEndpoints(
         CancellationToken cancellationToken)
     {
         var user = await FindUser(username, cancellationToken);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         var response = request.Response?.Trim().ToLowerInvariant();
         if (response is not ("accepted" or "tentative" or "declined"))
+        {
             return BadRequest(new { message = "Choose accepted, tentative, or declined." });
+        }
 
         var meeting = await WriteQuery().SingleOrDefaultAsync(x => x.Id == id,
             cancellationToken);
-        if (meeting is null || !CanView(meeting, user.Id)) return NotFound();
+        if (meeting is null || !CanView(meeting, user.Id))
+        {
+            return NotFound();
+        }
+
         if (meeting.Status == "cancelled")
+        {
             return Conflict(new { message = "Cancelled meetings cannot receive responses." });
+        }
+
         var participant = meeting.Participants.SingleOrDefault(x =>
             x.UserId == user.Id);
         if (participant is null)
+        {
             return Json(new { message = "The organizer cannot respond to their own meeting." }, statusCode: 403);
+        }
 
         if (participant.ResponseStatus != response)
         {
@@ -508,7 +631,9 @@ public sealed class MeetingsEndpoints(
         var result = Convert.ToInt32(await command.ExecuteScalarAsync(
             cancellationToken));
         if (result < 0)
+        {
             throw new TimeoutException("Could not lock the meeting conversation.");
+        }
     }
 
     private static ConversationChanges SyncConversationMembers(
@@ -526,7 +651,10 @@ public sealed class MeetingsEndpoints(
         foreach (var membership in conversation.Members)
         {
             if (targetIds.Contains(membership.UserId) || membership.LeftAt is not null)
+            {
                 continue;
+            }
+
             membership.LeftAt = DateTimeOffset.UtcNow;
             membership.IsArchived = true;
             membership.UnreadCount = 0;
@@ -569,18 +697,25 @@ public sealed class MeetingsEndpoints(
         {
             var connectionIds = presence.ConnectionIdsForUser(userId);
             foreach (var connectionId in connectionIds)
+            {
                 await hubContext.Groups.RemoveFromGroupAsync(connectionId,
                     groupName, cancellationToken);
+            }
+
             if (connectionIds.Count > 0)
+            {
                 await hubContext.Clients.Clients(connectionIds).SendAsync(
                     "ConversationRemoved", new ConversationRemovedDto(conversationId),
                     cancellationToken);
+            }
         }
         foreach (var user in changes.Added)
         {
             foreach (var connectionId in presence.ConnectionIdsForUser(user.Id))
+            {
                 await hubContext.Groups.AddToGroupAsync(connectionId,
                     groupName, cancellationToken);
+            }
         }
 
         await hubContext.Clients.Group(groupName).SendAsync(
@@ -603,14 +738,22 @@ public sealed class MeetingsEndpoints(
     {
         var title = request.Title?.Trim() ?? "";
         if (title.Length is < 2 or > 200)
+        {
             return (null, "Meeting titles must contain 2–200 characters.");
+        }
+
         var description = request.Description?.Trim();
         if (description?.Length > 4000)
+        {
             return (null, "Descriptions cannot exceed 4,000 characters.");
+        }
+
         if (!TryDate(request.StartDate, out var startDate) ||
             !TryDate(request.EndDate, out var endDate) || endDate < startDate ||
             endDate.DayNumber - startDate.DayNumber > 366)
+        {
             return (null, "Choose a valid date range of at most one year.");
+        }
 
         TimeOnly? startTime = null;
         TimeOnly? endTime = null;
@@ -619,7 +762,10 @@ public sealed class MeetingsEndpoints(
             if (!TryTime(request.Start, out var parsedStart) ||
                 !TryTime(request.End, out var parsedEnd) ||
                 (startDate == endDate && parsedEnd <= parsedStart))
+            {
                 return (null, "Choose valid start and end times.");
+            }
+
             startTime = parsedStart;
             endTime = parsedEnd;
         }
@@ -632,14 +778,23 @@ public sealed class MeetingsEndpoints(
     {
         var distinctIds = (ids ?? []).Distinct().ToArray();
         if (distinctIds.Length > 100)
+        {
             return (null, "A meeting can include at most 100 people.");
+        }
+
         if (distinctIds.Contains(organizerId))
+        {
             return (null, "The organizer is included automatically.");
+        }
+
         var people = await db.Users.Where(x =>
             distinctIds.Contains(x.Id) && x.Status == "active")
             .ToArrayAsync(cancellationToken);
         if (people.Length != distinctIds.Length)
+        {
             return (null, "Select active users from the people search results.");
+        }
+
         return (people, null);
     }
 
@@ -647,7 +802,10 @@ public sealed class MeetingsEndpoints(
     {
         var date = meeting.StartDate.ToString("MMM d, yyyy", CultureInfo.InvariantCulture);
         if (meeting.StartDate != meeting.EndDate)
+        {
             date += " – " + meeting.EndDate.ToString("MMM d, yyyy", CultureInfo.InvariantCulture);
+        }
+
         return meeting.IsAllDay ? date + " · All day" :
             date + " · " + meeting.StartTime?.ToString("HH:mm", CultureInfo.InvariantCulture) +
             "–" + meeting.EndTime?.ToString("HH:mm", CultureInfo.InvariantCulture);

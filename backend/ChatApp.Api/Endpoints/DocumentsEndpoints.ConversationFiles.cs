@@ -11,9 +11,15 @@ public sealed partial class DocumentsEndpoints
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
         if (scope is not ("mine" or "others") || offset < 0 || query?.Length > 100)
+        {
             return BadRequest(new { message = "Choose a valid conversation file view and search term." });
+        }
 
         var files = db.MessageAttachments.AsNoTracking().Where(x =>
             x.Message.DeletedAt == null && x.Message.SenderUserId != null &&
@@ -24,7 +30,10 @@ public sealed partial class DocumentsEndpoints
             ? files.Where(x => x.Message.SenderUserId == actor.Id)
             : files.Where(x => x.Message.SenderUserId != actor.Id);
         var term = query?.Trim();
-        if (!string.IsNullOrEmpty(term)) files = files.Where(x => x.FileName.Contains(term));
+        if (!string.IsNullOrEmpty(term))
+        {
+            files = files.Where(x => x.FileName.Contains(term));
+        }
 
         const int pageSize = 100;
         var page = await files.OrderByDescending(x => x.Message.CreatedAt)

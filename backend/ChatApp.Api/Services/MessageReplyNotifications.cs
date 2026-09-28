@@ -15,7 +15,10 @@ public static class MessageReplyNotifications
         string? preview,
         CancellationToken cancellationToken = default)
     {
-        if (replyToMessageId is null) return;
+        if (replyToMessageId is null)
+        {
+            return;
+        }
 
         var recipientId = await db.Messages.AsNoTracking()
             .Where(message =>
@@ -29,12 +32,18 @@ public static class MessageReplyNotifications
                     member.UserId == message.SenderUserId && member.LeftAt == null))
             .Select(message => message.SenderUserId)
             .SingleOrDefaultAsync(cancellationToken);
-        if (recipientId is null) return;
+        if (recipientId is null)
+        {
+            return;
+        }
 
         var title = string.IsNullOrWhiteSpace(preview)
             ? "Replied to your message"
             : preview.Trim();
-        if (title.Length > 120) title = $"{title[..117]}...";
+        if (title.Length > 120)
+        {
+            title = $"{title[..117]}...";
+        }
 
         db.UserNotifications.Add(new UserNotification
         {

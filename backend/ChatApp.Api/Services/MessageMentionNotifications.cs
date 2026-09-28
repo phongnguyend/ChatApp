@@ -16,14 +16,20 @@ public static class MessageMentionNotifications
         bool mentionEveryone,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(content)) return;
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return;
+        }
 
         var requestedIds = (mentionedUserIds ?? []).Distinct()
             .Where(id => id != senderUserId)
             .Take(100)
             .ToArray();
         var mentionsEveryone = mentionEveryone && ContainsMention(content, "everyone");
-        if (requestedIds.Length == 0 && !mentionsEveryone) return;
+        if (requestedIds.Length == 0 && !mentionsEveryone)
+        {
+            return;
+        }
 
         var recipients = await db.ConversationMembers.AsNoTracking()
             .Where(member =>
@@ -39,6 +45,7 @@ public static class MessageMentionNotifications
         foreach (var recipient in recipients.Where(recipient =>
                      mentionsEveryone ||
                      ContainsMention(content, recipient.Username)))
+        {
             db.UserNotifications.Add(new UserNotification
             {
                 UserId = recipient.UserId,
@@ -48,6 +55,7 @@ public static class MessageMentionNotifications
                 ContextId = conversationId,
                 TargetTitle = preview,
             });
+        }
     }
 
     private static bool ContainsMention(string content, string username)
@@ -58,13 +66,21 @@ public static class MessageMentionNotifications
         {
             var index = content.IndexOf(token, start,
                 StringComparison.OrdinalIgnoreCase);
-            if (index < 0) return false;
+            if (index < 0)
+            {
+                return false;
+            }
+
             var beforeIsBoundary = index == 0 ||
                 !IsUnquotedUsernameCharacter(content[index - 1]);
             var after = index + token.Length;
             var afterIsBoundary = after == content.Length ||
                 !IsUnquotedUsernameCharacter(content[after]);
-            if (beforeIsBoundary && afterIsBoundary) return true;
+            if (beforeIsBoundary && afterIsBoundary)
+            {
+                return true;
+            }
+
             start = index + token.Length;
         }
         return false;

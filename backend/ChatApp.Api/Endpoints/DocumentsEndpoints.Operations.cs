@@ -11,10 +11,17 @@ public sealed partial class DocumentsEndpoints
         [FromQuery] string query, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
         var term = query?.Trim();
         if (string.IsNullOrEmpty(term) || term.Length > 100)
+        {
             return BadRequest(new { message = "Enter a search term of 1–100 characters." });
+        }
+
         var ownerIds = await db.DocumentShares.AsNoTracking()
             .Where(x => x.GranteeUserId == actor.Id && x.OwnerUser.Status == "active")
             .Select(x => x.OwnerUserId).Distinct().ToListAsync(cancellationToken);
@@ -34,7 +41,11 @@ public sealed partial class DocumentsEndpoints
         foreach (var folder in folderCandidates)
         {
             var permission = await FolderPermission(folder, actor.Id, cancellationToken);
-            if (permission is null) continue;
+            if (permission is null)
+            {
+                continue;
+            }
+
             folders.Add(ToDto(folder, permission,
                 folder.OwnerUserId == actor.Id ? null : folder.OwnerUser.UserName));
             locations[folder.Id] = await FolderLocation(folder.ParentFolderId, actor.Id,
@@ -43,7 +54,11 @@ public sealed partial class DocumentsEndpoints
         foreach (var file in fileCandidates)
         {
             var permission = await FilePermission(file, actor.Id, cancellationToken);
-            if (permission is null) continue;
+            if (permission is null)
+            {
+                continue;
+            }
+
             files.Add(ToDto(file, permission,
                 file.OwnerUserId == actor.Id ? null : file.OwnerUser.UserName));
             locations[file.Id] = await FolderLocation(file.FolderId, actor.Id,
@@ -56,20 +71,31 @@ public sealed partial class DocumentsEndpoints
         DocumentBulkRequest request, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
         if (request.Action is not ("move" or "copy" or "trash") ||
             request.Items is null or { Count: < 1 or > 100 } ||
             request.Items.Any(x => x.Kind is not ("file" or "folder")) ||
             request.Items.Select(x => (x.Kind, x.Id)).Distinct().Count() != request.Items.Count)
+        {
             return BadRequest(new { message = "Select 1–100 distinct files or folders and a valid action." });
+        }
+
         if (request.Action == "trash" && request.DestinationFolderId is not null)
+        {
             return BadRequest(new { message = "Trash does not use a destination folder." });
+        }
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await LockLibrary(actor.Id, cancellationToken);
         if (request.Action != "trash" && !await FolderExists(actor.Id,
                 request.DestinationFolderId, cancellationToken))
+        {
             return NotFound(new { message = "The destination folder was not found." });
+        }
 
         var folderIds = request.Items.Where(x => x.Kind == "folder").Select(x => x.Id).ToArray();
         var fileIds = request.Items.Where(x => x.Kind == "file").Select(x => x.Id).ToArray();
@@ -80,11 +106,25 @@ public sealed partial class DocumentsEndpoints
             x.OwnerUserId == actor.Id && x.DeletedAt == null && fileIds.Contains(x.Id))
             .ToListAsync(cancellationToken);
         if (selectedFolders.Count != folderIds.Length || selectedFiles.Count != fileIds.Length)
+        {
             return NotFound(new { message = "One or more selected items are unavailable." });
+        }
+
         foreach (var folder in selectedFolders)
-            if (await FolderPermission(folder, actor.Id, cancellationToken) != "owner") return NotFound();
+        {
+            if (await FolderPermission(folder, actor.Id, cancellationToken) != "owner")
+            {
+                return NotFound();
+            }
+        }
+
         foreach (var file in selectedFiles)
-            if (await FilePermission(file, actor.Id, cancellationToken) != "owner") return NotFound();
+        {
+            if (await FilePermission(file, actor.Id, cancellationToken) != "owner")
+            {
+                return NotFound();
+            }
+        }
 
         var allFolders = await db.DocumentFolders.AsNoTracking().Where(x =>
             x.OwnerUserId == actor.Id && x.DeletedAt == null).ToListAsync(cancellationToken);
@@ -98,8 +138,16 @@ public sealed partial class DocumentsEndpoints
         if (request.Action == "trash")
         {
             var now = DateTimeOffset.UtcNow;
-            foreach (var folder in selectedFolders) folder.DeletedAt = folder.UpdatedAt = now;
-            foreach (var file in selectedFiles) file.DeletedAt = file.UpdatedAt = now;
+            foreach (var folder in selectedFolders)
+            {
+                folder.DeletedAt = folder.UpdatedAt = now;
+            }
+
+            foreach (var file in selectedFiles)
+            {
+                file.DeletedAt = file.UpdatedAt = now;
+            }
+
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return Ok(new { count = selectedCount });
@@ -107,7 +155,10 @@ public sealed partial class DocumentsEndpoints
 
         var destination = request.DestinationFolderId;
         if (selectedFolders.Any(x => IsAncestorOrSelf(x.Id, destination, byId)))
+        {
             return Conflict(new { message = "A folder cannot be placed inside itself." });
+        }
+
         var isMove = request.Action == "move";
         var folderNames = await db.DocumentFolders.AsNoTracking().Where(x =>
             x.OwnerUserId == actor.Id && x.ParentFolderId == destination && x.DeletedAt == null &&
@@ -122,10 +173,21 @@ public sealed partial class DocumentsEndpoints
         {
             if (selectedFolders.Any(x => !usedFolderNames.Add(x.NormalizedName)) ||
                 selectedFiles.Any(x => !usedFileNames.Add(x.NormalizedName)))
+            {
                 return Conflict(new { message = "An item with the same name already exists in the destination." });
+            }
+
             var now = DateTimeOffset.UtcNow;
-            foreach (var folder in selectedFolders) { folder.ParentFolderId = destination; folder.UpdatedAt = now; }
-            foreach (var file in selectedFiles) { file.FolderId = destination; file.UpdatedAt = now; }
+            foreach (var folder in selectedFolders)
+            {
+                folder.ParentFolderId = destination;
+                folder.UpdatedAt = now;
+            }
+            foreach (var file in selectedFiles)
+            {
+                file.FolderId = destination;
+                file.UpdatedAt = now;
+            }
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return Ok(new { count = selectedCount });
@@ -144,7 +206,12 @@ public sealed partial class DocumentsEndpoints
                 var current = queue.Dequeue();
                 folderCopies.Add(current);
                 if (children.TryGetValue(current.Source.Id, out var nested))
-                    foreach (var child in nested) queue.Enqueue((child, current.Source.Id, false));
+                {
+                    foreach (var child in nested)
+                    {
+                        queue.Enqueue((child, current.Source.Id, false));
+                    }
+                }
             }
         }
         var includedFolderIds = folderCopies.Select(x => x.Source.Id).ToArray();
@@ -157,7 +224,9 @@ public sealed partial class DocumentsEndpoints
             x.CompletedAt == null && x.ExpiresAt > DateTimeOffset.UtcNow)
             .SumAsync(x => (long?)x.SizeBytes, cancellationToken) ?? 0;
         if (await UsedStorage(actor.Id, cancellationToken) + reservedBytes + copyBytes > await StorageLimitBytes(actor.Id, cancellationToken))
+        {
             return Json(new { code = "storage_limit", message = "These copies would exceed your storage limit." }, statusCode: StatusCodes.Status413PayloadTooLarge);
+        }
 
         var newKeys = new List<string>();
         try
@@ -187,7 +256,11 @@ public sealed partial class DocumentsEndpoints
                     : source.Name;
                 var key = $"documents/{actor.Id:N}/{Guid.NewGuid():N}";
                 await using var content = await storage.OpenReadAsync(source.StorageKey, cancellationToken);
-                if (content is null) throw new IOException("A source file is unavailable.");
+                if (content is null)
+                {
+                    throw new IOException("A source file is unavailable.");
+                }
+
                 await storage.WriteAsync(key, content, cancellationToken);
                 newKeys.Add(key);
                 db.StoredDocuments.Add(new StoredDocument
@@ -220,7 +293,11 @@ public sealed partial class DocumentsEndpoints
         var visited = new HashSet<Guid>();
         while (parentId is Guid id && visited.Add(id) && folders.TryGetValue(id, out var parent))
         {
-            if (selectedFolderIds.Contains(id)) return true;
+            if (selectedFolderIds.Contains(id))
+            {
+                return true;
+            }
+
             parentId = parent.ParentFolderId;
         }
         return false;
@@ -232,7 +309,11 @@ public sealed partial class DocumentsEndpoints
         var visited = new HashSet<Guid>();
         while (descendantId is Guid id && visited.Add(id) && folders.TryGetValue(id, out var folder))
         {
-            if (id == folderId) return true;
+            if (id == folderId)
+            {
+                return true;
+            }
+
             descendantId = folder.ParentFolderId;
         }
         return false;
@@ -240,26 +321,40 @@ public sealed partial class DocumentsEndpoints
 
     private static string AvailableFolderName(string original, HashSet<string> used)
     {
-        if (used.Add(Normalize(original))) return original;
+        if (used.Add(Normalize(original)))
+        {
+            return original;
+        }
+
         for (var number = 2; number <= 10000; number++)
         {
             var suffix = $" ({number})";
             var candidate = $"{original[..Math.Min(original.Length, 255 - suffix.Length)]}{suffix}";
-            if (used.Add(Normalize(candidate))) return candidate;
+            if (used.Add(Normalize(candidate)))
+            {
+                return candidate;
+            }
         }
         throw new InvalidOperationException("No available folder name was found.");
     }
 
     private static string AvailableFileName(string original, HashSet<string> used)
     {
-        if (used.Add(Normalize(original))) return original;
+        if (used.Add(Normalize(original)))
+        {
+            return original;
+        }
+
         var extension = Path.GetExtension(original);
         var stem = original[..^extension.Length];
         for (var number = 2; number <= 10000; number++)
         {
             var suffix = $" ({number})";
             var candidate = $"{stem[..Math.Min(stem.Length, 255 - suffix.Length - extension.Length)]}{suffix}{extension}";
-            if (used.Add(Normalize(candidate))) return candidate;
+            if (used.Add(Normalize(candidate)))
+            {
+                return candidate;
+            }
         }
         throw new InvalidOperationException("No available file name was found.");
     }
@@ -274,7 +369,10 @@ public sealed partial class DocumentsEndpoints
             var copyExtension = extension.Length + suffix.Length >= 255 ? "" : extension;
             var copyStem = copyExtension.Length == 0 ? original : stem;
             var candidate = $"{copyStem[..Math.Min(copyStem.Length, 255 - suffix.Length - copyExtension.Length)]}{suffix}{copyExtension}";
-            if (used.Add(Normalize(candidate))) return candidate;
+            if (used.Add(Normalize(candidate)))
+            {
+                return candidate;
+            }
         }
         throw new InvalidOperationException("No available file copy name was found.");
     }

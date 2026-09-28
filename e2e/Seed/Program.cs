@@ -38,7 +38,9 @@ user.SecurityStamp = Convert.ToHexString(System.Security.Cryptography.RandomNumb
 user.PasswordHash = new PasswordHasher<ChatUser>().HashPassword(user, password);
 await db.SaveChangesAsync();
 if (!await db.UserRoles.AnyAsync(x => x.UserId == user.Id && x.RoleId == role.Id))
+{
     db.UserRoles.Add(new IdentityUserRole<Guid> { UserId = user.Id, RoleId = role.Id });
+}
 await db.SaveChangesAsync();
 await transaction.CommitAsync();
 Console.WriteLine("E2E administrator prepared.");

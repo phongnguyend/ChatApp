@@ -312,7 +312,10 @@ public sealed class MessagesEndpoints(
         var user = await db.Users.SingleOrDefaultAsync(
             item => item.NormalizedUserName == normalized && item.Status == "active",
             cancellationToken);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
 
         var message = await db.Messages
             .Include(item => item.Sender)
@@ -324,9 +327,15 @@ public sealed class MessagesEndpoints(
                     item.Conversation.Members.Any(member =>
                         member.UserId == user.Id && member.LeftAt == null),
                 cancellationToken);
-        if (message is null) return NotFound();
+        if (message is null)
+        {
+            return NotFound();
+        }
 
-        if (message.PinnedAt is not null) return Ok(ToPinDto(message));
+        if (message.PinnedAt is not null)
+        {
+            return Ok(ToPinDto(message));
+        }
 
         message.PinnedByUser = user;
         message.PinnedAt = DateTimeOffset.UtcNow;
@@ -351,7 +360,10 @@ public sealed class MessagesEndpoints(
         var user = await db.Users.SingleOrDefaultAsync(
             item => item.NormalizedUserName == normalized && item.Status == "active",
             cancellationToken);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
 
         var message = await db.Messages
             .Include(item => item.Poll)
@@ -443,7 +455,10 @@ public sealed class MessagesEndpoints(
             .Where(item => item.NormalizedUserName == normalized && item.Status == "active")
             .Select(item => (Guid?)item.Id)
             .SingleOrDefaultAsync(cancellationToken);
-        if (userId is null) return NotFound();
+        if (userId is null)
+        {
+            return NotFound();
+        }
 
         var message = await db.Messages.SingleOrDefaultAsync(
             item =>
@@ -453,7 +468,10 @@ public sealed class MessagesEndpoints(
                 item.Conversation.Members.Any(member =>
                     member.UserId == userId && member.LeftAt == null),
             cancellationToken);
-        if (message is null) return NoContent();
+        if (message is null)
+        {
+            return NoContent();
+        }
 
         var conversationId = message.ConversationId;
         message.PinnedAt = null;

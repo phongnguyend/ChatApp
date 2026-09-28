@@ -109,15 +109,25 @@ public sealed class UserTasksEndpoints(ChatAppDbContext db)
         [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         if (from.HasValue != to.HasValue)
+        {
             return BadRequest(new { message = "Choose a valid date range of at most one year." });
+        }
+
         var query = ReadQuery().Where(x => x.UserId == user.Id ||
             x.Shares.Any(share => share.GranteeUserId == user.Id));
         if (from is { } start && to is { } end)
         {
             if (end < start || end.DayNumber - start.DayNumber > 366)
+            {
                 return BadRequest(new { message = "Choose a valid date range of at most one year." });
+            }
+
             query = query.Where(x => x.DueDate >= start && x.DueDate <= end);
         }
         var tasks = await query
@@ -133,9 +143,17 @@ public sealed class UserTasksEndpoints(ChatAppDbContext db)
         SaveUserTaskRequest request, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         var error = Validate(request);
-        if (error is not null) return BadRequest(new { message = error });
+        if (error is not null)
+        {
+            return BadRequest(new { message = error });
+        }
+
         var task = new UserTask
         {
             UserId = user.Id,
@@ -154,14 +172,26 @@ public sealed class UserTasksEndpoints(ChatAppDbContext db)
         SaveUserTaskRequest request, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         var error = Validate(request);
-        if (error is not null) return BadRequest(new { message = error });
+        if (error is not null)
+        {
+            return BadRequest(new { message = error });
+        }
+
         var task = await WriteQuery().SingleOrDefaultAsync(
             x => x.Id == id && (x.UserId == user.Id ||
                 x.Shares.Any(share => share.GranteeUserId == user.Id &&
                     share.Permission == "editor")), ct);
-        if (task is null) return NotFound();
+        if (task is null)
+        {
+            return NotFound();
+        }
+
         task.Title = request.Title.Trim();
         task.Description = CleanDescription(request.Description);
         task.DueDate = request.DueDate;
@@ -175,12 +205,20 @@ public sealed class UserTasksEndpoints(ChatAppDbContext db)
         SetUserTaskCompletionRequest request, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         var task = await WriteQuery().SingleOrDefaultAsync(
             x => x.Id == id && (x.UserId == user.Id ||
                 x.Shares.Any(share => share.GranteeUserId == user.Id &&
                     (share.Permission == "editor" || x.AssigneeUserId == user.Id))), ct);
-        if (task is null) return NotFound();
+        if (task is null)
+        {
+            return NotFound();
+        }
+
         task.IsCompleted = request.IsCompleted;
         task.CompletedAt = request.IsCompleted ? DateTimeOffset.UtcNow : null;
         task.UpdatedAt = DateTimeOffset.UtcNow;
@@ -192,10 +230,18 @@ public sealed class UserTasksEndpoints(ChatAppDbContext db)
         CancellationToken ct)
     {
         var user = await FindUser(username, ct);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         var task = await db.UserTasks.SingleOrDefaultAsync(
             x => x.Id == id && x.UserId == user.Id, ct);
-        if (task is null) return NotFound();
+        if (task is null)
+        {
+            return NotFound();
+        }
+
         db.UserTasks.Remove(task);
         await db.SaveChangesAsync(ct);
         return NoContent();
@@ -205,23 +251,37 @@ public sealed class UserTasksEndpoints(ChatAppDbContext db)
         SetUserTaskAssigneeRequest request, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         await using var transaction = await db.Database.BeginTransactionAsync(
             IsolationLevel.Serializable, ct);
         var task = await WriteQuery().SingleOrDefaultAsync(
             x => x.Id == id && x.UserId == user.Id, ct);
-        if (task is null) return NotFound();
+        if (task is null)
+        {
+            return NotFound();
+        }
+
         var previousAssigneeId = task.AssigneeUserId;
         if (request.AssigneeUserId is { } assigneeId)
         {
             if (assigneeId != user.Id &&
                 !task.Shares.Any(x => x.GranteeUserId == assigneeId))
+            {
                 return BadRequest(new { message = "Choose yourself or a person in the task's sharing list." });
+            }
+
             task.AssigneeUser = assigneeId == user.Id ? user :
                 await db.Users.SingleOrDefaultAsync(x =>
                     x.Id == assigneeId && x.Status == "active", ct);
             if (task.AssigneeUser is null)
+            {
                 return BadRequest(new { message = "Choose an active person." });
+            }
+
             task.AssigneeUserId = assigneeId;
         }
         else
@@ -231,6 +291,7 @@ public sealed class UserTasksEndpoints(ChatAppDbContext db)
         }
         if (task.AssigneeUserId is { } newAssigneeId &&
             newAssigneeId != user.Id && newAssigneeId != previousAssigneeId)
+        {
             db.UserNotifications.Add(new UserNotification
             {
                 UserId = newAssigneeId,
@@ -239,6 +300,8 @@ public sealed class UserTasksEndpoints(ChatAppDbContext db)
                 TargetId = task.Id,
                 TargetTitle = task.Title,
             });
+        }
+
         task.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
@@ -250,7 +313,11 @@ public sealed class UserTasksEndpoints(ChatAppDbContext db)
     {
         var user = await FindUser(username, ct);
         if (user is null || !await db.UserTasks.AnyAsync(
-                x => x.Id == id && x.UserId == user.Id, ct)) return NotFound();
+                x => x.Id == id && x.UserId == user.Id, ct))
+        {
+            return NotFound();
+        }
+
         var shared = await db.UserTaskShares.AsNoTracking()
             .Where(x => x.TaskId == id && x.GranteeUser.Status == "active")
             .OrderBy(x => (((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim() == "" ? x.GranteeUser.UserName : ((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim()))
@@ -267,7 +334,11 @@ public sealed class UserTasksEndpoints(ChatAppDbContext db)
     {
         var user = await FindUser(username, ct);
         if (user is null || !await db.UserTasks.AnyAsync(
-                x => x.Id == id && x.UserId == user.Id, ct)) return NotFound();
+                x => x.Id == id && x.UserId == user.Id, ct))
+        {
+            return NotFound();
+        }
+
         var shares = await db.UserTaskShares.AsNoTracking()
             .Where(x => x.TaskId == id)
             .OrderBy(x => (((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim() == "" ? x.GranteeUser.UserName : ((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim()))
@@ -281,15 +352,31 @@ public sealed class UserTasksEndpoints(ChatAppDbContext db)
         SaveUserTaskShareRequest request, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
-        if (user is null) return NotFound();
-        if (request.Permission is not ("viewer" or "editor"))
-            return BadRequest(new { message = "Choose Viewer or Editor." });
-        if (!await db.UserTasks.AnyAsync(x => x.Id == id && x.UserId == user.Id, ct))
+        if (user is null)
+        {
             return NotFound();
+        }
+
+        if (request.Permission is not ("viewer" or "editor"))
+        {
+            return BadRequest(new { message = "Choose Viewer or Editor." });
+        }
+
+        if (!await db.UserTasks.AnyAsync(x => x.Id == id && x.UserId == user.Id, ct))
+        {
+            return NotFound();
+        }
+
         var grantee = await FindUser(request.RecipientUsername, ct);
-        if (grantee is null) return BadRequest(new { message = "Choose an active person." });
+        if (grantee is null)
+        {
+            return BadRequest(new { message = "Choose an active person." });
+        }
+
         if (grantee.Id == user.Id)
+        {
             return BadRequest(new { message = "You already own this task." });
+        }
 
         await using var transaction = await db.Database.BeginTransactionAsync(
             IsolationLevel.Serializable, ct);
@@ -315,7 +402,11 @@ public sealed class UserTasksEndpoints(ChatAppDbContext db)
                 TargetTitle = taskTitle,
             });
         }
-        else share.Permission = request.Permission;
+        else
+        {
+            share.Permission = request.Permission;
+        }
+
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         return Ok(new UserTaskShareDto(share.Id, grantee.Id, grantee.UserName,
@@ -326,12 +417,20 @@ public sealed class UserTasksEndpoints(ChatAppDbContext db)
         [FromQuery] string username, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return NotFound();
+        }
+
         await using var transaction = await db.Database.BeginTransactionAsync(
             IsolationLevel.Serializable, ct);
         var share = await db.UserTaskShares.SingleOrDefaultAsync(x =>
             x.Id == shareId && x.TaskId == id && x.Task.UserId == user.Id, ct);
-        if (share is null) return NotFound();
+        if (share is null)
+        {
+            return NotFound();
+        }
+
         var task = await db.UserTasks.SingleAsync(x => x.Id == id, ct);
         if (task.AssigneeUserId == share.GranteeUserId)
         {
@@ -358,11 +457,20 @@ public sealed class UserTasksEndpoints(ChatAppDbContext db)
     private static string? Validate(SaveUserTaskRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Title) || request.Title.Trim().Length > 200)
+        {
             return "Enter a title of at most 200 characters.";
+        }
+
         if (request.Description?.Trim().Length > 4000)
+        {
             return "Notes must be at most 4,000 characters.";
+        }
+
         if (request.Priority is not ("low" or "normal" or "high"))
+        {
             return "Choose a valid priority.";
+        }
+
         return null;
     }
 

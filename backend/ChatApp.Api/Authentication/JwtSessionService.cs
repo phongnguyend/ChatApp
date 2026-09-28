@@ -20,24 +20,43 @@ public sealed class JwtSessionService
         audience = configuration["Authentication:Jwt:Audience"] ?? "ChatApp.Api";
         lifetimeMinutes = configuration.GetValue("Authentication:Jwt:LifetimeMinutes", 60);
         if (string.IsNullOrWhiteSpace(issuer) || string.IsNullOrWhiteSpace(audience) || lifetimeMinutes is < 5 or > 120)
+        {
             throw new InvalidOperationException("JWT issuer/audience are required and LifetimeMinutes must be between 5 and 120.");
+        }
+
         byte[] bytes;
-        try { bytes = Convert.FromBase64String(configuration["Authentication:Jwt:SigningKey"] ?? ""); }
-        catch (FormatException) { throw new InvalidOperationException("Authentication:Jwt:SigningKey must be base64-encoded random bytes."); }
+        try
+        {
+            bytes = Convert.FromBase64String(configuration["Authentication:Jwt:SigningKey"] ?? "");
+        }
+        catch (FormatException)
+        {
+            throw new InvalidOperationException("Authentication:Jwt:SigningKey must be base64-encoded random bytes.");
+        }
         if (bytes.Length < 32)
+        {
             throw new InvalidOperationException("Set Authentication:Jwt:SigningKey to at least 32 random bytes encoded as base64 using user-secrets or an environment variable.");
+        }
+
         key = new SymmetricSecurityKey(bytes);
     }
 
     public TokenValidationParameters ValidationParameters => new()
     {
-        ValidateIssuer = true, ValidIssuer = issuer,
-        ValidateAudience = true, ValidAudience = audience,
-        ValidateIssuerSigningKey = true, IssuerSigningKey = key,
-        ValidateLifetime = true, RequireExpirationTime = true, RequireSignedTokens = true,
-        ValidAlgorithms = [SecurityAlgorithms.HmacSha256], ValidTypes = ["at+jwt"],
+        ValidateIssuer = true,
+        ValidIssuer = issuer,
+        ValidateAudience = true,
+        ValidAudience = audience,
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = key,
+        ValidateLifetime = true,
+        RequireExpirationTime = true,
+        RequireSignedTokens = true,
+        ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
+        ValidTypes = ["at+jwt"],
         ClockSkew = TimeSpan.FromSeconds(30),
-        NameClaimType = "email", RoleClaimType = "role"
+        NameClaimType = "email",
+        RoleClaimType = "role"
     };
 
     public object Issue(HttpContext context, ChatUser user, IEnumerable<string> roles)
@@ -60,9 +79,11 @@ public sealed class JwtSessionService
         var accessToken = new JwtSecurityTokenHandler().WriteToken(token);
         context.Response.Cookies.Append("chatapp-media", accessToken, new CookieOptions
         {
-            HttpOnly = true, Secure = context.Request.IsHttps,
+            HttpOnly = true,
+            Secure = context.Request.IsHttps,
             SameSite = context.Request.IsHttps ? SameSiteMode.None : SameSiteMode.Lax,
-            Path = "/api", Expires = expires,
+            Path = "/api",
+            Expires = expires,
         });
         return new { accessToken, tokenType = "Bearer", expiresAt = expires };
     }

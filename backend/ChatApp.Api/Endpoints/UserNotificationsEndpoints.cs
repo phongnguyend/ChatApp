@@ -22,7 +22,11 @@ public sealed class UserNotificationsEndpoints(ChatAppDbContext db)
             CancellationToken ct) =>
             handler.UnreadCount(username, ct))
             .WithName("UserNotificationsEndpoints.UnreadCount")
-            .AddEndpointFilter(async (context, next) => { context.HttpContext.Response.Headers.CacheControl = "no-store"; return await next(context); });
+            .AddEndpointFilter(async (context, next) =>
+            {
+                context.HttpContext.Response.Headers.CacheControl = "no-store";
+                return await next(context);
+            });
 
         group.MapGet("", (
             [FromServices] UserNotificationsEndpoints handler,
@@ -52,7 +56,10 @@ public sealed class UserNotificationsEndpoints(ChatAppDbContext db)
         CancellationToken ct)
     {
         var userId = await FindUserId(username, ct);
-        if (userId is null) return NotFound();
+        if (userId is null)
+        {
+            return NotFound();
+        }
         // A badge can tolerate a transient dirty count; avoid shared read locks
         // on the notification table during the frequent polling request.
         var count = await db.Database.SqlQuery<int>(
@@ -65,9 +72,15 @@ public sealed class UserNotificationsEndpoints(ChatAppDbContext db)
         [FromQuery] int page = 0, CancellationToken ct = default)
     {
         var userId = await FindUserId(username, ct);
-        if (userId is null) return NotFound();
+        if (userId is null)
+        {
+            return NotFound();
+        }
+
         if (page is < 0 or > 10000)
+        {
             return BadRequest(new { message = "Choose a valid page." });
+        }
 
         const int pageSize = 50;
         var query = db.UserNotifications.AsNoTracking()
@@ -88,10 +101,18 @@ public sealed class UserNotificationsEndpoints(ChatAppDbContext db)
         CancellationToken ct)
     {
         var userId = await FindUserId(username, ct);
-        if (userId is null) return NotFound();
+        if (userId is null)
+        {
+            return NotFound();
+        }
+
         var notification = await db.UserNotifications.SingleOrDefaultAsync(
             x => x.Id == id && x.UserId == userId, ct);
-        if (notification is null) return NotFound();
+        if (notification is null)
+        {
+            return NotFound();
+        }
+
         if (notification.ReadAt is null)
         {
             notification.ReadAt = DateTimeOffset.UtcNow;
@@ -104,7 +125,11 @@ public sealed class UserNotificationsEndpoints(ChatAppDbContext db)
         CancellationToken ct)
     {
         var userId = await FindUserId(username, ct);
-        if (userId is null) return NotFound();
+        if (userId is null)
+        {
+            return NotFound();
+        }
+
         await db.UserNotifications.Where(x => x.UserId == userId && x.ReadAt == null)
             .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.ReadAt,
                 DateTimeOffset.UtcNow), ct);

@@ -21,9 +21,15 @@ public static class AuthenticatedActorFilter
                 {
                     // A failed required-parameter binding must remain a 400,
                     // rather than being reported as an impersonation attempt.
-                    if (context.Arguments[index] is null) return Results.BadRequest();
+                    if (context.Arguments[index] is null)
+                    {
+                        return Results.BadRequest();
+                    }
+
                     if (!string.Equals(context.Arguments[index] as string, username, StringComparison.OrdinalIgnoreCase))
+                    {
                         return Results.Forbid();
+                    }
                 }
             }
             return await next(context);

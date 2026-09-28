@@ -14,9 +14,15 @@ public sealed partial class DocumentsEndpoints
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
         if (offset < 0 || query?.Length > 100)
+        {
             return BadRequest(new { message = "Choose a valid search and page." });
+        }
 
         var users = db.Users.AsNoTracking().AsQueryable();
         var term = query?.Trim();
@@ -32,7 +38,10 @@ public sealed partial class DocumentsEndpoints
         var page = await users.OrderBy(x => x.NormalizedUserName)
             .Skip(offset).Take(pageSize).Select(x => new
             {
-                x.Id, Username = x.UserName, DisplayName = (((x.FirstName ?? "") + " " + (x.LastName ?? "")).Trim() == "" ? x.UserName : ((x.FirstName ?? "") + " " + (x.LastName ?? "")).Trim()), x.Status,
+                x.Id,
+                Username = x.UserName,
+                DisplayName = (((x.FirstName ?? "") + " " + (x.LastName ?? "")).Trim() == "" ? x.UserName : ((x.FirstName ?? "") + " " + (x.LastName ?? "")).Trim()),
+                x.Status,
                 CustomLimitBytes = x.DocumentStorageLimitBytes,
             }).ToArrayAsync(cancellationToken);
         var ids = page.Select(x => x.Id).ToArray();
@@ -73,21 +82,35 @@ public sealed partial class DocumentsEndpoints
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
         if (request.LimitBytes is <= 0 or > MaximumStorageLimit)
+        {
             return BadRequest(new { message = "Choose a limit between 1 byte and 100 TB, or use the default." });
+        }
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await LockLibrary(userId, cancellationToken);
         var target = await db.Users.SingleOrDefaultAsync(x => x.Id == userId,
             cancellationToken);
-        if (target is null) return NotFound();
+        if (target is null)
+        {
+            return NotFound();
+        }
+
         target.DocumentStorageLimitBytes = request.LimitBytes;
         target.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return Ok(new { target.Id, target.DocumentStorageLimitBytes,
-            limitBytes = target.DocumentStorageLimitBytes ?? DefaultStorageLimitBytes() });
+        return Ok(new
+        {
+            target.Id,
+            target.DocumentStorageLimitBytes,
+            limitBytes = target.DocumentStorageLimitBytes ?? DefaultStorageLimitBytes()
+        });
     }
 
 }

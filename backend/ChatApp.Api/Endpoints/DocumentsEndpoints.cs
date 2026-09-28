@@ -402,7 +402,11 @@ public sealed partial class DocumentsEndpoints(
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
         var usedBytes = await UsedStorage(actor.Id, cancellationToken);
         return Ok(new { usedBytes, limitBytes = actor.DocumentStorageLimitBytes ?? DefaultStorageLimitBytes() });
     }
@@ -413,11 +417,19 @@ public sealed partial class DocumentsEndpoints(
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
         var current = folderId is null ? null : await db.DocumentFolders.AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == folderId, cancellationToken);
         if (folderId is not null && (current is null ||
-            await FolderPermission(current, actor.Id, cancellationToken) is null)) return NotFound();
+            await FolderPermission(current, actor.Id, cancellationToken) is null))
+        {
+            return NotFound();
+        }
+
         var ownerId = current?.OwnerUserId ?? actor.Id;
         var allFolders = await db.DocumentFolders.AsNoTracking()
             .Where(x => x.OwnerUserId == ownerId && x.DeletedAt == null)
@@ -437,20 +449,30 @@ public sealed partial class DocumentsEndpoints(
             var firstAccessible = 0;
             while (firstAccessible < breadcrumbs.Count - 1 &&
                 await FolderPermission(allFolders.Single(x => x.Id == breadcrumbs[firstAccessible].Id),
-                    actor.Id, cancellationToken) is null) firstAccessible++;
+                    actor.Id, cancellationToken) is null)
+            {
+                firstAccessible++;
+            }
+
             breadcrumbs = breadcrumbs.Skip(firstAccessible).ToList();
         }
 
         var folders = new List<DocumentFolderDto>();
         foreach (var folder in allFolders.Where(x => x.ParentFolderId == folderId).OrderBy(x => x.Name))
+        {
             folders.Add(ToDto(folder, await FolderPermission(folder, actor.Id, cancellationToken) ?? "viewer"));
+        }
+
         var files = await db.StoredDocuments.AsNoTracking()
             .Where(x => x.OwnerUserId == ownerId && x.FolderId == folderId && x.DeletedAt == null)
             .OrderBy(x => x.Name)
             .ToArrayAsync(cancellationToken);
         var fileDtos = new List<StoredDocumentDto>();
         foreach (var file in files)
+        {
             fileDtos.Add(ToDto(file, await FilePermission(file, actor.Id, cancellationToken) ?? "viewer"));
+        }
+
         return Ok(new DocumentListingDto(current is null ? null : ToDto(current,
                 await FolderPermission(current, actor.Id, cancellationToken) ?? "viewer"),
             breadcrumbs, folders, fileDtos));
@@ -462,21 +484,38 @@ public sealed partial class DocumentsEndpoints(
         CancellationToken cancellationToken)
     {
         var owner = await FindOwner(username, cancellationToken);
-        if (owner is null) return NotFound();
+        if (owner is null)
+        {
+            return NotFound();
+        }
+
         var name = CleanName(request.Name);
-        if (name is null) return BadRequest(new { message = "Use a folder name of 1–255 valid characters." });
+        if (name is null)
+        {
+            return BadRequest(new { message = "Use a folder name of 1–255 valid characters." });
+        }
+
         var parent = request.ParentFolderId is null ? null : await db.DocumentFolders
             .SingleOrDefaultAsync(x => x.Id == request.ParentFolderId, cancellationToken);
         if (request.ParentFolderId is not null && (parent is null ||
             await FolderPermission(parent, owner.Id, cancellationToken) is not ("owner" or "editor")))
+        {
             return NotFound();
+        }
+
         var libraryOwnerId = parent?.OwnerUserId ?? owner.Id;
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await LockLibrary(libraryOwnerId, cancellationToken);
         if (!await FolderExists(libraryOwnerId, request.ParentFolderId, cancellationToken))
+        {
             return NotFound(new { message = "The parent folder was not found." });
+        }
+
         if (await HasFolderName(libraryOwnerId, request.ParentFolderId, name, null, cancellationToken))
+        {
             return Conflict(new { message = "A folder with this name already exists here." });
+        }
+
         var folder = new DocumentFolder
         {
             OwnerUserId = libraryOwnerId,
@@ -495,16 +534,30 @@ public sealed partial class DocumentsEndpoints(
         CancellationToken cancellationToken)
     {
         var owner = await FindOwner(username, cancellationToken);
-        if (owner is null) return NotFound();
+        if (owner is null)
+        {
+            return NotFound();
+        }
+
         var name = CleanName(request.Name);
-        if (name is null) return BadRequest(new { message = "Use a folder name of 1–255 valid characters." });
+        if (name is null)
+        {
+            return BadRequest(new { message = "Use a folder name of 1–255 valid characters." });
+        }
+
         var folder = await db.DocumentFolders.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (folder is null || await FolderPermission(folder, owner.Id, cancellationToken) is not ("owner" or "editor"))
+        {
             return NotFound();
+        }
+
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await LockLibrary(folder.OwnerUserId, cancellationToken);
         if (await HasFolderName(folder.OwnerUserId, folder.ParentFolderId, name, id, cancellationToken))
+        {
             return Conflict(new { message = "A folder with this name already exists here." });
+        }
+
         folder.Name = name;
         folder.NormalizedName = Normalize(name);
         folder.UpdatedAt = DateTimeOffset.UtcNow;
@@ -517,13 +570,20 @@ public sealed partial class DocumentsEndpoints(
         [FromQuery] string username, CancellationToken cancellationToken)
     {
         var owner = await FindOwner(username, cancellationToken);
-        if (owner is null) return NotFound();
+        if (owner is null)
+        {
+            return NotFound();
+        }
+
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await LockLibrary(owner.Id, cancellationToken);
         var folder = await db.DocumentFolders.SingleOrDefaultAsync(x =>
             x.Id == id && x.OwnerUserId == owner.Id && x.DeletedAt == null, cancellationToken);
         if (folder is null || await FolderPermission(folder, owner.Id, cancellationToken) is null)
+        {
             return NotFound();
+        }
+
         folder.DeletedAt = DateTimeOffset.UtcNow;
         folder.UpdatedAt = folder.DeletedAt.Value;
         await db.SaveChangesAsync(cancellationToken);
@@ -539,46 +599,78 @@ public sealed partial class DocumentsEndpoints(
         CancellationToken cancellationToken)
     {
         var owner = await FindOwner(username, cancellationToken);
-        if (owner is null) return NotFound();
+        if (owner is null)
+        {
+            return NotFound();
+        }
+
         var name = CleanName(file.FileName.Replace('\\', '/').Split('/').Last());
-        if (name is null) return BadRequest(new { message = "Choose a file with a valid name." });
+        if (name is null)
+        {
+            return BadRequest(new { message = "Choose a file with a valid name." });
+        }
+
         if (file.Length > MaxFileSize)
+        {
             return BadRequest(new { message = "Files must be 50 MB or smaller." });
+        }
+
         if (conflict is not (null or "ask" or "replace" or "keepBoth"))
+        {
             return BadRequest(new { message = "Choose Replace or Keep both." });
+        }
 
         var folder = folderId is null ? null : await db.DocumentFolders.AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == folderId, cancellationToken);
         if (folderId is not null && (folder is null ||
             await FolderPermission(folder, owner.Id, cancellationToken) is not ("owner" or "editor")))
+        {
             return NotFound();
+        }
+
         var libraryOwnerId = folder?.OwnerUserId ?? owner.Id;
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await LockLibrary(libraryOwnerId, cancellationToken);
         if (!await FolderExists(libraryOwnerId, folderId, cancellationToken))
+        {
             return NotFound(new { message = "The destination folder was not found." });
+        }
+
         var existing = await db.StoredDocuments.SingleOrDefaultAsync(x =>
             x.OwnerUserId == libraryOwnerId && x.FolderId == folderId &&
             x.DeletedAt == null && x.NormalizedName == Normalize(name), cancellationToken);
         if (existing is not null && conflict == "replace" &&
             await FilePermission(existing, owner.Id, cancellationToken) is not ("owner" or "editor"))
+        {
             return Forbid();
+        }
+
         if (existing is not null && conflict is null or "ask")
+        {
             return Conflict(new { code = "name_conflict", message = "A file with this name already exists here.", existingId = existing.Id, name });
+        }
+
         if (existing is not null && conflict == "keepBoth")
+        {
             name = await NextAvailableName(libraryOwnerId, folderId, name, cancellationToken);
+        }
 
         var usedBytes = await UsedStorage(libraryOwnerId, cancellationToken);
         if (usedBytes + await ReservedStorage(libraryOwnerId, cancellationToken) + file.Length > await StorageLimitBytes(libraryOwnerId, cancellationToken))
+        {
             return Json(new { code = "storage_limit", message = "This upload would exceed the owner's storage limit." }, statusCode: StatusCodes.Status413PayloadTooLarge);
+        }
 
         var key = $"documents/{libraryOwnerId:N}/{Guid.NewGuid():N}";
         var contentType = CleanContentType(file.ContentType);
         try
         {
             await using (var stream = file.OpenReadStream())
+            {
                 await storage.WriteAsync(key, stream, cancellationToken);
+            }
+
             StoredDocument document;
             if (existing is not null && conflict == "replace")
             {
@@ -612,7 +704,10 @@ public sealed partial class DocumentsEndpoints(
         }
         catch
         {
-            try { await storage.DeleteAsync(key, CancellationToken.None); }
+            try
+            {
+                await storage.DeleteAsync(key, CancellationToken.None);
+            }
             catch (Exception cleanupError)
             {
                 logger.LogWarning(cleanupError,
@@ -627,18 +722,32 @@ public sealed partial class DocumentsEndpoints(
         CancellationToken cancellationToken)
     {
         var owner = await FindOwner(username, cancellationToken);
-        if (owner is null) return NotFound();
+        if (owner is null)
+        {
+            return NotFound();
+        }
+
         var name = CleanName(request.Name);
-        if (name is null) return BadRequest(new { message = "Use a file name of 1–255 valid characters." });
+        if (name is null)
+        {
+            return BadRequest(new { message = "Use a file name of 1–255 valid characters." });
+        }
+
         var file = await db.StoredDocuments.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (file is null || await FilePermission(file, owner.Id, cancellationToken) is not ("owner" or "editor"))
+        {
             return NotFound();
+        }
+
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await LockLibrary(file.OwnerUserId, cancellationToken);
         if (await db.StoredDocuments.AnyAsync(x => x.OwnerUserId == file.OwnerUserId &&
             x.FolderId == file.FolderId && x.NormalizedName == Normalize(name) &&
             x.DeletedAt == null && x.Id != id, cancellationToken))
+        {
             return Conflict(new { message = "A file with this name already exists here." });
+        }
+
         file.Name = name;
         file.NormalizedName = Normalize(name);
         file.UpdatedAt = DateTimeOffset.UtcNow;
@@ -651,22 +760,38 @@ public sealed partial class DocumentsEndpoints(
         [FromForm] IFormFile file, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
         if (file.Length > MaxFileSize)
+        {
             return BadRequest(new { message = "Files must be 50 MB or smaller." });
+        }
+
         var document = await db.StoredDocuments.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (document is null || await FilePermission(document, actor.Id, cancellationToken) is not ("owner" or "editor"))
+        {
             return NotFound();
+        }
+
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await LockLibrary(document.OwnerUserId, cancellationToken);
         var usedBytes = await UsedStorage(document.OwnerUserId, cancellationToken);
         if (usedBytes + await ReservedStorage(document.OwnerUserId, cancellationToken) + file.Length > await StorageLimitBytes(document.OwnerUserId, cancellationToken))
+        {
             return Json(new { code = "storage_limit", message = "This upload would exceed the owner's storage limit." }, statusCode: StatusCodes.Status413PayloadTooLarge);
+        }
+
         var key = $"documents/{document.OwnerUserId:N}/{Guid.NewGuid():N}";
         try
         {
             await using (var stream = file.OpenReadStream())
+            {
                 await storage.WriteAsync(key, stream, cancellationToken);
+            }
+
             db.DocumentVersions.Add(PreviousVersion(document));
             document.StorageKey = key;
             document.ContentType = CleanContentType(file.ContentType);
@@ -680,7 +805,10 @@ public sealed partial class DocumentsEndpoints(
         }
         catch
         {
-            try { await storage.DeleteAsync(key, CancellationToken.None); }
+            try
+            {
+                await storage.DeleteAsync(key, CancellationToken.None);
+            }
             catch (Exception cleanupError)
             {
                 logger.LogWarning(cleanupError, "Could not clean up failed document upload {StorageKey}", key);
@@ -693,13 +821,20 @@ public sealed partial class DocumentsEndpoints(
         [FromQuery] string username, CancellationToken cancellationToken)
     {
         var owner = await FindOwner(username, cancellationToken);
-        if (owner is null) return NotFound();
+        if (owner is null)
+        {
+            return NotFound();
+        }
+
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await LockLibrary(owner.Id, cancellationToken);
         var file = await db.StoredDocuments.SingleOrDefaultAsync(x =>
             x.Id == id && x.OwnerUserId == owner.Id && x.DeletedAt == null, cancellationToken);
         if (file is null || await FilePermission(file, owner.Id, cancellationToken) is null)
+        {
             return NotFound();
+        }
+
         file.DeletedAt = DateTimeOffset.UtcNow;
         file.UpdatedAt = file.DeletedAt.Value;
         await db.SaveChangesAsync(cancellationToken);
@@ -713,14 +848,29 @@ public sealed partial class DocumentsEndpoints(
         CancellationToken cancellationToken = default)
     {
         var owner = await FindOwner(username, cancellationToken);
-        if (owner is null) return NotFound();
+        if (owner is null)
+        {
+            return NotFound();
+        }
+
         var file = await db.StoredDocuments.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
-        if (file is null || await FilePermission(file, owner.Id, cancellationToken) is null) return NotFound();
+        if (file is null || await FilePermission(file, owner.Id, cancellationToken) is null)
+        {
+            return NotFound();
+        }
+
         var stream = await storage.OpenReadAsync(file.StorageKey, cancellationToken);
-        if (stream is null) return NotFound();
+        if (stream is null)
+        {
+            return NotFound();
+        }
+
         httpContext.Response.Headers["X-Content-Type-Options"] = "nosniff";
         if (!download && IsPreviewable(file.ContentType))
+        {
             return File(stream, file.ContentType, enableRangeProcessing: true);
+        }
+
         return File(stream, "application/octet-stream", file.Name,
             enableRangeProcessing: true);
     }
@@ -729,9 +879,17 @@ public sealed partial class DocumentsEndpoints(
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
         var file = await db.StoredDocuments.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
-        if (file is null || await FilePermission(file, actor.Id, cancellationToken) is null) return NotFound();
+        if (file is null || await FilePermission(file, actor.Id, cancellationToken) is null)
+        {
+            return NotFound();
+        }
+
         var versions = await db.DocumentVersions.AsNoTracking().Where(x => x.DocumentId == id)
             .OrderByDescending(x => x.Number)
             .Select(x => new DocumentVersionDto(x.Id, x.Number, x.ContentType, x.SizeBytes,
@@ -746,17 +904,36 @@ public sealed partial class DocumentsEndpoints(
         CancellationToken cancellationToken = default)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
         var file = await db.StoredDocuments.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
-        if (file is null || await FilePermission(file, actor.Id, cancellationToken) is null) return NotFound();
+        if (file is null || await FilePermission(file, actor.Id, cancellationToken) is null)
+        {
+            return NotFound();
+        }
+
         var version = await db.DocumentVersions.AsNoTracking().SingleOrDefaultAsync(x =>
             x.Id == versionId && x.DocumentId == id, cancellationToken);
-        if (version is null) return NotFound();
+        if (version is null)
+        {
+            return NotFound();
+        }
+
         var stream = await storage.OpenReadAsync(version.StorageKey, cancellationToken);
-        if (stream is null) return NotFound();
+        if (stream is null)
+        {
+            return NotFound();
+        }
+
         httpContext.Response.Headers["X-Content-Type-Options"] = "nosniff";
         if (!download && IsPreviewable(version.ContentType))
+        {
             return File(stream, version.ContentType, enableRangeProcessing: true);
+        }
+
         return File(stream, "application/octet-stream", file.Name,
             enableRangeProcessing: true);
     }
@@ -765,26 +942,47 @@ public sealed partial class DocumentsEndpoints(
         [FromQuery] string username, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
         var document = await db.StoredDocuments.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (document is null || await FilePermission(document, actor.Id, cancellationToken) is not ("owner" or "editor"))
+        {
             return NotFound();
+        }
+
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await LockLibrary(document.OwnerUserId, cancellationToken);
         var version = await db.DocumentVersions.AsNoTracking().SingleOrDefaultAsync(x =>
             x.Id == versionId && x.DocumentId == id, cancellationToken);
-        if (version is null) return NotFound();
+        if (version is null)
+        {
+            return NotFound();
+        }
+
         if (await UsedStorage(document.OwnerUserId, cancellationToken) +
             await ReservedStorage(document.OwnerUserId, cancellationToken) + version.SizeBytes >
             await StorageLimitBytes(document.OwnerUserId, cancellationToken))
+        {
             return Json(new { code = "storage_limit", message = "Restoring this version would exceed the owner's storage limit. Delete an older version first." }, statusCode: StatusCodes.Status413PayloadTooLarge);
+        }
+
         var source = await storage.OpenReadAsync(version.StorageKey, cancellationToken);
-        if (source is null) return NotFound();
+        if (source is null)
+        {
+            return NotFound();
+        }
+
         var key = $"documents/{document.OwnerUserId:N}/{Guid.NewGuid():N}";
         try
         {
             await using (source)
+            {
                 await storage.WriteAsync(key, source, cancellationToken);
+            }
+
             db.DocumentVersions.Add(PreviousVersion(document));
             document.StorageKey = key;
             document.ContentType = version.ContentType;
@@ -798,7 +996,10 @@ public sealed partial class DocumentsEndpoints(
         }
         catch
         {
-            try { await storage.DeleteAsync(key, CancellationToken.None); }
+            try
+            {
+                await storage.DeleteAsync(key, CancellationToken.None);
+            }
             catch (Exception cleanupError)
             {
                 logger.LogWarning(cleanupError, "Could not clean up failed version restore {StorageKey}", key);
@@ -811,15 +1012,26 @@ public sealed partial class DocumentsEndpoints(
         [FromQuery] string username, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
         var file = await db.StoredDocuments.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (file is null || await FilePermission(file, actor.Id, cancellationToken) is not ("owner" or "editor"))
+        {
             return NotFound();
+        }
+
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await LockLibrary(file.OwnerUserId, cancellationToken);
         var version = await db.DocumentVersions.SingleOrDefaultAsync(x =>
             x.Id == versionId && x.DocumentId == id, cancellationToken);
-        if (version is null) return NotFound();
+        if (version is null)
+        {
+            return NotFound();
+        }
+
         var key = version.StorageKey;
         db.DocumentVersions.Remove(version);
         await db.SaveChangesAsync(cancellationToken);
@@ -832,21 +1044,35 @@ public sealed partial class DocumentsEndpoints(
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
         var folder = await db.DocumentFolders.AsNoTracking().Include(x => x.OwnerUser)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
-        if (folder is null) return NotFound();
+        if (folder is null)
+        {
+            return NotFound();
+        }
+
         var permission = folder.DeletedAt is not null && folder.OwnerUserId == actor.Id
             ? "owner" : await FolderPermission(folder, actor.Id, cancellationToken);
-        if (permission is null) return NotFound();
+        if (permission is null)
+        {
+            return NotFound();
+        }
 
         var allFolders = await db.DocumentFolders.AsNoTracking()
             .Where(x => x.OwnerUserId == folder.OwnerUserId && x.DeletedAt == null)
             .Select(x => new { x.Id, x.ParentFolderId }).ToListAsync(cancellationToken);
         var descendantIds = new List<Guid> { id };
         for (var index = 0; index < descendantIds.Count; index++)
+        {
             descendantIds.AddRange(allFolders.Where(x => x.ParentFolderId == descendantIds[index])
                 .Select(x => x.Id));
+        }
+
         var fileSummary = await db.StoredDocuments.AsNoTracking()
             .Where(x => x.OwnerUserId == folder.OwnerUserId && x.DeletedAt == null &&
                 x.FolderId != null && descendantIds.Contains(x.FolderId.Value))
@@ -864,13 +1090,25 @@ public sealed partial class DocumentsEndpoints(
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
         var file = await db.StoredDocuments.AsNoTracking().Include(x => x.OwnerUser)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
-        if (file is null) return NotFound();
+        if (file is null)
+        {
+            return NotFound();
+        }
+
         var permission = file.DeletedAt is not null && file.OwnerUserId == actor.Id
             ? "owner" : await FilePermission(file, actor.Id, cancellationToken);
-        if (permission is null) return NotFound();
+        if (permission is null)
+        {
+            return NotFound();
+        }
+
         return Ok(new DocumentPropertiesDto("file", file.Id, file.Name,
             await FolderLocation(file.FolderId, actor.Id, file.OwnerUserId, cancellationToken),
             file.OwnerUser.UserName, file.OwnerUser.DisplayName, permission,
@@ -881,7 +1119,11 @@ public sealed partial class DocumentsEndpoints(
     public async Task<IResult> Trash([FromQuery] string username, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
         var folders = await db.DocumentFolders.AsNoTracking()
             .Where(x => x.OwnerUserId == actor.Id && x.DeletedAt != null)
             .OrderByDescending(x => x.DeletedAt).ToListAsync(cancellationToken);
@@ -896,14 +1138,25 @@ public sealed partial class DocumentsEndpoints(
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await LockLibrary(actor.Id, cancellationToken);
         var folder = await db.DocumentFolders.SingleOrDefaultAsync(x =>
             x.Id == id && x.OwnerUserId == actor.Id && x.DeletedAt != null, cancellationToken);
-        if (folder is null) return NotFound();
+        if (folder is null)
+        {
+            return NotFound();
+        }
+
         if (!await FolderExists(actor.Id, folder.ParentFolderId, cancellationToken))
+        {
             return Conflict(new { message = "Restore the parent folder first." });
+        }
+
         if (await HasFolderName(actor.Id, folder.ParentFolderId, folder.Name, id, cancellationToken))
         {
             folder.Name = await NextAvailableFolderName(actor.Id, folder.ParentFolderId,
@@ -921,14 +1174,25 @@ public sealed partial class DocumentsEndpoints(
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await LockLibrary(actor.Id, cancellationToken);
         var file = await db.StoredDocuments.SingleOrDefaultAsync(x =>
             x.Id == id && x.OwnerUserId == actor.Id && x.DeletedAt != null, cancellationToken);
-        if (file is null) return NotFound();
+        if (file is null)
+        {
+            return NotFound();
+        }
+
         if (!await FolderExists(actor.Id, file.FolderId, cancellationToken))
+        {
             return Conflict(new { message = "Restore the parent folder first." });
+        }
+
         if (await db.StoredDocuments.AnyAsync(x => x.OwnerUserId == actor.Id &&
             x.FolderId == file.FolderId && x.NormalizedName == file.NormalizedName &&
             x.DeletedAt == null, cancellationToken))
@@ -947,12 +1211,20 @@ public sealed partial class DocumentsEndpoints(
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await LockLibrary(actor.Id, cancellationToken);
         var file = await db.StoredDocuments.SingleOrDefaultAsync(x => x.Id == id &&
             x.OwnerUserId == actor.Id && x.DeletedAt != null, cancellationToken);
-        if (file is null) return NotFound();
+        if (file is null)
+        {
+            return NotFound();
+        }
+
         var keys = await db.DocumentVersions.Where(x => x.DocumentId == id)
             .Select(x => x.StorageKey).ToListAsync(cancellationToken);
         keys.Add(file.StorageKey);
@@ -967,18 +1239,29 @@ public sealed partial class DocumentsEndpoints(
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await LockLibrary(actor.Id, cancellationToken);
         var folders = await db.DocumentFolders.AsNoTracking()
             .Where(x => x.OwnerUserId == actor.Id)
             .Select(x => new { x.Id, x.ParentFolderId, x.DeletedAt })
             .ToListAsync(cancellationToken);
-        if (!folders.Any(x => x.Id == id && x.DeletedAt != null)) return NotFound();
+        if (!folders.Any(x => x.Id == id && x.DeletedAt != null))
+        {
+            return NotFound();
+        }
+
         var descendants = new List<Guid> { id };
         for (var index = 0; index < descendants.Count; index++)
+        {
             descendants.AddRange(folders.Where(x => x.ParentFolderId == descendants[index])
                 .Select(x => x.Id));
+        }
+
         var files = await db.StoredDocuments.Where(x => x.OwnerUserId == actor.Id &&
             x.FolderId != null && descendants.Contains(x.FolderId.Value))
             .ToListAsync(cancellationToken);
@@ -989,8 +1272,11 @@ public sealed partial class DocumentsEndpoints(
         db.StoredDocuments.RemoveRange(files);
         await db.SaveChangesAsync(cancellationToken);
         foreach (var folderId in descendants.AsEnumerable().Reverse())
+        {
             await db.DocumentFolders.Where(x => x.Id == folderId && x.OwnerUserId == actor.Id)
                 .ExecuteDeleteAsync(cancellationToken);
+        }
+
         await transaction.CommitAsync(cancellationToken);
         await DeleteObjects(keys);
         return NoContent();
@@ -999,7 +1285,11 @@ public sealed partial class DocumentsEndpoints(
     public async Task<IResult> Shared([FromQuery] string username, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
         var shares = await db.DocumentShares.AsNoTracking()
             .Include(x => x.Folder).Include(x => x.File).Include(x => x.OwnerUser)
             .Where(x => x.GranteeUserId == actor.Id && x.OwnerUser.Status == "active")
@@ -1009,9 +1299,14 @@ public sealed partial class DocumentsEndpoints(
         foreach (var share in shares)
         {
             if (share.Folder is { } folder && await FolderPermission(folder, actor.Id, cancellationToken) is { } folderPermission)
+            {
                 folders.Add(ToDto(folder, folderPermission, share.OwnerUser.UserName));
+            }
+
             if (share.File is { } file && await FilePermission(file, actor.Id, cancellationToken) is { } filePermission)
+            {
                 files.Add(ToDto(file, filePermission, share.OwnerUser.UserName));
+            }
         }
         return Ok(new DocumentListingDto(null, [], folders, files));
     }
@@ -1020,7 +1315,11 @@ public sealed partial class DocumentsEndpoints(
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
         var peopleShares = await db.DocumentShares.AsNoTracking()
             .Where(x => x.OwnerUserId == actor.Id && x.GranteeUser.Status == "active")
             .Select(x => new { x.FolderId, x.FileId }).ToListAsync(cancellationToken);
@@ -1045,7 +1344,11 @@ public sealed partial class DocumentsEndpoints(
         var summaries = new Dictionary<Guid, DocumentSharingSummaryDto>();
         foreach (var folder in folderCandidates)
         {
-            if (await FolderPermission(folder, actor.Id, cancellationToken) is null) continue;
+            if (await FolderPermission(folder, actor.Id, cancellationToken) is null)
+            {
+                continue;
+            }
+
             folders.Add(ToDto(folder));
             var link = publicLinks.SingleOrDefault(x => x.FolderId == folder.Id);
             summaries[folder.Id] = new DocumentSharingSummaryDto(
@@ -1054,7 +1357,11 @@ public sealed partial class DocumentsEndpoints(
         }
         foreach (var file in fileCandidates)
         {
-            if (await FilePermission(file, actor.Id, cancellationToken) is null) continue;
+            if (await FilePermission(file, actor.Id, cancellationToken) is null)
+            {
+                continue;
+            }
+
             files.Add(ToDto(file));
             var link = publicLinks.SingleOrDefault(x => x.FileId == file.Id);
             summaries[file.Id] = new DocumentSharingSummaryDto(
@@ -1071,8 +1378,16 @@ public sealed partial class DocumentsEndpoints(
         [FromQuery] string kind, [FromQuery] Guid id, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
-        if (!await OwnsTarget(actor.Id, kind, id, cancellationToken)) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
+        if (!await OwnsTarget(actor.Id, kind, id, cancellationToken))
+        {
+            return NotFound();
+        }
+
         var shares = await db.DocumentShares.AsNoTracking().Include(x => x.GranteeUser)
             .Where(x => (kind == "folder" ? x.FolderId == id : x.FileId == id))
             .OrderBy(x => (((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim() == "" ? x.GranteeUser.UserName : ((x.GranteeUser.FirstName ?? "") + " " + (x.GranteeUser.LastName ?? "")).Trim()))
@@ -1086,13 +1401,33 @@ public sealed partial class DocumentsEndpoints(
         DocumentShareRequest request, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
         if (request.Permission is not ("viewer" or "editor") ||
-            request.Kind is not ("folder" or "file")) return BadRequest(new { message = "Choose Viewer or Editor." });
-        if (!await OwnsTarget(actor.Id, request.Kind, request.Id, cancellationToken)) return NotFound();
+            request.Kind is not ("folder" or "file"))
+        {
+            return BadRequest(new { message = "Choose Viewer or Editor." });
+        }
+
+        if (!await OwnsTarget(actor.Id, request.Kind, request.Id, cancellationToken))
+        {
+            return NotFound();
+        }
+
         var grantee = await FindOwner(request.RecipientUsername, cancellationToken);
-        if (grantee is null) return BadRequest(new { message = "Choose an active person." });
-        if (grantee.Id == actor.Id) return BadRequest(new { message = "You already own this item." });
+        if (grantee is null)
+        {
+            return BadRequest(new { message = "Choose an active person." });
+        }
+
+        if (grantee.Id == actor.Id)
+        {
+            return BadRequest(new { message = "You already own this item." });
+        }
+
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await LockLibrary(actor.Id, cancellationToken);
         var share = await db.DocumentShares.SingleOrDefaultAsync(x =>
@@ -1123,7 +1458,11 @@ public sealed partial class DocumentsEndpoints(
                 TargetTitle = targetTitle,
             });
         }
-        else share.Permission = request.Permission;
+        else
+        {
+            share.Permission = request.Permission;
+        }
+
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return Ok(new DocumentShareDto(share.Id, grantee.UserName, grantee.DisplayName, share.Permission));
@@ -1133,10 +1472,18 @@ public sealed partial class DocumentsEndpoints(
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null) return NotFound();
+        if (actor is null)
+        {
+            return NotFound();
+        }
+
         var share = await db.DocumentShares.SingleOrDefaultAsync(x =>
             x.Id == id && x.OwnerUserId == actor.Id, cancellationToken);
-        if (share is null) return NotFound();
+        if (share is null)
+        {
+            return NotFound();
+        }
+
         db.DocumentShares.Remove(share);
         await db.SaveChangesAsync(cancellationToken);
         return NoContent();
@@ -1146,7 +1493,11 @@ public sealed partial class DocumentsEndpoints(
         [FromQuery] string kind, [FromQuery] Guid id, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null || !await OwnsTarget(actor.Id, kind, id, cancellationToken)) return NotFound();
+        if (actor is null || !await OwnsTarget(actor.Id, kind, id, cancellationToken))
+        {
+            return NotFound();
+        }
+
         var link = await db.DocumentPublicLinks.AsNoTracking().SingleOrDefaultAsync(x =>
             x.OwnerUserId == actor.Id && (kind == "folder" ? x.FolderId == id : x.FileId == id), cancellationToken);
         return link is null ? NoContent() : Ok(new DocumentPublicLinkDto(link.Token, link.CreatedAt, link.ExpiresAt));
@@ -1156,9 +1507,16 @@ public sealed partial class DocumentsEndpoints(
         DocumentPublicLinkRequest request, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null || !await OwnsTarget(actor.Id, request.Kind, request.Id, cancellationToken)) return NotFound();
+        if (actor is null || !await OwnsTarget(actor.Id, request.Kind, request.Id, cancellationToken))
+        {
+            return NotFound();
+        }
+
         if (request.ExpiresAt is { } expiresAt && expiresAt <= DateTimeOffset.UtcNow)
+        {
             return BadRequest(new { message = "Choose an expiry date in the future." });
+        }
+
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await LockLibrary(actor.Id, cancellationToken);
         var link = await db.DocumentPublicLinks.SingleOrDefaultAsync(x =>
@@ -1176,7 +1534,11 @@ public sealed partial class DocumentsEndpoints(
             };
             db.DocumentPublicLinks.Add(link);
         }
-        else link.ExpiresAt = request.ExpiresAt;
+        else
+        {
+            link.ExpiresAt = request.ExpiresAt;
+        }
+
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return Ok(new DocumentPublicLinkDto(link.Token, link.CreatedAt, link.ExpiresAt));
@@ -1186,7 +1548,11 @@ public sealed partial class DocumentsEndpoints(
         [FromQuery] string kind, [FromQuery] Guid id, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
-        if (actor is null || !await OwnsTarget(actor.Id, kind, id, cancellationToken)) return NotFound();
+        if (actor is null || !await OwnsTarget(actor.Id, kind, id, cancellationToken))
+        {
+            return NotFound();
+        }
+
         await db.DocumentPublicLinks.Where(x => x.OwnerUserId == actor.Id &&
             (kind == "folder" ? x.FolderId == id : x.FileId == id)).ExecuteDeleteAsync(cancellationToken);
         return NoContent();
@@ -1196,19 +1562,35 @@ public sealed partial class DocumentsEndpoints(
         CancellationToken cancellationToken)
     {
         var link = await ActivePublicLink(token, cancellationToken);
-        if (link is null) return NotFound();
+        if (link is null)
+        {
+            return NotFound();
+        }
+
         httpContext.Response.Headers.CacheControl = "no-store";
         if (link.FileId is Guid fileId)
         {
-            if (folderId is not null) return NotFound();
+            if (folderId is not null)
+            {
+                return NotFound();
+            }
+
             var file = await db.StoredDocuments.AsNoTracking().SingleOrDefaultAsync(x => x.Id == fileId, cancellationToken);
-            if (file is null || await FilePermission(file, link.OwnerUserId, cancellationToken) is null) return NotFound();
+            if (file is null || await FilePermission(file, link.OwnerUserId, cancellationToken) is null)
+            {
+                return NotFound();
+            }
+
             return Ok(new PublicDocumentListingDto("file", file.Name, null, [], [], [ToDto(file)]));
         }
         var rootId = link.FolderId!.Value;
         var currentId = folderId ?? rootId;
         var path = await PublicFolderPath(currentId, rootId, link.OwnerUserId, cancellationToken);
-        if (path is null) return NotFound();
+        if (path is null)
+        {
+            return NotFound();
+        }
+
         var folders = await db.DocumentFolders.AsNoTracking().Where(x =>
             x.OwnerUserId == link.OwnerUserId && x.ParentFolderId == currentId && x.DeletedAt == null)
             .OrderBy(x => x.Name).ToListAsync(cancellationToken);
@@ -1225,8 +1607,15 @@ public sealed partial class DocumentsEndpoints(
     {
         if (!Uri.TryCreate(origin, UriKind.Absolute, out var uiOrigin) ||
             uiOrigin.Scheme is not ("http" or "https"))
+        {
             return BadRequest(new { message = "A valid HTTP or HTTPS UI origin is required." });
-        if (await ActivePublicLink(token, cancellationToken) is null) return NotFound();
+        }
+
+        if (await ActivePublicLink(token, cancellationToken) is null)
+        {
+            return NotFound();
+        }
+
         var publicUrl = new Uri(uiOrigin, $"/?publicDocument={Uri.EscapeDataString(token)}").AbsoluteUri;
         using var qrCodeData = QRCodeGenerator.GenerateQrCode(publicUrl, QRCodeGenerator.ECCLevel.Q);
         using var qrCode = new PngByteQRCode(qrCodeData);
@@ -1238,29 +1627,54 @@ public sealed partial class DocumentsEndpoints(
         [FromQuery] bool download = false, CancellationToken cancellationToken = default)
     {
         var link = await ActivePublicLink(token, cancellationToken);
-        if (link is null) return NotFound();
+        if (link is null)
+        {
+            return NotFound();
+        }
+
         var file = await db.StoredDocuments.AsNoTracking().SingleOrDefaultAsync(x =>
             x.Id == id && x.OwnerUserId == link.OwnerUserId && x.DeletedAt == null, cancellationToken);
-        if (file is null || await FilePermission(file, link.OwnerUserId, cancellationToken) is null) return NotFound();
+        if (file is null || await FilePermission(file, link.OwnerUserId, cancellationToken) is null)
+        {
+            return NotFound();
+        }
+
         if (link.FileId is Guid sharedFileId)
         {
-            if (sharedFileId != id) return NotFound();
+            if (sharedFileId != id)
+            {
+                return NotFound();
+            }
         }
         else if (file.FolderId is not Guid folderId ||
             await PublicFolderPath(folderId, link.FolderId!.Value, link.OwnerUserId, cancellationToken) is null)
+        {
             return NotFound();
+        }
+
         var stream = await storage.OpenReadAsync(file.StorageKey, cancellationToken);
-        if (stream is null) return NotFound();
+        if (stream is null)
+        {
+            return NotFound();
+        }
+
         httpContext.Response.Headers.CacheControl = "no-store";
         httpContext.Response.Headers["X-Content-Type-Options"] = "nosniff";
         if (!download && IsPreviewable(file.ContentType))
+        {
             return File(stream, file.ContentType, enableRangeProcessing: true);
+        }
+
         return File(stream, "application/octet-stream", file.Name, enableRangeProcessing: true);
     }
 
     private async Task<DocumentPublicLink?> ActivePublicLink(string token, CancellationToken ct)
     {
-        if (token.Length != 43) return null;
+        if (token.Length != 43)
+        {
+            return null;
+        }
+
         var now = DateTimeOffset.UtcNow;
         return await db.DocumentPublicLinks.AsNoTracking().SingleOrDefaultAsync(x =>
             x.Token == token && x.OwnerUser.Status == "active" &&
@@ -1276,15 +1690,27 @@ public sealed partial class DocumentsEndpoints(
         {
             var folder = await db.DocumentFolders.AsNoTracking().SingleOrDefaultAsync(x =>
                 x.Id == currentId && x.OwnerUserId == ownerId && x.DeletedAt == null, ct);
-            if (folder is null) return null;
+            if (folder is null)
+            {
+                return null;
+            }
+
             path.Add(folder);
             if (currentId == rootId)
             {
-                if (await FolderPermission(folder, ownerId, ct) is null) return null;
+                if (await FolderPermission(folder, ownerId, ct) is null)
+                {
+                    return null;
+                }
+
                 path.Reverse();
                 return path;
             }
-            if (folder.ParentFolderId is not Guid parentId) return null;
+            if (folder.ParentFolderId is not Guid parentId)
+            {
+                return null;
+            }
+
             currentId = parentId;
         }
         return null;
@@ -1304,7 +1730,11 @@ public sealed partial class DocumentsEndpoints(
             var folder = await db.DocumentFolders.AsNoTracking()
                 .SingleOrDefaultAsync(x => x.Id == id && x.OwnerUserId == ownerId, ct);
             if (folder is null || actorId != ownerId &&
-                await FolderPermission(folder, actorId, ct) is null) break;
+                await FolderPermission(folder, actorId, ct) is null)
+            {
+                break;
+            }
+
             names.Add(folder.Name);
             folderId = folder.ParentFolderId;
         }
@@ -1350,7 +1780,11 @@ public sealed partial class DocumentsEndpoints(
 
     private async Task<bool> FolderExists(Guid ownerId, Guid? folderId, CancellationToken ct)
     {
-        if (folderId is null) return true;
+        if (folderId is null)
+        {
+            return true;
+        }
+
         var folder = await db.DocumentFolders.AsNoTracking().SingleOrDefaultAsync(x =>
             x.Id == folderId && x.OwnerUserId == ownerId, ct);
         return folder is not null && await FolderPermission(folder, ownerId, ct) is not null;
@@ -1363,14 +1797,25 @@ public sealed partial class DocumentsEndpoints(
         DocumentFolder? current = folder;
         while (current is not null)
         {
-            if (current.DeletedAt is not null || !visited.Add(current.Id)) return null;
+            if (current.DeletedAt is not null || !visited.Add(current.Id))
+            {
+                return null;
+            }
+
             ancestorIds.Add(current.Id);
             current = current.ParentFolderId is Guid parentId
                 ? await db.DocumentFolders.AsNoTracking().SingleOrDefaultAsync(x => x.Id == parentId, ct)
                 : null;
-            if (current is not null && current.OwnerUserId != folder.OwnerUserId) return null;
+            if (current is not null && current.OwnerUserId != folder.OwnerUserId)
+            {
+                return null;
+            }
         }
-        if (folder.OwnerUserId == actorId) return "owner";
+        if (folder.OwnerUserId == actorId)
+        {
+            return "owner";
+        }
+
         var permissions = await db.DocumentShares.AsNoTracking()
             .Where(x => x.GranteeUserId == actorId && x.FolderId != null &&
                 ancestorIds.Contains(x.FolderId.Value))
@@ -1381,18 +1826,32 @@ public sealed partial class DocumentsEndpoints(
 
     private async Task<string?> FilePermission(StoredDocument file, Guid actorId, CancellationToken ct)
     {
-        if (file.DeletedAt is not null) return null;
+        if (file.DeletedAt is not null)
+        {
+            return null;
+        }
+
         string? folderPermission = null;
         if (file.FolderId is Guid folderId)
         {
             var folder = await db.DocumentFolders.AsNoTracking()
                 .SingleOrDefaultAsync(x => x.Id == folderId, ct);
             if (folder is null || await FolderPermission(folder, file.OwnerUserId, ct) is null)
+            {
                 return null;
+            }
+
             folderPermission = await FolderPermission(folder, actorId, ct);
-            if (file.OwnerUserId == actorId && folderPermission is null) return null;
+            if (file.OwnerUserId == actorId && folderPermission is null)
+            {
+                return null;
+            }
         }
-        if (file.OwnerUserId == actorId) return "owner";
+        if (file.OwnerUserId == actorId)
+        {
+            return "owner";
+        }
+
         var permissions = await db.DocumentShares.AsNoTracking()
             .Where(x => x.GranteeUserId == actorId && x.FileId == file.Id)
             .Select(x => x.Permission).ToListAsync(ct);
@@ -1436,7 +1895,9 @@ public sealed partial class DocumentsEndpoints(
             if (!await db.StoredDocuments.AnyAsync(x => x.OwnerUserId == ownerId &&
                 x.FolderId == folderId && x.DeletedAt == null &&
                 x.NormalizedName == Normalize(candidate), ct))
+            {
                 return candidate;
+            }
         }
         throw new InvalidOperationException("No available file name was found.");
     }
@@ -1448,7 +1909,10 @@ public sealed partial class DocumentsEndpoints(
         {
             var suffix = $" ({index})";
             var candidate = $"{name[..Math.Min(name.Length, 255 - suffix.Length)]}{suffix}";
-            if (!await HasFolderName(ownerId, parentId, candidate, null, ct)) return candidate;
+            if (!await HasFolderName(ownerId, parentId, candidate, null, ct))
+            {
+                return candidate;
+            }
         }
         throw new InvalidOperationException("No available folder name was found.");
     }
@@ -1465,14 +1929,19 @@ public sealed partial class DocumentsEndpoints(
         parameter.Value = $"user-documents:{ownerId:N}";
         command.Parameters.Add(parameter);
         if (Convert.ToInt32(await command.ExecuteScalarAsync(ct)) < 0)
+        {
             throw new TimeoutException("Could not lock the document library.");
+        }
     }
 
     private async Task DeleteObjects(IEnumerable<string> keys)
     {
         foreach (var key in keys)
         {
-            try { await storage.DeleteAsync(key, CancellationToken.None); }
+            try
+            {
+                await storage.DeleteAsync(key, CancellationToken.None);
+            }
             catch (Exception error)
             {
                 logger.LogWarning(error, "Could not remove document object {StorageKey}", key);
@@ -1486,7 +1955,10 @@ public sealed partial class DocumentsEndpoints(
         if (string.IsNullOrWhiteSpace(name) || name.Length > 255 ||
             name is "." or ".." || name.EndsWith('.') ||
             name.Any(c => char.IsControl(c) || "\\/:*?\"<>|".Contains(c)))
+        {
             return null;
+        }
+
         return name;
     }
 

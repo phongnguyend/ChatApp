@@ -898,7 +898,11 @@ public sealed class ConversationsEndpoints(
                 .Where(x => x.Id == targetId && x.ConversationId == id && x.DeletedAt == null)
                 .Select(x => new { x.SequenceNumber })
                 .SingleOrDefaultAsync(cancellationToken);
-            if (target is null) return NotFound(new { message = "Message is no longer available." });
+            if (target is null)
+            {
+                return NotFound(new { message = "Message is no longer available." });
+            }
+
             var newerCount = await db.Messages.AsNoTracking()
                 .CountAsync(x => x.ConversationId == id && x.SequenceNumber > target.SequenceNumber,
                     cancellationToken);
@@ -1279,10 +1283,10 @@ public sealed class ConversationsEndpoints(
                 cancellationToken))
         {
             return Json(new
-                {
-                    message =
+            {
+                message =
                         "Messages cannot be sent while either user has blocked the other."
-                }, statusCode: StatusCodes.Status403Forbidden);
+            }, statusCode: StatusCodes.Status403Forbidden);
         }
 
         var storageScopeId = Guid.NewGuid();

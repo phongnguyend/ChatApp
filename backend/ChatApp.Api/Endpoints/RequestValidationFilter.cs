@@ -22,27 +22,45 @@ internal static class RequestValidationFilter
         {
             var errors = new Dictionary<string, string[]>();
             foreach (var index in bodyIndexes)
+            {
                 Validate(context.Arguments[index], "", errors);
+            }
+
             return errors.Count > 0 ? Results.ValidationProblem(errors) : await next(context);
         };
     }
 
     private static void Validate(object? value, string path, Dictionary<string, string[]> errors)
     {
-        if (value is null || value is string) return;
+        if (value is null || value is string)
+        {
+            return;
+        }
+
         if (value is IEnumerable items)
         {
             var index = 0;
-            foreach (var item in items) Validate(item, $"{path}[{index++}]", errors);
+            foreach (var item in items)
+            {
+                Validate(item, $"{path}[{index++}]", errors);
+            }
+
             return;
         }
-        if (value.GetType().Namespace?.StartsWith("ChatApp.", StringComparison.Ordinal) != true) return;
+        if (value.GetType().Namespace?.StartsWith("ChatApp.", StringComparison.Ordinal) != true)
+        {
+            return;
+        }
 
         var results = new List<ValidationResult>();
         Validator.TryValidateObject(value, new ValidationContext(value), results, validateAllProperties: true);
         foreach (var result in results)
+        {
             foreach (var member in result.MemberNames.DefaultIfEmpty(""))
+            {
                 errors[Join(path, member)] = [result.ErrorMessage ?? "Invalid value."];
+            }
+        }
 
         var properties = Properties.GetOrAdd(value.GetType(), type =>
         {
@@ -57,9 +75,13 @@ internal static class RequestValidationFilter
             var memberValue = property.GetValue(value);
             var memberPath = Join(path, property.Name);
             if (required && memberValue is null)
+            {
                 errors[memberPath] = [$"The {property.Name} field is required."];
+            }
             else
+            {
                 Validate(memberValue, memberPath, errors);
+            }
         }
     }
 

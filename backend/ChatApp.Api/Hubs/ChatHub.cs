@@ -97,11 +97,11 @@ public sealed class ChatHub(
                             recording.Status == "processing"
                                 ? ToRecordingDto(recording)
                                 : new
-                            {
-                                recording = ToRecordingDto(recording),
-                                message =
+                                {
+                                    recording = ToRecordingDto(recording),
+                                    message =
                                     "Recording stopped because the recorder disconnected."
-                            });
+                                });
                     await SendMeetingSystemMessage(
                         recording.ConversationId,
                         "Recording stopped because the recorder disconnected.",
@@ -570,7 +570,10 @@ public sealed class ChatHub(
         {
             throw new HubException("You cannot stop this live location.");
         }
-        if (!share.IsActive) return;
+        if (!share.IsActive)
+        {
+            return;
+        }
 
         share.IsActive = false;
         share.StoppedAt = DateTimeOffset.UtcNow;

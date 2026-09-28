@@ -68,23 +68,45 @@ public sealed class UserRemindersEndpoints(ChatAppDbContext db)
         CancellationToken ct)
     {
         var userId = await FindUserId(username, ct);
-        if (userId is null) return NotFound();
+        if (userId is null)
+        {
+            return NotFound();
+        }
+
         if (from > to)
+        {
             return BadRequest(new { message = "The end date must be on or after the start date." });
+        }
+
         name = name?.Trim();
         description = description?.Trim();
         if (name?.Length > 200 || description?.Length > 200)
+        {
             return BadRequest(new { message = "A reminder search term is too long." });
+        }
+
         var query = db.UserReminders.AsNoTracking().Where(x => x.UserId == userId);
         if (from is { } first)
+        {
             query = query.Where(x => x.ReminderDate >= first);
+        }
+
         if (to is { } last)
+        {
             query = query.Where(x => x.ReminderDate <= last);
+        }
+
         if (!string.IsNullOrEmpty(name))
+        {
             query = query.Where(x => x.Title.Contains(name));
+        }
+
         if (!string.IsNullOrEmpty(description))
+        {
             query = query.Where(x => x.Description != null &&
                 x.Description.Contains(description));
+        }
+
         var reminders = await query.OrderBy(x => x.ReminderDate)
             .ThenBy(x => x.ReminderTime == null)
             .ThenBy(x => x.ReminderTime)
@@ -97,7 +119,11 @@ public sealed class UserRemindersEndpoints(ChatAppDbContext db)
         CancellationToken ct)
     {
         var userId = await FindUserId(username, ct);
-        if (userId is null) return NotFound();
+        if (userId is null)
+        {
+            return NotFound();
+        }
+
         var reminder = await db.UserReminders.AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == id && x.UserId == userId, ct);
         return reminder is null ? NotFound() : Ok(ToDto(reminder));
@@ -107,9 +133,17 @@ public sealed class UserRemindersEndpoints(ChatAppDbContext db)
         SaveUserReminderRequest request, CancellationToken ct)
     {
         var userId = await FindUserId(username, ct);
-        if (userId is null) return NotFound();
+        if (userId is null)
+        {
+            return NotFound();
+        }
+
         var error = Validate(request);
-        if (error is not null) return BadRequest(new { message = error });
+        if (error is not null)
+        {
+            return BadRequest(new { message = error });
+        }
+
         var reminder = new UserReminder
         {
             UserId = userId.Value,
@@ -128,12 +162,24 @@ public sealed class UserRemindersEndpoints(ChatAppDbContext db)
         SaveUserReminderRequest request, CancellationToken ct)
     {
         var userId = await FindUserId(username, ct);
-        if (userId is null) return NotFound();
+        if (userId is null)
+        {
+            return NotFound();
+        }
+
         var error = Validate(request);
-        if (error is not null) return BadRequest(new { message = error });
+        if (error is not null)
+        {
+            return BadRequest(new { message = error });
+        }
+
         var reminder = await db.UserReminders.SingleOrDefaultAsync(
             x => x.Id == id && x.UserId == userId, ct);
-        if (reminder is null) return NotFound();
+        if (reminder is null)
+        {
+            return NotFound();
+        }
+
         reminder.Title = request.Title!.Trim();
         reminder.Description = CleanDescription(request.Description);
         reminder.ReminderDate = request.ReminderDate!.Value;
@@ -147,10 +193,18 @@ public sealed class UserRemindersEndpoints(ChatAppDbContext db)
         CancellationToken ct)
     {
         var userId = await FindUserId(username, ct);
-        if (userId is null) return NotFound();
+        if (userId is null)
+        {
+            return NotFound();
+        }
+
         var reminder = await db.UserReminders.SingleOrDefaultAsync(
             x => x.Id == id && x.UserId == userId, ct);
-        if (reminder is null) return NotFound();
+        if (reminder is null)
+        {
+            return NotFound();
+        }
+
         db.UserReminders.Remove(reminder);
         await db.SaveChangesAsync(ct);
         return NoContent();
@@ -164,11 +218,20 @@ public sealed class UserRemindersEndpoints(ChatAppDbContext db)
     private static string? Validate(SaveUserReminderRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Title) || request.Title.Trim().Length > 200)
+        {
             return "Enter a title of at most 200 characters.";
+        }
+
         if (request.Description?.Trim().Length > 4000)
+        {
             return "Description must be at most 4,000 characters.";
+        }
+
         if (request.ReminderDate is null || request.ReminderDate == default(DateOnly))
+        {
             return "Choose a reminder date.";
+        }
+
         return null;
     }
 
