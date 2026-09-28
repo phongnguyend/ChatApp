@@ -1,4 +1,5 @@
 using ChatApp.Api.Services;
+using ChatApp.Api.Endpoints;
 using ChatApp.Api.Authentication;
 using Microsoft.AspNetCore.SignalR;
 using ChatApp.Infrastructure;
@@ -11,7 +12,8 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApi(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddControllers(options => options.Filters.Add<AuthenticatedActorFilter>());
+        services.AddApplicationEndpoints();
+        services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = false);
         services.AddSignalR(options => options.AddFilter<AuthenticatedHubFilter>());
         services.AddHttpClient();
         services.AddPersistence(configuration);

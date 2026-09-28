@@ -1,27 +1,54 @@
+using ChatApp.Api.Authentication;
+using static Microsoft.AspNetCore.Http.Results;
 using ChatApp.Infrastructure.Notification;
 using ChatApp.Persistence;
 using ChatApp.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-namespace ChatApp.Api.Controllers;
+namespace ChatApp.Api.Endpoints;
 
-[ApiController]
-[Route("api/push")]
-public sealed class PushNotificationsController(
+public sealed class PushNotificationsEndpoints(
     ChatAppDbContext db,
     AzurePushNotificationService notifications,
-    ILogger<PushNotificationsController> logger) : ControllerBase
+    ILogger<PushNotificationsEndpoints> logger)
 {
-    [HttpGet("config")]
-    public ActionResult GetConfig() => Ok(new
+    public static void Map(IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/push")
+            .RequireAuthorization();
+        group.AddEndpointFilterFactory(AuthenticatedActorFilter.Create);
+        group.AddEndpointFilterFactory(RequestValidationFilter.Create);
+
+        group.MapGet("config", (
+            [FromServices] PushNotificationsEndpoints handler) =>
+            handler.GetConfig())
+            .WithName("PushNotificationsEndpoints.GetConfig");
+
+        group.MapPost("subscriptions", (
+            [FromServices] PushNotificationsEndpoints handler,
+            [FromQuery] string username,
+            [FromBody] BrowserSubscriptionRequest request,
+            CancellationToken cancellationToken) =>
+            handler.Register(username, request, cancellationToken))
+            .WithName("PushNotificationsEndpoints.Register");
+
+        group.MapDelete("subscriptions/{installationId}", (
+            [FromServices] PushNotificationsEndpoints handler,
+            string installationId,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.Unregister(installationId, username, cancellationToken))
+            .WithName("PushNotificationsEndpoints.Unregister");
+    }
+
+    public IResult GetConfig() => Ok(new
     {
         enabled = notifications.IsConfigured,
         vapidPublicKey = notifications.VapidPublicKey
     });
 
-    [HttpPost("subscriptions")]
-    public async Task<ActionResult> Register(
+    public async Task<IResult> Register(
         [FromQuery] string username,
         [FromBody] BrowserSubscriptionRequest request,
         CancellationToken cancellationToken)
@@ -67,8 +94,7 @@ public sealed class PushNotificationsController(
         return NoContent();
     }
 
-    [HttpDelete("subscriptions/{installationId}")]
-    public async Task<ActionResult> Unregister(
+    public async Task<IResult> Unregister(
         string installationId,
         [FromQuery] string username,
         CancellationToken cancellationToken)

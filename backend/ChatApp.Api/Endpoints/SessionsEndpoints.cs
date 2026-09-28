@@ -1,3 +1,5 @@
+using ChatApp.Api.Authentication;
+using static Microsoft.AspNetCore.Http.Results;
 using ChatApp.Application.Contracts;
 using ChatApp.Persistence;
 using ChatApp.Domain.Models;
@@ -5,17 +7,28 @@ using ChatApp.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-namespace ChatApp.Api.Controllers;
+namespace ChatApp.Api.Endpoints;
 
-[ApiController]
-[Route("api/session")]
-public sealed class SessionsController(ChatAppDbContext db) : ControllerBase
+public sealed class SessionsEndpoints(ChatAppDbContext db)
 {
-    [HttpPost]
-    public async Task<ActionResult<UserDto>> Login(
-        CancellationToken cancellationToken)
+    public static void Map(IEndpointRouteBuilder app)
     {
-        var userId = Guid.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
+        var group = app.MapGroup("/api/session")
+            .RequireAuthorization();
+        group.AddEndpointFilterFactory(AuthenticatedActorFilter.Create);
+        group.AddEndpointFilterFactory(RequestValidationFilter.Create);
+
+        group.MapPost("", (
+            [FromServices] SessionsEndpoints handler,
+            HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+            handler.Login(httpContext, cancellationToken))
+            .WithName("SessionsEndpoints.Login");
+    }
+
+    public async Task<IResult> Login(HttpContext httpContext, CancellationToken cancellationToken)
+    {
+        var userId = Guid.Parse(httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
         var user = await db.Users.SingleAsync(x => x.Id == userId, cancellationToken);
         user.LastSeenAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);

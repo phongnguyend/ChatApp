@@ -1,3 +1,5 @@
+using ChatApp.Api.Authentication;
+using static Microsoft.AspNetCore.Http.Results;
 using ChatApp.Application.Abstractions;
 using System.Data;
 using System.Security.Cryptography;
@@ -9,21 +11,394 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using QRCoder;
 
-namespace ChatApp.Api.Controllers;
+namespace ChatApp.Api.Endpoints;
 
-[ApiController]
-[Route("api/documents")]
-public sealed partial class DocumentsController(
+public sealed partial class DocumentsEndpoints(
     ChatAppDbContext db,
     IUploadObjectStorage storage,
     IConfiguration configuration,
-    ILogger<DocumentsController> logger) : ControllerBase
+    ILogger<DocumentsEndpoints> logger)
 {
+    public static void Map(IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/documents")
+            .RequireAuthorization();
+        group.AddEndpointFilterFactory(AuthenticatedActorFilter.Create);
+        group.AddEndpointFilterFactory(RequestValidationFilter.Create);
+
+        group.MapPost("uploads", (
+            [FromServices] DocumentsEndpoints handler,
+            [FromQuery] string username,
+            [FromBody] StartDocumentUploadRequest request,
+            CancellationToken cancellationToken) =>
+            handler.StartUpload(username, request, cancellationToken))
+            .WithName("DocumentsEndpoints.StartUpload");
+
+        group.MapGet("uploads/{id:guid}", (
+            [FromServices] DocumentsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.UploadStatus(id, username, cancellationToken))
+            .WithName("DocumentsEndpoints.UploadStatus");
+
+        group.MapPut("uploads/{id:guid}/chunks/{index:int}", (
+            [FromServices] DocumentsEndpoints handler,
+            HttpContext httpContext,
+            Guid id,
+            int index,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.PutUploadChunk(httpContext, id, index, username, cancellationToken))
+            .WithName("DocumentsEndpoints.PutUploadChunk")
+            .WithMetadata(new RequestSizeLimitAttribute(UploadChunkSize + 1024));
+
+        group.MapPost("uploads/{id:guid}/complete", (
+            [FromServices] DocumentsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromBody] CompleteDocumentUploadRequest request,
+            CancellationToken cancellationToken) =>
+            handler.CompleteUpload(id, username, request, cancellationToken))
+            .WithName("DocumentsEndpoints.CompleteUpload");
+
+        group.MapDelete("uploads/{id:guid}", (
+            [FromServices] DocumentsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.CancelUpload(id, username, cancellationToken))
+            .WithName("DocumentsEndpoints.CancelUpload");
+
+        group.MapGet("storage-management", (
+            [FromServices] DocumentsEndpoints handler,
+            [FromQuery] string username,
+            [FromQuery] string? query,
+            CancellationToken cancellationToken,
+            [FromQuery] int offset = default) =>
+            handler.StorageManagement(username, query, offset, cancellationToken))
+            .WithName("DocumentsEndpoints.StorageManagement")
+            .RequireAuthorization(ChatApp.Domain.Security.AppRoles.ManageUsers);
+
+        group.MapPut("storage-management/{userId:guid}/limit", (
+            [FromServices] DocumentsEndpoints handler,
+            Guid userId,
+            [FromQuery] string username,
+            [FromBody] SetStorageLimitRequest request,
+            CancellationToken cancellationToken) =>
+            handler.SetStorageLimit(userId, username, request, cancellationToken))
+            .WithName("DocumentsEndpoints.SetStorageLimit")
+            .RequireAuthorization(ChatApp.Domain.Security.AppRoles.ManageUsers);
+
+        group.MapGet("search", (
+            [FromServices] DocumentsEndpoints handler,
+            [FromQuery] string username,
+            [FromQuery] string query,
+            CancellationToken cancellationToken) =>
+            handler.Search(username, query, cancellationToken))
+            .WithName("DocumentsEndpoints.Search");
+
+        group.MapPost("bulk", (
+            [FromServices] DocumentsEndpoints handler,
+            [FromQuery] string username,
+            [FromBody] DocumentBulkRequest request,
+            CancellationToken cancellationToken) =>
+            handler.Bulk(username, request, cancellationToken))
+            .WithName("DocumentsEndpoints.Bulk");
+
+        group.MapGet("storage", (
+            [FromServices] DocumentsEndpoints handler,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.StorageUsage(username, cancellationToken))
+            .WithName("DocumentsEndpoints.StorageUsage");
+
+        group.MapGet("", (
+            [FromServices] DocumentsEndpoints handler,
+            [FromQuery] string username,
+            [FromQuery] Guid? folderId,
+            CancellationToken cancellationToken) =>
+            handler.List(username, folderId, cancellationToken))
+            .WithName("DocumentsEndpoints.List");
+
+        group.MapPost("folders", (
+            [FromServices] DocumentsEndpoints handler,
+            [FromQuery] string username,
+            [FromBody] FolderRequest request,
+            CancellationToken cancellationToken) =>
+            handler.CreateFolder(username, request, cancellationToken))
+            .WithName("DocumentsEndpoints.CreateFolder");
+
+        group.MapPatch("folders/{id:guid}", (
+            [FromServices] DocumentsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromBody] RenameDocumentRequest request,
+            CancellationToken cancellationToken) =>
+            handler.RenameFolder(id, username, request, cancellationToken))
+            .WithName("DocumentsEndpoints.RenameFolder");
+
+        group.MapDelete("folders/{id:guid}", (
+            [FromServices] DocumentsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.DeleteFolder(id, username, cancellationToken))
+            .WithName("DocumentsEndpoints.DeleteFolder");
+
+        group.MapPost("files", (
+            [FromServices] DocumentsEndpoints handler,
+            [FromQuery] string username,
+            [FromForm] IFormFile file,
+            [FromForm] Guid? folderId,
+            [FromForm] string? conflict,
+            CancellationToken cancellationToken) =>
+            handler.Upload(username, file, folderId, conflict, cancellationToken))
+            .WithName("DocumentsEndpoints.Upload")
+            .WithMetadata(new RequestSizeLimitAttribute(55 * 1024 * 1024))
+            .DisableAntiforgery();
+
+        group.MapPatch("files/{id:guid}", (
+            [FromServices] DocumentsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromBody] RenameDocumentRequest request,
+            CancellationToken cancellationToken) =>
+            handler.RenameFile(id, username, request, cancellationToken))
+            .WithName("DocumentsEndpoints.RenameFile");
+
+        group.MapPut("files/{id:guid}/content", (
+            [FromServices] DocumentsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromForm] IFormFile file,
+            CancellationToken cancellationToken) =>
+            handler.ReplaceContent(id, username, file, cancellationToken))
+            .WithName("DocumentsEndpoints.ReplaceContent")
+            .WithMetadata(new RequestSizeLimitAttribute(55 * 1024 * 1024))
+            .DisableAntiforgery();
+
+        group.MapDelete("files/{id:guid}", (
+            [FromServices] DocumentsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.DeleteFile(id, username, cancellationToken))
+            .WithName("DocumentsEndpoints.DeleteFile");
+
+        group.MapGet("files/{id:guid}/content", (
+            [FromServices] DocumentsEndpoints handler,
+            HttpContext httpContext,
+            Guid id,
+            [FromQuery] string username,
+            [FromQuery] bool download = false,
+            CancellationToken cancellationToken = default) =>
+            handler.Download(httpContext, id, username, download, cancellationToken))
+            .WithName("DocumentsEndpoints.Download");
+
+        group.MapGet("files/{id:guid}/versions", (
+            [FromServices] DocumentsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.FileVersions(id, username, cancellationToken))
+            .WithName("DocumentsEndpoints.FileVersions");
+
+        group.MapGet("files/{id:guid}/versions/{versionId:guid}/content", (
+            [FromServices] DocumentsEndpoints handler,
+            HttpContext httpContext,
+            Guid id,
+            Guid versionId,
+            [FromQuery] string username,
+            [FromQuery] bool download = false,
+            CancellationToken cancellationToken = default) =>
+            handler.VersionContent(httpContext, id, versionId, username, download, cancellationToken))
+            .WithName("DocumentsEndpoints.VersionContent");
+
+        group.MapPost("files/{id:guid}/versions/{versionId:guid}/restore", (
+            [FromServices] DocumentsEndpoints handler,
+            Guid id,
+            Guid versionId,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.RestoreVersion(id, versionId, username, cancellationToken))
+            .WithName("DocumentsEndpoints.RestoreVersion");
+
+        group.MapDelete("files/{id:guid}/versions/{versionId:guid}", (
+            [FromServices] DocumentsEndpoints handler,
+            Guid id,
+            Guid versionId,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.DeleteVersion(id, versionId, username, cancellationToken))
+            .WithName("DocumentsEndpoints.DeleteVersion");
+
+        group.MapGet("folders/{id:guid}/properties", (
+            [FromServices] DocumentsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.FolderProperties(id, username, cancellationToken))
+            .WithName("DocumentsEndpoints.FolderProperties");
+
+        group.MapGet("files/{id:guid}/properties", (
+            [FromServices] DocumentsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.FileProperties(id, username, cancellationToken))
+            .WithName("DocumentsEndpoints.FileProperties");
+
+        group.MapGet("trash", (
+            [FromServices] DocumentsEndpoints handler,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.Trash(username, cancellationToken))
+            .WithName("DocumentsEndpoints.Trash");
+
+        group.MapPatch("folders/{id:guid}/restore", (
+            [FromServices] DocumentsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.RestoreFolder(id, username, cancellationToken))
+            .WithName("DocumentsEndpoints.RestoreFolder");
+
+        group.MapPatch("files/{id:guid}/restore", (
+            [FromServices] DocumentsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.RestoreFile(id, username, cancellationToken))
+            .WithName("DocumentsEndpoints.RestoreFile");
+
+        group.MapDelete("trash/files/{id:guid}", (
+            [FromServices] DocumentsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.PurgeFile(id, username, cancellationToken))
+            .WithName("DocumentsEndpoints.PurgeFile");
+
+        group.MapDelete("trash/folders/{id:guid}", (
+            [FromServices] DocumentsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.PurgeFolder(id, username, cancellationToken))
+            .WithName("DocumentsEndpoints.PurgeFolder");
+
+        group.MapGet("shared", (
+            [FromServices] DocumentsEndpoints handler,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.Shared(username, cancellationToken))
+            .WithName("DocumentsEndpoints.Shared");
+
+        group.MapGet("shared-by-me", (
+            [FromServices] DocumentsEndpoints handler,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.SharedByMe(username, cancellationToken))
+            .WithName("DocumentsEndpoints.SharedByMe");
+
+        group.MapGet("shares", (
+            [FromServices] DocumentsEndpoints handler,
+            [FromQuery] string username,
+            [FromQuery] string kind,
+            CancellationToken cancellationToken,
+            [FromQuery] Guid? id = null) =>
+            handler.GetShares(username, kind, id ?? Guid.Empty, cancellationToken))
+            .WithName("DocumentsEndpoints.GetShares");
+
+        group.MapPut("shares", (
+            [FromServices] DocumentsEndpoints handler,
+            [FromQuery] string username,
+            [FromBody] DocumentShareRequest request,
+            CancellationToken cancellationToken) =>
+            handler.PutShare(username, request, cancellationToken))
+            .WithName("DocumentsEndpoints.PutShare");
+
+        group.MapDelete("shares/{id:guid}", (
+            [FromServices] DocumentsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.RemoveShare(id, username, cancellationToken))
+            .WithName("DocumentsEndpoints.RemoveShare");
+
+        group.MapGet("public-links", (
+            [FromServices] DocumentsEndpoints handler,
+            [FromQuery] string username,
+            [FromQuery] string kind,
+            CancellationToken cancellationToken,
+            [FromQuery] Guid? id = null) =>
+            handler.GetPublicLink(username, kind, id ?? Guid.Empty, cancellationToken))
+            .WithName("DocumentsEndpoints.GetPublicLink");
+
+        group.MapPut("public-links", (
+            [FromServices] DocumentsEndpoints handler,
+            [FromQuery] string username,
+            [FromBody] DocumentPublicLinkRequest request,
+            CancellationToken cancellationToken) =>
+            handler.PutPublicLink(username, request, cancellationToken))
+            .WithName("DocumentsEndpoints.PutPublicLink");
+
+        group.MapDelete("public-links", (
+            [FromServices] DocumentsEndpoints handler,
+            [FromQuery] string username,
+            [FromQuery] string kind,
+            CancellationToken cancellationToken,
+            [FromQuery] Guid? id = null) =>
+            handler.RemovePublicLink(username, kind, id ?? Guid.Empty, cancellationToken))
+            .WithName("DocumentsEndpoints.RemovePublicLink");
+
+        group.MapGet("public/{token}", (
+            [FromServices] DocumentsEndpoints handler,
+            HttpContext httpContext,
+            string token,
+            [FromQuery] Guid? folderId,
+            CancellationToken cancellationToken) =>
+            handler.PublicListing(httpContext, token, folderId, cancellationToken))
+            .WithName("DocumentsEndpoints.PublicListing")
+            .AllowAnonymous();
+
+        group.MapGet("public/{token}/qr-code", (
+            [FromServices] DocumentsEndpoints handler,
+            HttpContext httpContext,
+            string token,
+            [FromQuery] string origin,
+            CancellationToken cancellationToken) =>
+            handler.PublicQrCode(httpContext, token, origin, cancellationToken))
+            .WithName("DocumentsEndpoints.PublicQrCode")
+            .AllowAnonymous();
+
+        group.MapGet("public/{token}/files/{id:guid}/content", (
+            [FromServices] DocumentsEndpoints handler,
+            HttpContext httpContext,
+            string token,
+            Guid id,
+            [FromQuery] bool download = false,
+            CancellationToken cancellationToken = default) =>
+            handler.PublicContent(httpContext, token, id, download, cancellationToken))
+            .WithName("DocumentsEndpoints.PublicContent")
+            .AllowAnonymous();
+
+        group.MapGet("conversation-files", (
+            [FromServices] DocumentsEndpoints handler,
+            [FromQuery] string username,
+            [FromQuery] string scope,
+            [FromQuery] string? query,
+            CancellationToken cancellationToken,
+            [FromQuery] int offset = default) =>
+            handler.ConversationFiles(username, scope, query, offset, cancellationToken))
+            .WithName("DocumentsEndpoints.ConversationFiles");
+    }
+
     private const long MaxFileSize = 50 * 1024 * 1024;
     private const long DefaultStorageLimit = 5L * 1024 * 1024 * 1024;
 
-    [HttpGet("storage")]
-    public async Task<IActionResult> StorageUsage([FromQuery] string username,
+    public async Task<IResult> StorageUsage([FromQuery] string username,
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
@@ -32,8 +407,7 @@ public sealed partial class DocumentsController(
         return Ok(new { usedBytes, limitBytes = actor.DocumentStorageLimitBytes ?? DefaultStorageLimitBytes() });
     }
 
-    [HttpGet]
-    public async Task<IActionResult> List(
+    public async Task<IResult> List(
         [FromQuery] string username,
         [FromQuery] Guid? folderId,
         CancellationToken cancellationToken)
@@ -82,8 +456,7 @@ public sealed partial class DocumentsController(
             breadcrumbs, folders, fileDtos));
     }
 
-    [HttpPost("folders")]
-    public async Task<IActionResult> CreateFolder(
+    public async Task<IResult> CreateFolder(
         [FromQuery] string username,
         FolderRequest request,
         CancellationToken cancellationToken)
@@ -117,8 +490,7 @@ public sealed partial class DocumentsController(
         return Ok(ToDto(folder));
     }
 
-    [HttpPatch("folders/{id:guid}")]
-    public async Task<IActionResult> RenameFolder(Guid id,
+    public async Task<IResult> RenameFolder(Guid id,
         [FromQuery] string username, RenameDocumentRequest request,
         CancellationToken cancellationToken)
     {
@@ -141,8 +513,7 @@ public sealed partial class DocumentsController(
         return Ok(ToDto(folder));
     }
 
-    [HttpDelete("folders/{id:guid}")]
-    public async Task<IActionResult> DeleteFolder(Guid id,
+    public async Task<IResult> DeleteFolder(Guid id,
         [FromQuery] string username, CancellationToken cancellationToken)
     {
         var owner = await FindOwner(username, cancellationToken);
@@ -160,9 +531,7 @@ public sealed partial class DocumentsController(
         return NoContent();
     }
 
-    [HttpPost("files")]
-    [RequestSizeLimit(55 * 1024 * 1024)]
-    public async Task<IActionResult> Upload(
+    public async Task<IResult> Upload(
         [FromQuery] string username,
         [FromForm] IFormFile file,
         [FromForm] Guid? folderId,
@@ -202,8 +571,7 @@ public sealed partial class DocumentsController(
 
         var usedBytes = await UsedStorage(libraryOwnerId, cancellationToken);
         if (usedBytes + await ReservedStorage(libraryOwnerId, cancellationToken) + file.Length > await StorageLimitBytes(libraryOwnerId, cancellationToken))
-            return StatusCode(StatusCodes.Status413PayloadTooLarge,
-                new { code = "storage_limit", message = "This upload would exceed the owner's storage limit." });
+            return Json(new { code = "storage_limit", message = "This upload would exceed the owner's storage limit." }, statusCode: StatusCodes.Status413PayloadTooLarge);
 
         var key = $"documents/{libraryOwnerId:N}/{Guid.NewGuid():N}";
         var contentType = CleanContentType(file.ContentType);
@@ -254,8 +622,7 @@ public sealed partial class DocumentsController(
         }
     }
 
-    [HttpPatch("files/{id:guid}")]
-    public async Task<IActionResult> RenameFile(Guid id,
+    public async Task<IResult> RenameFile(Guid id,
         [FromQuery] string username, RenameDocumentRequest request,
         CancellationToken cancellationToken)
     {
@@ -280,9 +647,7 @@ public sealed partial class DocumentsController(
         return Ok(ToDto(file));
     }
 
-    [HttpPut("files/{id:guid}/content")]
-    [RequestSizeLimit(55 * 1024 * 1024)]
-    public async Task<IActionResult> ReplaceContent(Guid id, [FromQuery] string username,
+    public async Task<IResult> ReplaceContent(Guid id, [FromQuery] string username,
         [FromForm] IFormFile file, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
@@ -296,8 +661,7 @@ public sealed partial class DocumentsController(
         await LockLibrary(document.OwnerUserId, cancellationToken);
         var usedBytes = await UsedStorage(document.OwnerUserId, cancellationToken);
         if (usedBytes + await ReservedStorage(document.OwnerUserId, cancellationToken) + file.Length > await StorageLimitBytes(document.OwnerUserId, cancellationToken))
-            return StatusCode(StatusCodes.Status413PayloadTooLarge,
-                new { code = "storage_limit", message = "This upload would exceed the owner's storage limit." });
+            return Json(new { code = "storage_limit", message = "This upload would exceed the owner's storage limit." }, statusCode: StatusCodes.Status413PayloadTooLarge);
         var key = $"documents/{document.OwnerUserId:N}/{Guid.NewGuid():N}";
         try
         {
@@ -325,8 +689,7 @@ public sealed partial class DocumentsController(
         }
     }
 
-    [HttpDelete("files/{id:guid}")]
-    public async Task<IActionResult> DeleteFile(Guid id,
+    public async Task<IResult> DeleteFile(Guid id,
         [FromQuery] string username, CancellationToken cancellationToken)
     {
         var owner = await FindOwner(username, cancellationToken);
@@ -344,8 +707,7 @@ public sealed partial class DocumentsController(
         return NoContent();
     }
 
-    [HttpGet("files/{id:guid}/content")]
-    public async Task<IActionResult> Download(Guid id,
+    public async Task<IResult> Download(HttpContext httpContext, Guid id,
         [FromQuery] string username,
         [FromQuery] bool download = false,
         CancellationToken cancellationToken = default)
@@ -356,15 +718,14 @@ public sealed partial class DocumentsController(
         if (file is null || await FilePermission(file, owner.Id, cancellationToken) is null) return NotFound();
         var stream = await storage.OpenReadAsync(file.StorageKey, cancellationToken);
         if (stream is null) return NotFound();
-        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        httpContext.Response.Headers["X-Content-Type-Options"] = "nosniff";
         if (!download && IsPreviewable(file.ContentType))
             return File(stream, file.ContentType, enableRangeProcessing: true);
         return File(stream, "application/octet-stream", file.Name,
             enableRangeProcessing: true);
     }
 
-    [HttpGet("files/{id:guid}/versions")]
-    public async Task<IActionResult> FileVersions(Guid id, [FromQuery] string username,
+    public async Task<IResult> FileVersions(Guid id, [FromQuery] string username,
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
@@ -380,8 +741,7 @@ public sealed partial class DocumentsController(
         return Ok(versions);
     }
 
-    [HttpGet("files/{id:guid}/versions/{versionId:guid}/content")]
-    public async Task<IActionResult> VersionContent(Guid id, Guid versionId,
+    public async Task<IResult> VersionContent(HttpContext httpContext, Guid id, Guid versionId,
         [FromQuery] string username, [FromQuery] bool download = false,
         CancellationToken cancellationToken = default)
     {
@@ -394,15 +754,14 @@ public sealed partial class DocumentsController(
         if (version is null) return NotFound();
         var stream = await storage.OpenReadAsync(version.StorageKey, cancellationToken);
         if (stream is null) return NotFound();
-        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        httpContext.Response.Headers["X-Content-Type-Options"] = "nosniff";
         if (!download && IsPreviewable(version.ContentType))
             return File(stream, version.ContentType, enableRangeProcessing: true);
         return File(stream, "application/octet-stream", file.Name,
             enableRangeProcessing: true);
     }
 
-    [HttpPost("files/{id:guid}/versions/{versionId:guid}/restore")]
-    public async Task<IActionResult> RestoreVersion(Guid id, Guid versionId,
+    public async Task<IResult> RestoreVersion(Guid id, Guid versionId,
         [FromQuery] string username, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
@@ -418,8 +777,7 @@ public sealed partial class DocumentsController(
         if (await UsedStorage(document.OwnerUserId, cancellationToken) +
             await ReservedStorage(document.OwnerUserId, cancellationToken) + version.SizeBytes >
             await StorageLimitBytes(document.OwnerUserId, cancellationToken))
-            return StatusCode(StatusCodes.Status413PayloadTooLarge,
-                new { code = "storage_limit", message = "Restoring this version would exceed the owner's storage limit. Delete an older version first." });
+            return Json(new { code = "storage_limit", message = "Restoring this version would exceed the owner's storage limit. Delete an older version first." }, statusCode: StatusCodes.Status413PayloadTooLarge);
         var source = await storage.OpenReadAsync(version.StorageKey, cancellationToken);
         if (source is null) return NotFound();
         var key = $"documents/{document.OwnerUserId:N}/{Guid.NewGuid():N}";
@@ -449,8 +807,7 @@ public sealed partial class DocumentsController(
         }
     }
 
-    [HttpDelete("files/{id:guid}/versions/{versionId:guid}")]
-    public async Task<IActionResult> DeleteVersion(Guid id, Guid versionId,
+    public async Task<IResult> DeleteVersion(Guid id, Guid versionId,
         [FromQuery] string username, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
@@ -471,8 +828,7 @@ public sealed partial class DocumentsController(
         return NoContent();
     }
 
-    [HttpGet("folders/{id:guid}/properties")]
-    public async Task<IActionResult> FolderProperties(Guid id, [FromQuery] string username,
+    public async Task<IResult> FolderProperties(Guid id, [FromQuery] string username,
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
@@ -504,8 +860,7 @@ public sealed partial class DocumentsController(
             fileSummary?.Bytes ?? 0, descendantIds.Count - 1, fileSummary?.Count ?? 0));
     }
 
-    [HttpGet("files/{id:guid}/properties")]
-    public async Task<IActionResult> FileProperties(Guid id, [FromQuery] string username,
+    public async Task<IResult> FileProperties(Guid id, [FromQuery] string username,
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
@@ -523,8 +878,7 @@ public sealed partial class DocumentsController(
             file.SizeBytes, null, null));
     }
 
-    [HttpGet("trash")]
-    public async Task<IActionResult> Trash([FromQuery] string username, CancellationToken cancellationToken)
+    public async Task<IResult> Trash([FromQuery] string username, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
         if (actor is null) return NotFound();
@@ -538,8 +892,7 @@ public sealed partial class DocumentsController(
             files.Select(x => ToDto(x, "owner")).ToArray()));
     }
 
-    [HttpPatch("folders/{id:guid}/restore")]
-    public async Task<IActionResult> RestoreFolder(Guid id, [FromQuery] string username,
+    public async Task<IResult> RestoreFolder(Guid id, [FromQuery] string username,
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
@@ -564,8 +917,7 @@ public sealed partial class DocumentsController(
         return Ok(ToDto(folder));
     }
 
-    [HttpPatch("files/{id:guid}/restore")]
-    public async Task<IActionResult> RestoreFile(Guid id, [FromQuery] string username,
+    public async Task<IResult> RestoreFile(Guid id, [FromQuery] string username,
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
@@ -591,8 +943,7 @@ public sealed partial class DocumentsController(
         return Ok(ToDto(file));
     }
 
-    [HttpDelete("trash/files/{id:guid}")]
-    public async Task<IActionResult> PurgeFile(Guid id, [FromQuery] string username,
+    public async Task<IResult> PurgeFile(Guid id, [FromQuery] string username,
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
@@ -612,8 +963,7 @@ public sealed partial class DocumentsController(
         return NoContent();
     }
 
-    [HttpDelete("trash/folders/{id:guid}")]
-    public async Task<IActionResult> PurgeFolder(Guid id, [FromQuery] string username,
+    public async Task<IResult> PurgeFolder(Guid id, [FromQuery] string username,
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
@@ -646,8 +996,7 @@ public sealed partial class DocumentsController(
         return NoContent();
     }
 
-    [HttpGet("shared")]
-    public async Task<IActionResult> Shared([FromQuery] string username, CancellationToken cancellationToken)
+    public async Task<IResult> Shared([FromQuery] string username, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
         if (actor is null) return NotFound();
@@ -667,8 +1016,7 @@ public sealed partial class DocumentsController(
         return Ok(new DocumentListingDto(null, [], folders, files));
     }
 
-    [HttpGet("shared-by-me")]
-    public async Task<IActionResult> SharedByMe([FromQuery] string username,
+    public async Task<IResult> SharedByMe([FromQuery] string username,
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
@@ -719,8 +1067,7 @@ public sealed partial class DocumentsController(
         });
     }
 
-    [HttpGet("shares")]
-    public async Task<IActionResult> GetShares([FromQuery] string username,
+    public async Task<IResult> GetShares([FromQuery] string username,
         [FromQuery] string kind, [FromQuery] Guid id, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
@@ -735,8 +1082,7 @@ public sealed partial class DocumentsController(
         return Ok(shares);
     }
 
-    [HttpPut("shares")]
-    public async Task<IActionResult> PutShare([FromQuery] string username,
+    public async Task<IResult> PutShare([FromQuery] string username,
         DocumentShareRequest request, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
@@ -783,8 +1129,7 @@ public sealed partial class DocumentsController(
         return Ok(new DocumentShareDto(share.Id, grantee.UserName, grantee.DisplayName, share.Permission));
     }
 
-    [HttpDelete("shares/{id:guid}")]
-    public async Task<IActionResult> RemoveShare(Guid id, [FromQuery] string username,
+    public async Task<IResult> RemoveShare(Guid id, [FromQuery] string username,
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
@@ -797,8 +1142,7 @@ public sealed partial class DocumentsController(
         return NoContent();
     }
 
-    [HttpGet("public-links")]
-    public async Task<IActionResult> GetPublicLink([FromQuery] string username,
+    public async Task<IResult> GetPublicLink([FromQuery] string username,
         [FromQuery] string kind, [FromQuery] Guid id, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
@@ -808,8 +1152,7 @@ public sealed partial class DocumentsController(
         return link is null ? NoContent() : Ok(new DocumentPublicLinkDto(link.Token, link.CreatedAt, link.ExpiresAt));
     }
 
-    [HttpPut("public-links")]
-    public async Task<IActionResult> PutPublicLink([FromQuery] string username,
+    public async Task<IResult> PutPublicLink([FromQuery] string username,
         DocumentPublicLinkRequest request, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
@@ -839,8 +1182,7 @@ public sealed partial class DocumentsController(
         return Ok(new DocumentPublicLinkDto(link.Token, link.CreatedAt, link.ExpiresAt));
     }
 
-    [HttpDelete("public-links")]
-    public async Task<IActionResult> RemovePublicLink([FromQuery] string username,
+    public async Task<IResult> RemovePublicLink([FromQuery] string username,
         [FromQuery] string kind, [FromQuery] Guid id, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
@@ -850,14 +1192,12 @@ public sealed partial class DocumentsController(
         return NoContent();
     }
 
-    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
-    [HttpGet("public/{token}")]
-    public async Task<IActionResult> PublicListing(string token, [FromQuery] Guid? folderId,
+    public async Task<IResult> PublicListing(HttpContext httpContext, string token, [FromQuery] Guid? folderId,
         CancellationToken cancellationToken)
     {
         var link = await ActivePublicLink(token, cancellationToken);
         if (link is null) return NotFound();
-        Response.Headers.CacheControl = "no-store";
+        httpContext.Response.Headers.CacheControl = "no-store";
         if (link.FileId is Guid fileId)
         {
             if (folderId is not null) return NotFound();
@@ -880,9 +1220,7 @@ public sealed partial class DocumentsController(
             files.Select(x => ToDto(x)).ToArray()));
     }
 
-    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
-    [HttpGet("public/{token}/qr-code")]
-    public async Task<IActionResult> PublicQrCode(string token, [FromQuery] string origin,
+    public async Task<IResult> PublicQrCode(HttpContext httpContext, string token, [FromQuery] string origin,
         CancellationToken cancellationToken)
     {
         if (!Uri.TryCreate(origin, UriKind.Absolute, out var uiOrigin) ||
@@ -892,13 +1230,11 @@ public sealed partial class DocumentsController(
         var publicUrl = new Uri(uiOrigin, $"/?publicDocument={Uri.EscapeDataString(token)}").AbsoluteUri;
         using var qrCodeData = QRCodeGenerator.GenerateQrCode(publicUrl, QRCodeGenerator.ECCLevel.Q);
         using var qrCode = new PngByteQRCode(qrCodeData);
-        Response.Headers.CacheControl = "no-store";
+        httpContext.Response.Headers.CacheControl = "no-store";
         return File(qrCode.GetGraphic(8), "image/png");
     }
 
-    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
-    [HttpGet("public/{token}/files/{id:guid}/content")]
-    public async Task<IActionResult> PublicContent(string token, Guid id,
+    public async Task<IResult> PublicContent(HttpContext httpContext, string token, Guid id,
         [FromQuery] bool download = false, CancellationToken cancellationToken = default)
     {
         var link = await ActivePublicLink(token, cancellationToken);
@@ -915,8 +1251,8 @@ public sealed partial class DocumentsController(
             return NotFound();
         var stream = await storage.OpenReadAsync(file.StorageKey, cancellationToken);
         if (stream is null) return NotFound();
-        Response.Headers.CacheControl = "no-store";
-        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        httpContext.Response.Headers.CacheControl = "no-store";
+        httpContext.Response.Headers["X-Content-Type-Options"] = "nosniff";
         if (!download && IsPreviewable(file.ContentType))
             return File(stream, file.ContentType, enableRangeProcessing: true);
         return File(stream, "application/octet-stream", file.Name, enableRangeProcessing: true);

@@ -1,17 +1,54 @@
+using ChatApp.Api.Authentication;
+using static Microsoft.AspNetCore.Http.Results;
 using ChatApp.Api.Services;
 using ChatApp.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-namespace ChatApp.Api.Controllers;
+namespace ChatApp.Api.Endpoints;
 
-[ApiController]
-[Route("api/user-notifications")]
-public sealed class UserNotificationsController(ChatAppDbContext db) : ControllerBase
+public sealed class UserNotificationsEndpoints(ChatAppDbContext db)
 {
-    [HttpGet("unread-count")]
-    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-    public async Task<IActionResult> UnreadCount([FromQuery] string username,
+    public static void Map(IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/user-notifications")
+            .RequireAuthorization();
+        group.AddEndpointFilterFactory(AuthenticatedActorFilter.Create);
+        group.AddEndpointFilterFactory(RequestValidationFilter.Create);
+
+        group.MapGet("unread-count", (
+            [FromServices] UserNotificationsEndpoints handler,
+            [FromQuery] string username,
+            CancellationToken ct) =>
+            handler.UnreadCount(username, ct))
+            .WithName("UserNotificationsEndpoints.UnreadCount")
+            .AddEndpointFilter(async (context, next) => { context.HttpContext.Response.Headers.CacheControl = "no-store"; return await next(context); });
+
+        group.MapGet("", (
+            [FromServices] UserNotificationsEndpoints handler,
+            [FromQuery] string username,
+            [FromQuery] int page = 0,
+            CancellationToken ct = default) =>
+            handler.List(username, page, ct))
+            .WithName("UserNotificationsEndpoints.List");
+
+        group.MapPost("{id:guid}/read", (
+            [FromServices] UserNotificationsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken ct) =>
+            handler.MarkRead(id, username, ct))
+            .WithName("UserNotificationsEndpoints.MarkRead");
+
+        group.MapPost("read-all", (
+            [FromServices] UserNotificationsEndpoints handler,
+            [FromQuery] string username,
+            CancellationToken ct) =>
+            handler.MarkAllRead(username, ct))
+            .WithName("UserNotificationsEndpoints.MarkAllRead");
+    }
+
+    public async Task<IResult> UnreadCount([FromQuery] string username,
         CancellationToken ct)
     {
         var userId = await FindUserId(username, ct);
@@ -24,8 +61,7 @@ public sealed class UserNotificationsController(ChatAppDbContext db) : Controlle
         return Ok(new { unreadCount = count });
     }
 
-    [HttpGet]
-    public async Task<IActionResult> List([FromQuery] string username,
+    public async Task<IResult> List([FromQuery] string username,
         [FromQuery] int page = 0, CancellationToken ct = default)
     {
         var userId = await FindUserId(username, ct);
@@ -48,8 +84,7 @@ public sealed class UserNotificationsController(ChatAppDbContext db) : Controlle
             items.Length > pageSize, unreadCount));
     }
 
-    [HttpPost("{id:guid}/read")]
-    public async Task<IActionResult> MarkRead(Guid id, [FromQuery] string username,
+    public async Task<IResult> MarkRead(Guid id, [FromQuery] string username,
         CancellationToken ct)
     {
         var userId = await FindUserId(username, ct);
@@ -65,8 +100,7 @@ public sealed class UserNotificationsController(ChatAppDbContext db) : Controlle
         return NoContent();
     }
 
-    [HttpPost("read-all")]
-    public async Task<IActionResult> MarkAllRead([FromQuery] string username,
+    public async Task<IResult> MarkAllRead([FromQuery] string username,
         CancellationToken ct)
     {
         var userId = await FindUserId(username, ct);

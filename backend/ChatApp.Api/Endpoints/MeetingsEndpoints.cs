@@ -1,3 +1,5 @@
+using ChatApp.Api.Authentication;
+using static Microsoft.AspNetCore.Http.Results;
 using ChatApp.Infrastructure.Caching;
 using System.Globalization;
 using ChatApp.Api.Hubs;
@@ -10,17 +12,95 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 
-namespace ChatApp.Api.Controllers;
+namespace ChatApp.Api.Endpoints;
 
-[ApiController]
-[Route("api/meetings")]
-public sealed class MeetingsController(
+public sealed class MeetingsEndpoints(
     ChatAppDbContext db,
     IHubContext<ChatHub> hubContext,
-    PresenceTracker presence) : ControllerBase
+    PresenceTracker presence)
 {
-    [HttpGet("manage")]
-    public async Task<ActionResult<MeetingManagePageDto>> Manage(
+    public static void Map(IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/meetings")
+            .RequireAuthorization();
+        group.AddEndpointFilterFactory(AuthenticatedActorFilter.Create);
+        group.AddEndpointFilterFactory(RequestValidationFilter.Create);
+
+        group.MapGet("manage", (
+            [FromServices] MeetingsEndpoints handler,
+            [FromQuery] string username,
+            [FromQuery] string tab = "created",
+            [FromQuery] int page = 0,
+            [FromQuery] string? from = null,
+            [FromQuery] string? to = null,
+            [FromQuery] string? name = null,
+            [FromQuery] string? organizer = null,
+            [FromQuery] string? participant = null,
+            CancellationToken cancellationToken = default) =>
+            handler.Manage(username, tab, page, from, to, name, organizer, participant, cancellationToken))
+            .WithName("MeetingsEndpoints.Manage");
+
+        group.MapGet("", (
+            [FromServices] MeetingsEndpoints handler,
+            [FromQuery] string username,
+            [FromQuery] string from,
+            [FromQuery] string to,
+            CancellationToken cancellationToken) =>
+            handler.List(username, from, to, cancellationToken))
+            .WithName("MeetingsEndpoints.List");
+
+        group.MapGet("{id:guid}", (
+            [FromServices] MeetingsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.GetById(id, username, cancellationToken))
+            .WithName("MeetingsEndpoints.GetById");
+
+        group.MapPost("{id:guid}/conversation", (
+            [FromServices] MeetingsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.OpenConversation(id, username, cancellationToken))
+            .WithName("MeetingsEndpoints.OpenConversation");
+
+        group.MapPost("", (
+            [FromServices] MeetingsEndpoints handler,
+            [FromQuery] string username,
+            [FromBody] SaveScheduledMeetingRequest request,
+            CancellationToken cancellationToken) =>
+            handler.Create(username, request, cancellationToken))
+            .WithName("MeetingsEndpoints.Create");
+
+        group.MapPut("{id:guid}", (
+            [FromServices] MeetingsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromBody] SaveScheduledMeetingRequest request,
+            CancellationToken cancellationToken) =>
+            handler.Update(id, username, request, cancellationToken))
+            .WithName("MeetingsEndpoints.Update");
+
+        group.MapPost("{id:guid}/cancel", (
+            [FromServices] MeetingsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.Cancel(id, username, cancellationToken))
+            .WithName("MeetingsEndpoints.Cancel");
+
+        group.MapPost("{id:guid}/response", (
+            [FromServices] MeetingsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromBody] MeetingResponseRequest request,
+            CancellationToken cancellationToken) =>
+            handler.Respond(id, username, request, cancellationToken))
+            .WithName("MeetingsEndpoints.Respond");
+    }
+
+    public async Task<IResult> Manage(
         [FromQuery] string username,
         [FromQuery] string tab = "created",
         [FromQuery] int page = 0,
@@ -76,8 +156,7 @@ public sealed class MeetingsController(
             meetings.Count > pageSize));
     }
 
-    [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<ScheduledMeetingDto>>> List(
+    public async Task<IResult> List(
         [FromQuery] string username,
         [FromQuery] string from,
         [FromQuery] string to,
@@ -101,8 +180,7 @@ public sealed class MeetingsController(
         return Ok(meetings.Select(x => ToDto(x, user.Id)).ToArray());
     }
 
-    [HttpGet("{id:guid}")]
-    public async Task<ActionResult<ScheduledMeetingDto>> GetById(
+    public async Task<IResult> GetById(
         Guid id,
         [FromQuery] string username,
         CancellationToken cancellationToken)
@@ -115,8 +193,7 @@ public sealed class MeetingsController(
         return Ok(ToDto(meeting, user.Id));
     }
 
-    [HttpPost("{id:guid}/conversation")]
-    public async Task<ActionResult<MeetingConversationDto>> OpenConversation(
+    public async Task<IResult> OpenConversation(
         Guid id,
         [FromQuery] string username,
         CancellationToken cancellationToken)
@@ -166,8 +243,7 @@ public sealed class MeetingsController(
         return Ok(new MeetingConversationDto(conversation.Id));
     }
 
-    [HttpPost]
-    public async Task<ActionResult<ScheduledMeetingDto>> Create(
+    public async Task<IResult> Create(
         [FromQuery] string username,
         SaveScheduledMeetingRequest request,
         CancellationToken cancellationToken)
@@ -219,12 +295,11 @@ public sealed class MeetingsController(
         }
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return CreatedAtAction(nameof(GetById),
+        return CreatedAtRoute("MeetingsEndpoints.GetById",
             new { id = meeting.Id, username }, ToDto(meeting, organizer.Id));
     }
 
-    [HttpPut("{id:guid}")]
-    public async Task<ActionResult<ScheduledMeetingDto>> Update(
+    public async Task<IResult> Update(
         Guid id,
         [FromQuery] string username,
         SaveScheduledMeetingRequest request,
@@ -239,7 +314,7 @@ public sealed class MeetingsController(
             cancellationToken);
         if (meeting is null || !CanView(meeting, user.Id)) return NotFound();
         if (meeting.OrganizerUserId != user.Id)
-            return StatusCode(403, new { message = "Only the organizer can edit this meeting." });
+            return Json(new { message = "Only the organizer can edit this meeting." }, statusCode: 403);
         if (meeting.Status == "cancelled")
             return Conflict(new { message = "Cancelled meetings cannot be edited." });
         var validation = Validate(request);
@@ -331,8 +406,7 @@ public sealed class MeetingsController(
         return Ok(ToDto(meeting, user.Id));
     }
 
-    [HttpPost("{id:guid}/cancel")]
-    public async Task<ActionResult<ScheduledMeetingDto>> Cancel(
+    public async Task<IResult> Cancel(
         Guid id,
         [FromQuery] string username,
         CancellationToken cancellationToken)
@@ -343,7 +417,7 @@ public sealed class MeetingsController(
             cancellationToken);
         if (meeting is null || !CanView(meeting, user.Id)) return NotFound();
         if (meeting.OrganizerUserId != user.Id)
-            return StatusCode(403, new { message = "Only the organizer can cancel this meeting." });
+            return Json(new { message = "Only the organizer can cancel this meeting." }, statusCode: 403);
         if (meeting.Status != "cancelled")
         {
             meeting.Status = "cancelled";
@@ -364,8 +438,7 @@ public sealed class MeetingsController(
         return Ok(ToDto(meeting, user.Id));
     }
 
-    [HttpPost("{id:guid}/response")]
-    public async Task<ActionResult<ScheduledMeetingDto>> Respond(
+    public async Task<IResult> Respond(
         Guid id,
         [FromQuery] string username,
         MeetingResponseRequest request,
@@ -385,7 +458,7 @@ public sealed class MeetingsController(
         var participant = meeting.Participants.SingleOrDefault(x =>
             x.UserId == user.Id);
         if (participant is null)
-            return StatusCode(403, new { message = "The organizer cannot respond to their own meeting." });
+            return Json(new { message = "The organizer cannot respond to their own meeting." }, statusCode: 403);
 
         if (participant.ResponseStatus != response)
         {

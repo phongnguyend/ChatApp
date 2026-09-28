@@ -1,13 +1,13 @@
+using static Microsoft.AspNetCore.Http.Results;
 using ChatApp.Domain.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-namespace ChatApp.Api.Controllers;
+namespace ChatApp.Api.Endpoints;
 
-public sealed partial class DocumentsController
+public sealed partial class DocumentsEndpoints
 {
-    [HttpGet("search")]
-    public async Task<IActionResult> Search([FromQuery] string username,
+    public async Task<IResult> Search([FromQuery] string username,
         [FromQuery] string query, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
@@ -52,8 +52,7 @@ public sealed partial class DocumentsController
         return Ok(new DocumentListingDto(null, [], folders, files) { Locations = locations });
     }
 
-    [HttpPost("bulk")]
-    public async Task<IActionResult> Bulk([FromQuery] string username,
+    public async Task<IResult> Bulk([FromQuery] string username,
         DocumentBulkRequest request, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
@@ -158,8 +157,7 @@ public sealed partial class DocumentsController
             x.CompletedAt == null && x.ExpiresAt > DateTimeOffset.UtcNow)
             .SumAsync(x => (long?)x.SizeBytes, cancellationToken) ?? 0;
         if (await UsedStorage(actor.Id, cancellationToken) + reservedBytes + copyBytes > await StorageLimitBytes(actor.Id, cancellationToken))
-            return StatusCode(StatusCodes.Status413PayloadTooLarge,
-                new { code = "storage_limit", message = "These copies would exceed your storage limit." });
+            return Json(new { code = "storage_limit", message = "These copies would exceed your storage limit." }, statusCode: StatusCodes.Status413PayloadTooLarge);
 
         var newKeys = new List<string>();
         try

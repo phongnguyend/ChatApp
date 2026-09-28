@@ -1,16 +1,15 @@
+using static Microsoft.AspNetCore.Http.Results;
 using ChatApp.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-namespace ChatApp.Api.Controllers;
+namespace ChatApp.Api.Endpoints;
 
-public sealed partial class DocumentsController
+public sealed partial class DocumentsEndpoints
 {
     private const long MaximumStorageLimit = 100L * 1024 * 1024 * 1024 * 1024;
 
-    [Microsoft.AspNetCore.Authorization.Authorize(Roles = ChatApp.Domain.Security.AppRoles.GlobalAdmin)]
-    [HttpGet("storage-management")]
-    public async Task<IActionResult> StorageManagement([FromQuery] string username,
+    public async Task<IResult> StorageManagement([FromQuery] string username,
         [FromQuery] string? query, [FromQuery] int offset,
         CancellationToken cancellationToken)
     {
@@ -69,9 +68,7 @@ public sealed partial class DocumentsController
             defaultLimit, userCount, allDocumentBytes + allVersionBytes));
     }
 
-    [Microsoft.AspNetCore.Authorization.Authorize(Roles = ChatApp.Domain.Security.AppRoles.GlobalAdmin)]
-    [HttpPut("storage-management/{userId:guid}/limit")]
-    public async Task<IActionResult> SetStorageLimit(Guid userId,
+    public async Task<IResult> SetStorageLimit(Guid userId,
         [FromQuery] string username, SetStorageLimitRequest request,
         CancellationToken cancellationToken)
     {

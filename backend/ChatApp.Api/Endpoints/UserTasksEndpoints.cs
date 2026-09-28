@@ -1,3 +1,5 @@
+using ChatApp.Api.Authentication;
+using static Microsoft.AspNetCore.Http.Results;
 using System.Data;
 using ChatApp.Persistence;
 using ChatApp.Domain.Models;
@@ -5,14 +7,105 @@ using ChatApp.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-namespace ChatApp.Api.Controllers;
+namespace ChatApp.Api.Endpoints;
 
-[ApiController]
-[Route("api/user-tasks")]
-public sealed class UserTasksController(ChatAppDbContext db) : ControllerBase
+public sealed class UserTasksEndpoints(ChatAppDbContext db)
 {
-    [HttpGet]
-    public async Task<IActionResult> List([FromQuery] string username,
+    public static void Map(IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/user-tasks")
+            .RequireAuthorization();
+        group.AddEndpointFilterFactory(AuthenticatedActorFilter.Create);
+        group.AddEndpointFilterFactory(RequestValidationFilter.Create);
+
+        group.MapGet("", (
+            [FromServices] UserTasksEndpoints handler,
+            [FromQuery] string username,
+            [FromQuery] DateOnly? from,
+            [FromQuery] DateOnly? to,
+            CancellationToken ct) =>
+            handler.List(username, from, to, ct))
+            .WithName("UserTasksEndpoints.List");
+
+        group.MapPost("", (
+            [FromServices] UserTasksEndpoints handler,
+            [FromQuery] string username,
+            [FromBody] SaveUserTaskRequest request,
+            CancellationToken ct) =>
+            handler.Create(username, request, ct))
+            .WithName("UserTasksEndpoints.Create");
+
+        group.MapPut("{id:guid}", (
+            [FromServices] UserTasksEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromBody] SaveUserTaskRequest request,
+            CancellationToken ct) =>
+            handler.Update(id, username, request, ct))
+            .WithName("UserTasksEndpoints.Update");
+
+        group.MapPatch("{id:guid}/completion", (
+            [FromServices] UserTasksEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromBody] SetUserTaskCompletionRequest request,
+            CancellationToken ct) =>
+            handler.SetCompletion(id, username, request, ct))
+            .WithName("UserTasksEndpoints.SetCompletion");
+
+        group.MapDelete("{id:guid}", (
+            [FromServices] UserTasksEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken ct) =>
+            handler.Delete(id, username, ct))
+            .WithName("UserTasksEndpoints.Delete");
+
+        group.MapPatch("{id:guid}/assignee", (
+            [FromServices] UserTasksEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromBody] SetUserTaskAssigneeRequest request,
+            CancellationToken ct) =>
+            handler.SetAssignee(id, username, request, ct))
+            .WithName("UserTasksEndpoints.SetAssignee");
+
+        group.MapGet("{id:guid}/assignees", (
+            [FromServices] UserTasksEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken ct) =>
+            handler.GetAssignees(id, username, ct))
+            .WithName("UserTasksEndpoints.GetAssignees");
+
+        group.MapGet("{id:guid}/shares", (
+            [FromServices] UserTasksEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken ct) =>
+            handler.GetShares(id, username, ct))
+            .WithName("UserTasksEndpoints.GetShares");
+
+        group.MapPut("{id:guid}/shares", (
+            [FromServices] UserTasksEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromBody] SaveUserTaskShareRequest request,
+            CancellationToken ct) =>
+            handler.PutShare(id, username, request, ct))
+            .WithName("UserTasksEndpoints.PutShare");
+
+        group.MapDelete("{id:guid}/shares/{shareId:guid}", (
+            [FromServices] UserTasksEndpoints handler,
+            Guid id,
+            Guid shareId,
+            [FromQuery] string username,
+            CancellationToken ct) =>
+            handler.RemoveShare(id, shareId, username, ct))
+            .WithName("UserTasksEndpoints.RemoveShare");
+    }
+
+    public async Task<IResult> List([FromQuery] string username,
         [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
@@ -36,8 +129,7 @@ public sealed class UserTasksController(ChatAppDbContext db) : ControllerBase
         return Ok(tasks.Select(x => ToDto(x, user.Id)).ToArray());
     }
 
-    [HttpPost]
-    public async Task<IActionResult> Create([FromQuery] string username,
+    public async Task<IResult> Create([FromQuery] string username,
         SaveUserTaskRequest request, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
@@ -55,11 +147,10 @@ public sealed class UserTasksController(ChatAppDbContext db) : ControllerBase
         };
         db.UserTasks.Add(task);
         await db.SaveChangesAsync(ct);
-        return CreatedAtAction(nameof(List), new { username }, ToDto(task, user.Id));
+        return CreatedAtRoute("UserTasksEndpoints.List", new { username }, ToDto(task, user.Id));
     }
 
-    [HttpPut("{id:guid}")]
-    public async Task<IActionResult> Update(Guid id, [FromQuery] string username,
+    public async Task<IResult> Update(Guid id, [FromQuery] string username,
         SaveUserTaskRequest request, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
@@ -80,8 +171,7 @@ public sealed class UserTasksController(ChatAppDbContext db) : ControllerBase
         return Ok(ToDto(task, user.Id));
     }
 
-    [HttpPatch("{id:guid}/completion")]
-    public async Task<IActionResult> SetCompletion(Guid id, [FromQuery] string username,
+    public async Task<IResult> SetCompletion(Guid id, [FromQuery] string username,
         SetUserTaskCompletionRequest request, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
@@ -98,8 +188,7 @@ public sealed class UserTasksController(ChatAppDbContext db) : ControllerBase
         return Ok(ToDto(task, user.Id));
     }
 
-    [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id, [FromQuery] string username,
+    public async Task<IResult> Delete(Guid id, [FromQuery] string username,
         CancellationToken ct)
     {
         var user = await FindUser(username, ct);
@@ -112,8 +201,7 @@ public sealed class UserTasksController(ChatAppDbContext db) : ControllerBase
         return NoContent();
     }
 
-    [HttpPatch("{id:guid}/assignee")]
-    public async Task<IActionResult> SetAssignee(Guid id, [FromQuery] string username,
+    public async Task<IResult> SetAssignee(Guid id, [FromQuery] string username,
         SetUserTaskAssigneeRequest request, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
@@ -157,8 +245,7 @@ public sealed class UserTasksController(ChatAppDbContext db) : ControllerBase
         return Ok(ToDto(task, user.Id));
     }
 
-    [HttpGet("{id:guid}/assignees")]
-    public async Task<IActionResult> GetAssignees(Guid id, [FromQuery] string username,
+    public async Task<IResult> GetAssignees(Guid id, [FromQuery] string username,
         CancellationToken ct)
     {
         var user = await FindUser(username, ct);
@@ -175,8 +262,7 @@ public sealed class UserTasksController(ChatAppDbContext db) : ControllerBase
         return Ok(shared);
     }
 
-    [HttpGet("{id:guid}/shares")]
-    public async Task<IActionResult> GetShares(Guid id, [FromQuery] string username,
+    public async Task<IResult> GetShares(Guid id, [FromQuery] string username,
         CancellationToken ct)
     {
         var user = await FindUser(username, ct);
@@ -191,8 +277,7 @@ public sealed class UserTasksController(ChatAppDbContext db) : ControllerBase
         return Ok(shares);
     }
 
-    [HttpPut("{id:guid}/shares")]
-    public async Task<IActionResult> PutShare(Guid id, [FromQuery] string username,
+    public async Task<IResult> PutShare(Guid id, [FromQuery] string username,
         SaveUserTaskShareRequest request, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
@@ -237,8 +322,7 @@ public sealed class UserTasksController(ChatAppDbContext db) : ControllerBase
             grantee.DisplayName, share.Permission));
     }
 
-    [HttpDelete("{id:guid}/shares/{shareId:guid}")]
-    public async Task<IActionResult> RemoveShare(Guid id, Guid shareId,
+    public async Task<IResult> RemoveShare(Guid id, Guid shareId,
         [FromQuery] string username, CancellationToken ct)
     {
         var user = await FindUser(username, ct);

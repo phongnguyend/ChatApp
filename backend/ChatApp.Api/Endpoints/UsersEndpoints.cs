@@ -1,3 +1,5 @@
+using ChatApp.Api.Authentication;
+using static Microsoft.AspNetCore.Http.Results;
 using ChatApp.Infrastructure.Caching;
 using ChatApp.Application.Contracts;
 using ChatApp.Persistence;
@@ -8,18 +10,65 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
-namespace ChatApp.Api.Controllers;
+namespace ChatApp.Api.Endpoints;
 
-[ApiController]
-[Route("api/users")]
-public sealed class UsersController(
+public sealed class UsersEndpoints(
     ChatAppDbContext db,
     IAvatarStorage avatarStorage,
     PresenceTracker presence,
-    IHubContext<ChatHub> hubContext) : ControllerBase
+    IHubContext<ChatHub> hubContext)
 {
-    [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<UserDto>>> Search(
+    public static void Map(IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/users")
+            .RequireAuthorization();
+        group.AddEndpointFilterFactory(AuthenticatedActorFilter.Create);
+        group.AddEndpointFilterFactory(RequestValidationFilter.Create);
+
+        group.MapGet("", (
+            [FromServices] UsersEndpoints handler,
+            [FromQuery] string currentUsername,
+            [FromQuery] string? query = null,
+            [FromQuery] Guid? conversationId = null,
+            CancellationToken cancellationToken = default) =>
+            handler.Search(currentUsername, query, conversationId, cancellationToken))
+            .WithName("UsersEndpoints.Search");
+
+        group.MapGet("blocked", (
+            [FromServices] UsersEndpoints handler,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.GetBlockedUsers(username, cancellationToken))
+            .WithName("UsersEndpoints.GetBlockedUsers");
+
+        group.MapPut("blocked/{targetUsername}", (
+            [FromServices] UsersEndpoints handler,
+            string targetUsername,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.BlockUser(targetUsername, username, cancellationToken))
+            .WithName("UsersEndpoints.BlockUser");
+
+        group.MapDelete("blocked/{targetUsername}", (
+            [FromServices] UsersEndpoints handler,
+            string targetUsername,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.UnblockUser(targetUsername, username, cancellationToken))
+            .WithName("UsersEndpoints.UnblockUser");
+
+        group.MapPost("avatar", (
+            [FromServices] UsersEndpoints handler,
+            [FromQuery] string username,
+            [FromForm] IFormFile image,
+            CancellationToken cancellationToken) =>
+            handler.UpdateAvatar(username, image, cancellationToken))
+            .WithName("UsersEndpoints.UpdateAvatar")
+            .WithMetadata(new RequestSizeLimitAttribute(6 * 1024 * 1024))
+            .DisableAntiforgery();
+    }
+
+    public async Task<IResult> Search(
         [FromQuery] string currentUsername,
         [FromQuery] string? query = null,
         [FromQuery] Guid? conversationId = null,
@@ -53,8 +102,7 @@ public sealed class UsersController(
         return Ok(users);
     }
 
-    [HttpGet("blocked")]
-    public async Task<ActionResult<IReadOnlyList<string>>> GetBlockedUsers(
+    public async Task<IResult> GetBlockedUsers(
         [FromQuery] string username,
         CancellationToken cancellationToken)
     {
@@ -77,8 +125,7 @@ public sealed class UsersController(
         return Ok(blockedUsernames);
     }
 
-    [HttpPut("blocked/{targetUsername}")]
-    public async Task<ActionResult<UserBlockChangedDto>> BlockUser(
+    public async Task<IResult> BlockUser(
         string targetUsername,
         [FromQuery] string username,
         CancellationToken cancellationToken)
@@ -122,8 +169,7 @@ public sealed class UsersController(
         return Ok(changed);
     }
 
-    [HttpDelete("blocked/{targetUsername}")]
-    public async Task<ActionResult<UserBlockChangedDto>> UnblockUser(
+    public async Task<IResult> UnblockUser(
         string targetUsername,
         [FromQuery] string username,
         CancellationToken cancellationToken)
@@ -155,9 +201,7 @@ public sealed class UsersController(
         return Ok(changed);
     }
 
-    [HttpPost("avatar")]
-    [RequestSizeLimit(6 * 1024 * 1024)]
-    public async Task<ActionResult<UserDto>> UpdateAvatar(
+    public async Task<IResult> UpdateAvatar(
         [FromQuery] string username,
         [FromForm] IFormFile image,
         CancellationToken cancellationToken)

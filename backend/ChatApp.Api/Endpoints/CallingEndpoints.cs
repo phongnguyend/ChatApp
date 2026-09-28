@@ -1,19 +1,33 @@
+using ChatApp.Api.Authentication;
+using static Microsoft.AspNetCore.Http.Results;
 using ChatApp.Application.Abstractions;
 using ChatApp.Persistence;
 using ChatApp.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-namespace ChatApp.Api.Controllers;
+namespace ChatApp.Api.Endpoints;
 
-[ApiController]
-[Route("api/calling")]
-public sealed class CallingController(
+public sealed class CallingEndpoints(
     ChatAppDbContext db,
-    ICallingProvider callingProvider) : ControllerBase
+    ICallingProvider callingProvider)
 {
-    [HttpGet("access")]
-    public async Task<ActionResult<CallingAccessCredential>> GetAccess(
+    public static void Map(IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/calling")
+            .RequireAuthorization();
+        group.AddEndpointFilterFactory(AuthenticatedActorFilter.Create);
+        group.AddEndpointFilterFactory(RequestValidationFilter.Create);
+
+        group.MapGet("access", (
+            [FromServices] CallingEndpoints handler,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.GetAccess(username, cancellationToken))
+            .WithName("CallingEndpoints.GetAccess");
+    }
+
+    public async Task<IResult> GetAccess(
         [FromQuery] string username,
         CancellationToken cancellationToken)
     {

@@ -1,3 +1,5 @@
+using ChatApp.Api.Authentication;
+using static Microsoft.AspNetCore.Http.Results;
 using ChatApp.Infrastructure.Caching;
 using ChatApp.Application.Abstractions;
 using System.Data;
@@ -10,26 +12,86 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
-namespace ChatApp.Api.Controllers;
+namespace ChatApp.Api.Endpoints;
 
-[ApiController]
-[Route("api/recordings")]
-public sealed class RecordingsController(
+public sealed class RecordingsEndpoints(
     ChatAppDbContext db,
     CallStateTracker calls,
     GroupMeetingStateTracker meetings,
     RecordingStateTracker recordingStates,
     ICallingProvider callingProvider,
-    IHubContext<ChatHub> hubContext) : ControllerBase
+    IHubContext<ChatHub> hubContext)
 {
-    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
-    [HttpPost("internal/completed")]
-    public async Task<IActionResult> NotifyRecordingCompleted(
-        RecordingCompletedNotificationRequest request,
+    public static void Map(IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/recordings")
+            .RequireAuthorization();
+        group.AddEndpointFilterFactory(AuthenticatedActorFilter.Create);
+        group.AddEndpointFilterFactory(RequestValidationFilter.Create);
+
+        group.MapGet("conversation/{conversationId:guid}", (
+            [FromServices] RecordingsEndpoints handler,
+            Guid conversationId,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.GetForConversation(conversationId, username, cancellationToken))
+            .WithName("RecordingsEndpoints.GetForConversation");
+
+        group.MapPost("internal/completed", (
+            [FromServices] RecordingsEndpoints handler,
+            HttpContext httpContext,
+            [FromBody] RecordingCompletedNotificationRequest request,
+            CancellationToken cancellationToken) =>
+            handler.NotifyRecordingCompleted(httpContext, request, cancellationToken))
+            .WithName("RecordingsEndpoints.NotifyRecordingCompleted")
+            .AllowAnonymous();
+
+        group.MapPost("", (
+            [FromServices] RecordingsEndpoints handler,
+            [FromQuery] string username,
+            [FromBody] CreateRecordingRequest request,
+            CancellationToken cancellationToken) =>
+            handler.Create(username, request, cancellationToken))
+            .WithName("RecordingsEndpoints.Create");
+
+        group.MapPost("{recordingId:guid}/cancel", (
+            [FromServices] RecordingsEndpoints handler,
+            Guid recordingId,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.Cancel(recordingId, username, cancellationToken))
+            .WithName("RecordingsEndpoints.Cancel");
+
+        group.MapGet("{recordingId:guid}", (
+            [FromServices] RecordingsEndpoints handler,
+            Guid recordingId,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.Get(recordingId, username, cancellationToken))
+            .WithName("RecordingsEndpoints.Get");
+
+        group.MapPost("{recordingId:guid}/check-status", (
+            [FromServices] RecordingsEndpoints handler,
+            Guid recordingId,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.CheckStatus(recordingId, username, cancellationToken))
+            .WithName("RecordingsEndpoints.CheckStatus");
+
+        group.MapDelete("{recordingId:guid}", (
+            [FromServices] RecordingsEndpoints handler,
+            Guid recordingId,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.DeleteIncomplete(recordingId, username, cancellationToken))
+            .WithName("RecordingsEndpoints.DeleteIncomplete");
+    }
+
+    public async Task<IResult> NotifyRecordingCompleted(HttpContext httpContext, RecordingCompletedNotificationRequest request,
         CancellationToken cancellationToken)
     {
-        var configuredKey = HttpContext.RequestServices.GetRequiredService<IConfiguration>()["RecordingCallbacks:Key"];
-        var suppliedKey = Request.Headers["X-Recording-Callback-Key"].ToString();
+        var configuredKey = httpContext.RequestServices.GetRequiredService<IConfiguration>()["RecordingCallbacks:Key"];
+        var suppliedKey = httpContext.Request.Headers["X-Recording-Callback-Key"].ToString();
         if (string.IsNullOrWhiteSpace(configuredKey) || !System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
             System.Text.Encoding.UTF8.GetBytes(configuredKey), System.Text.Encoding.UTF8.GetBytes(suppliedKey)))
             return Unauthorized();
@@ -139,8 +201,7 @@ public sealed class RecordingsController(
         return NoContent();
     }
 
-    [HttpPost]
-    public async Task<ActionResult<RecordingStateDto>> Create(
+    public async Task<IResult> Create(
         [FromQuery] string username,
         CreateRecordingRequest request,
         CancellationToken cancellationToken)
@@ -166,9 +227,7 @@ public sealed class RecordingsController(
                 sessionType,
                 cancellationToken))
         {
-            return StatusCode(
-                StatusCodes.Status403Forbidden,
-                new { message = "Only active call participants can record." });
+            return Json(new { message = "Only active call participants can record." }, statusCode: StatusCodes.Status403Forbidden);
         }
 
         var hasActiveRecording = await db.SessionRecordings.AnyAsync(
@@ -218,8 +277,7 @@ public sealed class RecordingsController(
         return Ok(ToDto(recording, user.DisplayName));
     }
 
-    [HttpPost("{recordingId:guid}/cancel")]
-    public async Task<IActionResult> Cancel(
+    public async Task<IResult> Cancel(
         Guid recordingId,
         [FromQuery] string username,
         CancellationToken cancellationToken)
@@ -260,8 +318,7 @@ public sealed class RecordingsController(
         return NoContent();
     }
 
-    [HttpGet("{recordingId:guid}")]
-    public async Task<ActionResult<RecordingStateDto>> Get(
+    public async Task<IResult> Get(
         Guid recordingId,
         [FromQuery] string username,
         CancellationToken cancellationToken)
@@ -286,8 +343,7 @@ public sealed class RecordingsController(
         return recording is null ? NotFound() : Ok(recording);
     }
 
-    [HttpGet("conversation/{conversationId:guid}")]
-    public async Task<ActionResult<IReadOnlyList<SessionRecordingListItemDto>>>
+    public async Task<IResult>
         GetForConversation(
             Guid conversationId,
             [FromQuery] string username,
@@ -308,7 +364,7 @@ public sealed class RecordingsController(
         var managedProviderName = callingProvider.Name;
         var canCheckManagedRecording = callingProvider.ManagesRecording;
 
-        return await db.SessionRecordings
+        return Ok(await db.SessionRecordings
             .AsNoTracking()
             .Where(recording => recording.ConversationId == conversationId)
             .OrderByDescending(recording => recording.StartedAt)
@@ -341,11 +397,10 @@ public sealed class RecordingsController(
                 canCheckManagedRecording &&
                 recording.Provider == managedProviderName &&
                 recording.ProviderRecordingId != null))
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken));
     }
 
-    [HttpPost("{recordingId:guid}/check-status")]
-    public async Task<ActionResult<RecordingProviderStatusDto>> CheckStatus(
+    public async Task<IResult> CheckStatus(
         Guid recordingId,
         [FromQuery] string username,
         CancellationToken cancellationToken)
@@ -394,15 +449,14 @@ public sealed class RecordingsController(
         }
         await db.SaveChangesAsync(cancellationToken);
 
-        return new RecordingProviderStatusDto(
+        return Ok(new RecordingProviderStatusDto(
             recording.Id,
             recording.Status,
             providerStatus,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow));
     }
 
-    [HttpDelete("{recordingId:guid}")]
-    public async Task<IActionResult> DeleteIncomplete(
+    public async Task<IResult> DeleteIncomplete(
         Guid recordingId,
         [FromQuery] string username,
         CancellationToken cancellationToken)

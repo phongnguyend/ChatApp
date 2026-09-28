@@ -1,17 +1,68 @@
+using ChatApp.Api.Authentication;
+using static Microsoft.AspNetCore.Http.Results;
 using ChatApp.Api.Services;
 using ChatApp.Persistence;
 using ChatApp.Domain.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-namespace ChatApp.Api.Controllers;
+namespace ChatApp.Api.Endpoints;
 
-[ApiController]
-[Route("api/user-reminders")]
-public sealed class UserRemindersController(ChatAppDbContext db) : ControllerBase
+public sealed class UserRemindersEndpoints(ChatAppDbContext db)
 {
-    [HttpGet]
-    public async Task<IActionResult> List([FromQuery] string username,
+    public static void Map(IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/user-reminders")
+            .RequireAuthorization();
+        group.AddEndpointFilterFactory(AuthenticatedActorFilter.Create);
+        group.AddEndpointFilterFactory(RequestValidationFilter.Create);
+
+        group.MapGet("", (
+            [FromServices] UserRemindersEndpoints handler,
+            [FromQuery] string username,
+            [FromQuery] DateOnly? from,
+            [FromQuery] DateOnly? to,
+            [FromQuery] string? name,
+            [FromQuery] string? description,
+            CancellationToken ct) =>
+            handler.List(username, from, to, name, description, ct))
+            .WithName("UserRemindersEndpoints.List");
+
+        group.MapGet("{id:guid}", (
+            [FromServices] UserRemindersEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken ct) =>
+            handler.GetById(id, username, ct))
+            .WithName("UserRemindersEndpoints.GetById");
+
+        group.MapPost("", (
+            [FromServices] UserRemindersEndpoints handler,
+            [FromQuery] string username,
+            [FromBody] SaveUserReminderRequest request,
+            CancellationToken ct) =>
+            handler.Create(username, request, ct))
+            .WithName("UserRemindersEndpoints.Create");
+
+        group.MapPut("{id:guid}", (
+            [FromServices] UserRemindersEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromBody] SaveUserReminderRequest request,
+            CancellationToken ct) =>
+            handler.Update(id, username, request, ct))
+            .WithName("UserRemindersEndpoints.Update");
+
+        group.MapDelete("{id:guid}", (
+            [FromServices] UserRemindersEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken ct) =>
+            handler.Delete(id, username, ct))
+            .WithName("UserRemindersEndpoints.Delete");
+    }
+
+    public async Task<IResult> List([FromQuery] string username,
         [FromQuery] DateOnly? from, [FromQuery] DateOnly? to,
         [FromQuery] string? name, [FromQuery] string? description,
         CancellationToken ct)
@@ -42,8 +93,7 @@ public sealed class UserRemindersController(ChatAppDbContext db) : ControllerBas
         return Ok(reminders.Select(ToDto).ToArray());
     }
 
-    [HttpGet("{id:guid}")]
-    public async Task<IActionResult> GetById(Guid id, [FromQuery] string username,
+    public async Task<IResult> GetById(Guid id, [FromQuery] string username,
         CancellationToken ct)
     {
         var userId = await FindUserId(username, ct);
@@ -53,8 +103,7 @@ public sealed class UserRemindersController(ChatAppDbContext db) : ControllerBas
         return reminder is null ? NotFound() : Ok(ToDto(reminder));
     }
 
-    [HttpPost]
-    public async Task<IActionResult> Create([FromQuery] string username,
+    public async Task<IResult> Create([FromQuery] string username,
         SaveUserReminderRequest request, CancellationToken ct)
     {
         var userId = await FindUserId(username, ct);
@@ -71,12 +120,11 @@ public sealed class UserRemindersController(ChatAppDbContext db) : ControllerBas
         };
         db.UserReminders.Add(reminder);
         await db.SaveChangesAsync(ct);
-        return CreatedAtAction(nameof(GetById),
+        return CreatedAtRoute("UserRemindersEndpoints.GetById",
             new { id = reminder.Id, username }, ToDto(reminder));
     }
 
-    [HttpPut("{id:guid}")]
-    public async Task<IActionResult> Update(Guid id, [FromQuery] string username,
+    public async Task<IResult> Update(Guid id, [FromQuery] string username,
         SaveUserReminderRequest request, CancellationToken ct)
     {
         var userId = await FindUserId(username, ct);
@@ -95,8 +143,7 @@ public sealed class UserRemindersController(ChatAppDbContext db) : ControllerBas
         return Ok(ToDto(reminder));
     }
 
-    [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id, [FromQuery] string username,
+    public async Task<IResult> Delete(Guid id, [FromQuery] string username,
         CancellationToken ct)
     {
         var userId = await FindUserId(username, ct);

@@ -1,3 +1,5 @@
+using ChatApp.Api.Authentication;
+using static Microsoft.AspNetCore.Http.Results;
 using ChatApp.Application.Contracts;
 using ChatApp.Persistence;
 using ChatApp.Api.Hubs;
@@ -7,14 +9,71 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
-namespace ChatApp.Api.Controllers;
+namespace ChatApp.Api.Endpoints;
 
-[ApiController]
-[Route("api/messages")]
-public sealed class MessagesController(
+public sealed class MessagesEndpoints(
     ChatAppDbContext db,
-    IHubContext<ChatHub> hubContext) : ControllerBase
+    IHubContext<ChatHub> hubContext)
 {
+    public static void Map(IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/messages")
+            .RequireAuthorization();
+        group.AddEndpointFilterFactory(AuthenticatedActorFilter.Create);
+        group.AddEndpointFilterFactory(RequestValidationFilter.Create);
+
+        group.MapPatch("{id:guid}", (
+            [FromServices] MessagesEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromBody] UpdateMessageRequest request,
+            CancellationToken cancellationToken) =>
+            handler.Edit(id, username, request, cancellationToken))
+            .WithName("MessagesEndpoints.Edit");
+
+        group.MapDelete("{id:guid}", (
+            [FromServices] MessagesEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.Delete(id, username, cancellationToken))
+            .WithName("MessagesEndpoints.Delete");
+
+        group.MapPost("{id:guid}/reactions", (
+            [FromServices] MessagesEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromBody] ToggleMessageReactionRequest request,
+            CancellationToken cancellationToken) =>
+            handler.ToggleReaction(id, username, request, cancellationToken))
+            .WithName("MessagesEndpoints.ToggleReaction");
+
+        group.MapPost("{id:guid}/pin", (
+            [FromServices] MessagesEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.Pin(id, username, cancellationToken))
+            .WithName("MessagesEndpoints.Pin");
+
+        group.MapPost("{id:guid}/poll-vote", (
+            [FromServices] MessagesEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromBody] VoteMessagePollRequest request,
+            CancellationToken cancellationToken) =>
+            handler.VoteInPoll(id, username, request, cancellationToken))
+            .WithName("MessagesEndpoints.VoteInPoll");
+
+        group.MapDelete("{id:guid}/pin", (
+            [FromServices] MessagesEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.Unpin(id, username, cancellationToken))
+            .WithName("MessagesEndpoints.Unpin");
+    }
+
     private static readonly HashSet<string> AllowedReactions =
     [
         "👍",
@@ -25,8 +84,7 @@ public sealed class MessagesController(
         "🎉"
     ];
 
-    [HttpPatch("{id:guid}")]
-    public async Task<ActionResult<MessageChangedDto>> Edit(
+    public async Task<IResult> Edit(
         Guid id,
         [FromQuery] string username,
         UpdateMessageRequest request,
@@ -90,8 +148,7 @@ public sealed class MessagesController(
         return Ok(changed);
     }
 
-    [HttpDelete("{id:guid}")]
-    public async Task<ActionResult<MessageChangedDto>> Delete(
+    public async Task<IResult> Delete(
         Guid id,
         [FromQuery] string username,
         CancellationToken cancellationToken)
@@ -163,8 +220,7 @@ public sealed class MessagesController(
         return Ok(changed);
     }
 
-    [HttpPost("{id:guid}/reactions")]
-    public async Task<ActionResult<MessageReactionChangedDto>> ToggleReaction(
+    public async Task<IResult> ToggleReaction(
         Guid id,
         [FromQuery] string username,
         ToggleMessageReactionRequest request,
@@ -247,8 +303,7 @@ public sealed class MessagesController(
         return Ok(changed);
     }
 
-    [HttpPost("{id:guid}/pin")]
-    public async Task<ActionResult<MessagePinDto>> Pin(
+    public async Task<IResult> Pin(
         Guid id,
         [FromQuery] string username,
         CancellationToken cancellationToken)
@@ -286,8 +341,7 @@ public sealed class MessagesController(
         return Ok(result);
     }
 
-    [HttpPost("{id:guid}/poll-vote")]
-    public async Task<ActionResult<MessagePollVoteChangedDto>> VoteInPoll(
+    public async Task<IResult> VoteInPoll(
         Guid id,
         [FromQuery] string username,
         VoteMessagePollRequest request,
@@ -379,8 +433,7 @@ public sealed class MessagesController(
         return Ok(changed);
     }
 
-    [HttpDelete("{id:guid}/pin")]
-    public async Task<IActionResult> Unpin(
+    public async Task<IResult> Unpin(
         Guid id,
         [FromQuery] string username,
         CancellationToken cancellationToken)

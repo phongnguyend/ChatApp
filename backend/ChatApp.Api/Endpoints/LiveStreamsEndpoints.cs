@@ -1,3 +1,5 @@
+using ChatApp.Api.Authentication;
+using static Microsoft.AspNetCore.Http.Results;
 using ChatApp.Application.Abstractions;
 using System.Data;
 using ChatApp.Application.Contracts;
@@ -9,18 +11,95 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
-namespace ChatApp.Api.Controllers;
+namespace ChatApp.Api.Endpoints;
 
-[ApiController]
-[Route("api/live-streams")]
-public sealed class LiveStreamsController(
+public sealed class LiveStreamsEndpoints(
     ChatAppDbContext db,
     IHubContext<ChatHub> hubContext,
     ICallingProvider callingProvider,
-    ILogger<LiveStreamsController> logger) : ControllerBase
+    ILogger<LiveStreamsEndpoints> logger)
 {
-    [HttpGet("active")]
-    public async Task<ActionResult<IReadOnlyList<LiveStreamDto>>> GetActive(
+    public static void Map(IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/live-streams")
+            .RequireAuthorization();
+        group.AddEndpointFilterFactory(AuthenticatedActorFilter.Create);
+        group.AddEndpointFilterFactory(RequestValidationFilter.Create);
+
+        group.MapGet("active", (
+            [FromServices] LiveStreamsEndpoints handler,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.GetActive(username, cancellationToken))
+            .WithName("LiveStreamsEndpoints.GetActive");
+
+        group.MapGet("joined", (
+            [FromServices] LiveStreamsEndpoints handler,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.GetJoined(username, cancellationToken))
+            .WithName("LiveStreamsEndpoints.GetJoined");
+
+        group.MapPost("", (
+            [FromServices] LiveStreamsEndpoints handler,
+            [FromQuery] string username,
+            [FromBody] CreateLiveStreamRequest request,
+            CancellationToken cancellationToken) =>
+            handler.Create(username, request, cancellationToken))
+            .WithName("LiveStreamsEndpoints.Create");
+
+        group.MapPost("{conversationId:guid}/start", (
+            [FromServices] LiveStreamsEndpoints handler,
+            Guid conversationId,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.Start(conversationId, username, cancellationToken))
+            .WithName("LiveStreamsEndpoints.Start");
+
+        group.MapPost("{conversationId:guid}/stop", (
+            [FromServices] LiveStreamsEndpoints handler,
+            Guid conversationId,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.Stop(conversationId, username, cancellationToken))
+            .WithName("LiveStreamsEndpoints.Stop");
+
+        group.MapPost("{conversationId:guid}/join", (
+            [FromServices] LiveStreamsEndpoints handler,
+            Guid conversationId,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.Join(conversationId, username, cancellationToken))
+            .WithName("LiveStreamsEndpoints.Join");
+
+        group.MapPost("{conversationId:guid}/leave", (
+            [FromServices] LiveStreamsEndpoints handler,
+            Guid conversationId,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.Leave(conversationId, username, cancellationToken))
+            .WithName("LiveStreamsEndpoints.Leave");
+
+        group.MapPost("{conversationId:guid}/sessions/join", (
+            [FromServices] LiveStreamsEndpoints handler,
+            Guid conversationId,
+            [FromQuery] string username,
+            [FromBody] LiveStreamSessionPresenceRequest request,
+            CancellationToken cancellationToken) =>
+            handler.JoinSession(conversationId, username, request, cancellationToken))
+            .WithName("LiveStreamsEndpoints.JoinSession");
+
+        group.MapPost("{conversationId:guid}/sessions/leave", (
+            [FromServices] LiveStreamsEndpoints handler,
+            Guid conversationId,
+            [FromQuery] string username,
+            [FromBody] LiveStreamSessionPresenceRequest request,
+            CancellationToken cancellationToken) =>
+            handler.LeaveSession(conversationId, username, request, cancellationToken))
+            .WithName("LiveStreamsEndpoints.LeaveSession");
+    }
+
+    public async Task<IResult> GetActive(
         [FromQuery] string username,
         CancellationToken cancellationToken)
     {
@@ -48,8 +127,7 @@ public sealed class LiveStreamsController(
         }).ToArray());
     }
 
-    [HttpGet("joined")]
-    public async Task<ActionResult<IReadOnlyList<LiveStreamDto>>> GetJoined(
+    public async Task<IResult> GetJoined(
         [FromQuery] string username,
         CancellationToken cancellationToken)
     {
@@ -78,8 +156,7 @@ public sealed class LiveStreamsController(
             .ToArray());
     }
 
-    [HttpPost]
-    public async Task<ActionResult<LiveStreamDto>> Create(
+    public async Task<IResult> Create(
         [FromQuery] string username,
         CreateLiveStreamRequest request,
         CancellationToken cancellationToken)
@@ -108,14 +185,12 @@ public sealed class LiveStreamsController(
         });
         db.Conversations.Add(conversation);
         await db.SaveChangesAsync(cancellationToken);
-        return CreatedAtAction(
-            nameof(GetJoined),
+        return CreatedAtRoute("LiveStreamsEndpoints.GetJoined",
             new { username },
             ToDto(conversation, null, user.Id));
     }
 
-    [HttpPost("{conversationId:guid}/start")]
-    public async Task<ActionResult<LiveStreamDto>> Start(
+    public async Task<IResult> Start(
         Guid conversationId,
         [FromQuery] string username,
         CancellationToken cancellationToken)
@@ -182,8 +257,7 @@ public sealed class LiveStreamsController(
         return Ok(ToDto(conversation, session, user.Id));
     }
 
-    [HttpPost("{conversationId:guid}/stop")]
-    public async Task<ActionResult<LiveStreamDto>> Stop(
+    public async Task<IResult> Stop(
         Guid conversationId,
         [FromQuery] string username,
         CancellationToken cancellationToken)
@@ -251,8 +325,7 @@ public sealed class LiveStreamsController(
         return Ok(ToDto(session, user.Id));
     }
 
-    [HttpPost("{conversationId:guid}/join")]
-    public async Task<ActionResult<LiveStreamDto>> Join(
+    public async Task<IResult> Join(
         Guid conversationId,
         [FromQuery] string username,
         CancellationToken cancellationToken)
@@ -286,8 +359,7 @@ public sealed class LiveStreamsController(
         return Ok(ToDto(session, user.Id));
     }
 
-    [HttpPost("{conversationId:guid}/leave")]
-    public async Task<IActionResult> Leave(
+    public async Task<IResult> Leave(
         Guid conversationId,
         [FromQuery] string username,
         CancellationToken cancellationToken)
@@ -316,8 +388,7 @@ public sealed class LiveStreamsController(
         return NoContent();
     }
 
-    [HttpPost("{conversationId:guid}/sessions/join")]
-    public Task<IActionResult> JoinSession(
+    public Task<IResult> JoinSession(
         Guid conversationId,
         [FromQuery] string username,
         LiveStreamSessionPresenceRequest request,
@@ -330,8 +401,7 @@ public sealed class LiveStreamsController(
             requireActiveSession: true,
             cancellationToken: cancellationToken);
 
-    [HttpPost("{conversationId:guid}/sessions/leave")]
-    public Task<IActionResult> LeaveSession(
+    public Task<IResult> LeaveSession(
         Guid conversationId,
         [FromQuery] string username,
         LiveStreamSessionPresenceRequest request,
@@ -362,7 +432,7 @@ public sealed class LiveStreamsController(
             "LiveStreamsChanged",
             cancellationToken: cancellationToken);
 
-    private async Task<IActionResult> ChangeSessionPresence(
+    private async Task<IResult> ChangeSessionPresence(
         Guid conversationId,
         string username,
         Guid sessionId,
@@ -414,7 +484,7 @@ public sealed class LiveStreamsController(
         return NoContent();
     }
 
-    private async Task<IActionResult?> StartLiveStreamRecording(
+    private async Task<IResult?> StartLiveStreamRecording(
         LiveStreamSession session,
         ChatUser host,
         CancellationToken cancellationToken)

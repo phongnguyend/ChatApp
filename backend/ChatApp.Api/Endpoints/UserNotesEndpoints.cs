@@ -1,3 +1,5 @@
+using ChatApp.Api.Authentication;
+using static Microsoft.AspNetCore.Http.Results;
 using System.Data;
 using ChatApp.Api.Services;
 using ChatApp.Persistence;
@@ -5,14 +7,94 @@ using ChatApp.Domain.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-namespace ChatApp.Api.Controllers;
+namespace ChatApp.Api.Endpoints;
 
-[ApiController]
-[Route("api/user-notes")]
-public sealed class UserNotesController(ChatAppDbContext db) : ControllerBase
+public sealed class UserNotesEndpoints(ChatAppDbContext db)
 {
-    [HttpGet]
-    public async Task<IActionResult> List([FromQuery] string username, CancellationToken ct)
+    public static void Map(IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/user-notes")
+            .RequireAuthorization();
+        group.AddEndpointFilterFactory(AuthenticatedActorFilter.Create);
+        group.AddEndpointFilterFactory(RequestValidationFilter.Create);
+
+        group.MapGet("", (
+            [FromServices] UserNotesEndpoints handler,
+            [FromQuery] string username,
+            CancellationToken ct) =>
+            handler.List(username, ct))
+            .WithName("UserNotesEndpoints.List");
+
+        group.MapGet("{id:guid}", (
+            [FromServices] UserNotesEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken ct) =>
+            handler.GetById(id, username, ct))
+            .WithName("UserNotesEndpoints.GetById");
+
+        group.MapPost("", (
+            [FromServices] UserNotesEndpoints handler,
+            [FromQuery] string username,
+            [FromBody] SaveUserNoteRequest request,
+            CancellationToken ct) =>
+            handler.Create(username, request, ct))
+            .WithName("UserNotesEndpoints.Create");
+
+        group.MapPut("{id:guid}", (
+            [FromServices] UserNotesEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromBody] SaveUserNoteRequest request,
+            CancellationToken ct) =>
+            handler.Update(id, username, request, ct))
+            .WithName("UserNotesEndpoints.Update");
+
+        group.MapPatch("{id:guid}/pin", (
+            [FromServices] UserNotesEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromBody] SetUserNotePinRequest request,
+            CancellationToken ct) =>
+            handler.SetPin(id, username, request, ct))
+            .WithName("UserNotesEndpoints.SetPin");
+
+        group.MapDelete("{id:guid}", (
+            [FromServices] UserNotesEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken ct) =>
+            handler.Delete(id, username, ct))
+            .WithName("UserNotesEndpoints.Delete");
+
+        group.MapGet("{id:guid}/shares", (
+            [FromServices] UserNotesEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken ct) =>
+            handler.GetShares(id, username, ct))
+            .WithName("UserNotesEndpoints.GetShares");
+
+        group.MapPut("{id:guid}/shares", (
+            [FromServices] UserNotesEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromBody] SaveUserNoteShareRequest request,
+            CancellationToken ct) =>
+            handler.PutShare(id, username, request, ct))
+            .WithName("UserNotesEndpoints.PutShare");
+
+        group.MapDelete("{id:guid}/shares/{shareId:guid}", (
+            [FromServices] UserNotesEndpoints handler,
+            Guid id,
+            Guid shareId,
+            [FromQuery] string username,
+            CancellationToken ct) =>
+            handler.RemoveShare(id, shareId, username, ct))
+            .WithName("UserNotesEndpoints.RemoveShare");
+    }
+
+    public async Task<IResult> List([FromQuery] string username, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
         if (user is null) return NotFound();
@@ -26,8 +108,7 @@ public sealed class UserNotesController(ChatAppDbContext db) : ControllerBase
         return Ok(notes.Select(x => ToDto(x, user.Id)).ToArray());
     }
 
-    [HttpGet("{id:guid}")]
-    public async Task<IActionResult> GetById(Guid id, [FromQuery] string username,
+    public async Task<IResult> GetById(Guid id, [FromQuery] string username,
         CancellationToken ct)
     {
         var user = await FindUser(username, ct);
@@ -38,8 +119,7 @@ public sealed class UserNotesController(ChatAppDbContext db) : ControllerBase
         return note is null ? NotFound() : Ok(ToDto(note, user.Id));
     }
 
-    [HttpPost]
-    public async Task<IActionResult> Create([FromQuery] string username,
+    public async Task<IResult> Create([FromQuery] string username,
         SaveUserNoteRequest request, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
@@ -55,12 +135,11 @@ public sealed class UserNotesController(ChatAppDbContext db) : ControllerBase
         };
         db.UserNotes.Add(note);
         await db.SaveChangesAsync(ct);
-        return CreatedAtAction(nameof(GetById),
+        return CreatedAtRoute("UserNotesEndpoints.GetById",
             new { id = note.Id, username }, ToDto(note, user.Id));
     }
 
-    [HttpPut("{id:guid}")]
-    public async Task<IActionResult> Update(Guid id, [FromQuery] string username,
+    public async Task<IResult> Update(Guid id, [FromQuery] string username,
         SaveUserNoteRequest request, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
@@ -79,8 +158,7 @@ public sealed class UserNotesController(ChatAppDbContext db) : ControllerBase
         return Ok(ToDto(note, user.Id));
     }
 
-    [HttpPatch("{id:guid}/pin")]
-    public async Task<IActionResult> SetPin(Guid id, [FromQuery] string username,
+    public async Task<IResult> SetPin(Guid id, [FromQuery] string username,
         SetUserNotePinRequest request, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
@@ -94,8 +172,7 @@ public sealed class UserNotesController(ChatAppDbContext db) : ControllerBase
         return Ok(ToDto(note, user.Id));
     }
 
-    [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id, [FromQuery] string username,
+    public async Task<IResult> Delete(Guid id, [FromQuery] string username,
         CancellationToken ct)
     {
         var user = await FindUser(username, ct);
@@ -108,8 +185,7 @@ public sealed class UserNotesController(ChatAppDbContext db) : ControllerBase
         return NoContent();
     }
 
-    [HttpGet("{id:guid}/shares")]
-    public async Task<IActionResult> GetShares(Guid id, [FromQuery] string username,
+    public async Task<IResult> GetShares(Guid id, [FromQuery] string username,
         CancellationToken ct)
     {
         var user = await FindUser(username, ct);
@@ -124,8 +200,7 @@ public sealed class UserNotesController(ChatAppDbContext db) : ControllerBase
         return Ok(shares);
     }
 
-    [HttpPut("{id:guid}/shares")]
-    public async Task<IActionResult> PutShare(Guid id, [FromQuery] string username,
+    public async Task<IResult> PutShare(Guid id, [FromQuery] string username,
         SaveUserNoteShareRequest request, CancellationToken ct)
     {
         var user = await FindUser(username, ct);
@@ -170,8 +245,7 @@ public sealed class UserNotesController(ChatAppDbContext db) : ControllerBase
             grantee.DisplayName, share.Permission));
     }
 
-    [HttpDelete("{id:guid}/shares/{shareId:guid}")]
-    public async Task<IActionResult> RemoveShare(Guid id, Guid shareId,
+    public async Task<IResult> RemoveShare(Guid id, Guid shareId,
         [FromQuery] string username, CancellationToken ct)
     {
         var user = await FindUser(username, ct);

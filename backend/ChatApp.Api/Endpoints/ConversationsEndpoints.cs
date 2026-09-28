@@ -1,3 +1,5 @@
+using ChatApp.Api.Authentication;
+using static Microsoft.AspNetCore.Http.Results;
 using ChatApp.Infrastructure.Notification;
 using ChatApp.Infrastructure.Caching;
 using System.Data;
@@ -12,20 +14,172 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using QRCoder;
 
-namespace ChatApp.Api.Controllers;
+namespace ChatApp.Api.Endpoints;
 
-[ApiController]
-[Route("api/conversations")]
-public sealed class ConversationsController(
+public sealed class ConversationsEndpoints(
     ChatAppDbContext db,
     IHubContext<ChatHub> hubContext,
     PresenceTracker presence,
     IAvatarStorage avatarStorage,
     IMessageAttachmentStorage attachmentStorage,
-    AzurePushNotificationService pushNotifications) : ControllerBase
+    AzurePushNotificationService pushNotifications)
 {
-    [HttpGet("{id:guid}/join-qr-code")]
-    public async Task<IActionResult> GetJoinQrCode(
+    public static void Map(IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/conversations")
+            .RequireAuthorization();
+        group.AddEndpointFilterFactory(AuthenticatedActorFilter.Create);
+        group.AddEndpointFilterFactory(RequestValidationFilter.Create);
+
+        group.MapGet("{id:guid}/join-qr-code", (
+            [FromServices] ConversationsEndpoints handler,
+            Guid id,
+            [FromQuery] string origin,
+            CancellationToken cancellationToken) =>
+            handler.GetJoinQrCode(id, origin, cancellationToken))
+            .WithName("ConversationsEndpoints.GetJoinQrCode");
+
+        group.MapGet("", (
+            [FromServices] ConversationsEndpoints handler,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.GetForUser(username, cancellationToken))
+            .WithName("ConversationsEndpoints.GetForUser");
+
+        group.MapPatch("{id:guid}/members/me/mute", (
+            [FromServices] ConversationsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromBody] UpdateConversationMuteRequest request,
+            CancellationToken cancellationToken) =>
+            handler.UpdateMute(id, username, request, cancellationToken))
+            .WithName("ConversationsEndpoints.UpdateMute");
+
+        group.MapPost("", (
+            [FromServices] ConversationsEndpoints handler,
+            [FromQuery] string username,
+            [FromBody] CreateConversationRequest request,
+            CancellationToken cancellationToken) =>
+            handler.CreateGroup(username, request, cancellationToken))
+            .WithName("ConversationsEndpoints.CreateGroup");
+
+        group.MapPost("direct", (
+            [FromServices] ConversationsEndpoints handler,
+            [FromQuery] string username,
+            [FromBody] CreateDirectConversationRequest request,
+            CancellationToken cancellationToken) =>
+            handler.CreateDirect(username, request, cancellationToken))
+            .WithName("ConversationsEndpoints.CreateDirect");
+
+        group.MapPost("{id:guid}/avatar", (
+            [FromServices] ConversationsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromForm] IFormFile image,
+            CancellationToken cancellationToken) =>
+            handler.UpdateGroupAvatar(id, username, image, cancellationToken))
+            .WithName("ConversationsEndpoints.UpdateGroupAvatar")
+            .WithMetadata(new RequestSizeLimitAttribute(6 * 1024 * 1024))
+            .DisableAntiforgery();
+
+        group.MapPatch("{id:guid}/title", (
+            [FromServices] ConversationsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromBody] UpdateConversationTitleRequest request,
+            CancellationToken cancellationToken) =>
+            handler.RenameGroup(id, username, request, cancellationToken))
+            .WithName("ConversationsEndpoints.RenameGroup");
+
+        group.MapDelete("{id:guid}/members/me", (
+            [FromServices] ConversationsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.LeaveGroup(id, username, cancellationToken))
+            .WithName("ConversationsEndpoints.LeaveGroup");
+
+        group.MapGet("{id:guid}/messages", (
+            [FromServices] ConversationsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromQuery] int limit = 80,
+            [FromQuery] Guid? aroundMessageId = null,
+            CancellationToken cancellationToken = default) =>
+            handler.GetMessages(id, username, limit, aroundMessageId, cancellationToken))
+            .WithName("ConversationsEndpoints.GetMessages");
+
+        group.MapPost("{id:guid}/polls", (
+            [FromServices] ConversationsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromBody] CreateMessagePollRequest request,
+            CancellationToken cancellationToken) =>
+            handler.CreatePoll(id, username, request, cancellationToken))
+            .WithName("ConversationsEndpoints.CreatePoll");
+
+        group.MapGet("{id:guid}/pinned-messages", (
+            [FromServices] ConversationsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.GetPinnedMessages(id, username, cancellationToken))
+            .WithName("ConversationsEndpoints.GetPinnedMessages");
+
+        group.MapPost("{id:guid}/messages/attachments", (
+            [FromServices] ConversationsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromForm] List<IFormFile> files,
+            [FromForm] string? content,
+            [FromForm] string clientMessageId,
+            [FromForm] Guid? replyToMessageId,
+            [FromForm] List<Guid>? mentionedUserIds,
+            CancellationToken cancellationToken,
+            [FromForm] bool mentionEveryone = default) =>
+            handler.SendAttachmentMessage(id, username, files, content, clientMessageId, replyToMessageId, mentionedUserIds, mentionEveryone, cancellationToken))
+            .WithName("ConversationsEndpoints.SendAttachmentMessage")
+            .WithMetadata(new RequestSizeLimitAttribute(80 * 1024 * 1024))
+            .DisableAntiforgery();
+
+        group.MapGet("{id:guid}/members", (
+            [FromServices] ConversationsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.GetMembers(id, username, cancellationToken))
+            .WithName("ConversationsEndpoints.GetMembers");
+
+        group.MapPatch("{id:guid}/members/{memberUserId:guid}/role", (
+            [FromServices] ConversationsEndpoints handler,
+            Guid id,
+            Guid memberUserId,
+            [FromQuery] string username,
+            [FromBody] UpdateConversationMemberRoleRequest request,
+            CancellationToken cancellationToken) =>
+            handler.UpdateMemberRole(id, memberUserId, username, request, cancellationToken))
+            .WithName("ConversationsEndpoints.UpdateMemberRole");
+
+        group.MapDelete("{id:guid}/members/{memberUserId:guid}", (
+            [FromServices] ConversationsEndpoints handler,
+            Guid id,
+            Guid memberUserId,
+            [FromQuery] string username,
+            CancellationToken cancellationToken) =>
+            handler.RemoveMember(id, memberUserId, username, cancellationToken))
+            .WithName("ConversationsEndpoints.RemoveMember");
+
+        group.MapPost("{id:guid}/members", (
+            [FromServices] ConversationsEndpoints handler,
+            Guid id,
+            [FromQuery] string username,
+            [FromBody] AddConversationMembersRequest request,
+            CancellationToken cancellationToken) =>
+            handler.AddMembers(id, username, request, cancellationToken))
+            .WithName("ConversationsEndpoints.AddMembers");
+    }
+
+    public async Task<IResult> GetJoinQrCode(
         Guid id,
         [FromQuery] string origin,
         CancellationToken cancellationToken)
@@ -57,8 +211,7 @@ public sealed class ConversationsController(
         return File(qrCode.GetGraphic(12), "image/png");
     }
 
-    [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<ConversationDto>>> GetForUser(
+    public async Task<IResult> GetForUser(
         [FromQuery] string username,
         CancellationToken cancellationToken)
     {
@@ -151,8 +304,7 @@ public sealed class ConversationsController(
         return Ok(conversations);
     }
 
-    [HttpPatch("{id:guid}/members/me/mute")]
-    public async Task<ActionResult<ConversationMuteChangedDto>> UpdateMute(
+    public async Task<IResult> UpdateMute(
         Guid id,
         [FromQuery] string username,
         UpdateConversationMuteRequest request,
@@ -188,8 +340,7 @@ public sealed class ConversationsController(
         return Ok(changed);
     }
 
-    [HttpPost]
-    public async Task<ActionResult<ConversationDto>> CreateGroup(
+    public async Task<IResult> CreateGroup(
         [FromQuery] string username,
         CreateConversationRequest request,
         CancellationToken cancellationToken)
@@ -282,14 +433,12 @@ public sealed class ConversationsController(
             result,
             cancellationToken);
 
-        return CreatedAtAction(
-            nameof(GetMessages),
+        return CreatedAtRoute("ConversationsEndpoints.GetMessages",
             new { id = conversation.Id, username },
             result);
     }
 
-    [HttpPost("direct")]
-    public async Task<ActionResult<ConversationDto>> CreateDirect(
+    public async Task<IResult> CreateDirect(
         [FromQuery] string username,
         CreateDirectConversationRequest request,
         CancellationToken cancellationToken)
@@ -424,15 +573,12 @@ public sealed class ConversationsController(
             false,
             cancellationToken);
 
-        return CreatedAtAction(
-            nameof(GetMessages),
+        return CreatedAtRoute("ConversationsEndpoints.GetMessages",
             new { id = conversation.Id, username },
             created);
     }
 
-    [HttpPost("{id:guid}/avatar")]
-    [RequestSizeLimit(6 * 1024 * 1024)]
-    public async Task<ActionResult<ConversationAvatarUpdatedDto>> UpdateGroupAvatar(
+    public async Task<IResult> UpdateGroupAvatar(
         Guid id,
         [FromQuery] string username,
         [FromForm] IFormFile image,
@@ -487,8 +633,7 @@ public sealed class ConversationsController(
         return Ok(updated);
     }
 
-    [HttpPatch("{id:guid}/title")]
-    public async Task<ActionResult<ConversationRenamedDto>> RenameGroup(
+    public async Task<IResult> RenameGroup(
         Guid id,
         [FromQuery] string username,
         UpdateConversationTitleRequest request,
@@ -606,8 +751,7 @@ public sealed class ConversationsController(
         return Ok(renamed);
     }
 
-    [HttpDelete("{id:guid}/members/me")]
-    public async Task<IActionResult> LeaveGroup(
+    public async Task<IResult> LeaveGroup(
         Guid id,
         [FromQuery] string username,
         CancellationToken cancellationToken)
@@ -733,8 +877,7 @@ public sealed class ConversationsController(
         return NoContent();
     }
 
-    [HttpGet("{id:guid}/messages")]
-    public async Task<ActionResult<IReadOnlyList<MessageDto>>> GetMessages(
+    public async Task<IResult> GetMessages(
         Guid id,
         [FromQuery] string username,
         [FromQuery] int limit = 80,
@@ -864,8 +1007,7 @@ public sealed class ConversationsController(
         return Ok(messages);
     }
 
-    [HttpPost("{id:guid}/polls")]
-    public async Task<ActionResult<MessageDto>> CreatePoll(
+    public async Task<IResult> CreatePoll(
         Guid id,
         [FromQuery] string username,
         CreateMessagePollRequest request,
@@ -908,10 +1050,10 @@ public sealed class ConversationsController(
         if (await DirectMessagingPolicy.IsBlockedAsync(
                 db, sender.Id, id, cancellationToken))
         {
-            return StatusCode(StatusCodes.Status403Forbidden, new
+            return Json(new
             {
                 message = "Messages cannot be sent while either user has blocked the other."
-            });
+            }, statusCode: StatusCodes.Status403Forbidden);
         }
 
         await using var transaction = await db.Database.BeginTransactionAsync(
@@ -1013,8 +1155,7 @@ public sealed class ConversationsController(
         return Ok(result);
     }
 
-    [HttpGet("{id:guid}/pinned-messages")]
-    public async Task<ActionResult<IReadOnlyList<MessagePinDto>>> GetPinnedMessages(
+    public async Task<IResult> GetPinnedMessages(
         Guid id,
         [FromQuery] string username,
         CancellationToken cancellationToken)
@@ -1046,9 +1187,7 @@ public sealed class ConversationsController(
         return Ok(pins);
     }
 
-    [HttpPost("{id:guid}/messages/attachments")]
-    [RequestSizeLimit(80 * 1024 * 1024)]
-    public async Task<ActionResult<MessageDto>> SendAttachmentMessage(
+    public async Task<IResult> SendAttachmentMessage(
         Guid id,
         [FromQuery] string username,
         [FromForm] List<IFormFile> files,
@@ -1139,13 +1278,11 @@ public sealed class ConversationsController(
                 id,
                 cancellationToken))
         {
-            return StatusCode(
-                StatusCodes.Status403Forbidden,
-                new
+            return Json(new
                 {
                     message =
                         "Messages cannot be sent while either user has blocked the other."
-                });
+                }, statusCode: StatusCodes.Status403Forbidden);
         }
 
         var storageScopeId = Guid.NewGuid();
@@ -1336,8 +1473,7 @@ public sealed class ConversationsController(
         }
     }
 
-    [HttpGet("{id:guid}/members")]
-    public async Task<ActionResult<IReadOnlyList<ConversationMemberDto>>> GetMembers(
+    public async Task<IResult> GetMembers(
         Guid id,
         [FromQuery] string username,
         CancellationToken cancellationToken)
@@ -1350,8 +1486,7 @@ public sealed class ConversationsController(
         return Ok(await GetMemberDtos(id, cancellationToken));
     }
 
-    [HttpPatch("{id:guid}/members/{memberUserId:guid}/role")]
-    public async Task<ActionResult<IReadOnlyList<ConversationMemberDto>>> UpdateMemberRole(
+    public async Task<IResult> UpdateMemberRole(
         Guid id,
         Guid memberUserId,
         [FromQuery] string username,
@@ -1476,8 +1611,7 @@ public sealed class ConversationsController(
         return Ok(await GetMemberDtos(id, cancellationToken));
     }
 
-    [HttpDelete("{id:guid}/members/{memberUserId:guid}")]
-    public async Task<IActionResult> RemoveMember(
+    public async Task<IResult> RemoveMember(
         Guid id,
         Guid memberUserId,
         [FromQuery] string username,
@@ -1615,8 +1749,7 @@ public sealed class ConversationsController(
         return NoContent();
     }
 
-    [HttpPost("{id:guid}/members")]
-    public async Task<ActionResult<IReadOnlyList<ConversationMemberDto>>> AddMembers(
+    public async Task<IResult> AddMembers(
         Guid id,
         [FromQuery] string username,
         AddConversationMembersRequest request,

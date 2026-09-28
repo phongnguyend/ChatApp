@@ -1,12 +1,12 @@
+using static Microsoft.AspNetCore.Http.Results;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-namespace ChatApp.Api.Controllers;
+namespace ChatApp.Api.Endpoints;
 
-public sealed partial class DocumentsController
+public sealed partial class DocumentsEndpoints
 {
-    [HttpGet("conversation-files")]
-    public async Task<IActionResult> ConversationFiles([FromQuery] string username,
+    public async Task<IResult> ConversationFiles([FromQuery] string username,
         [FromQuery] string scope, [FromQuery] string? query, [FromQuery] int offset,
         CancellationToken cancellationToken)
     {

@@ -1,26 +1,25 @@
+using static Microsoft.AspNetCore.Http.Results;
 using System.Security.Cryptography;
 using ChatApp.Domain.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-namespace ChatApp.Api.Controllers;
+namespace ChatApp.Api.Endpoints;
 
-public sealed partial class DocumentsController
+public sealed partial class DocumentsEndpoints
 {
     private const int UploadChunkSize = 8 * 1024 * 1024;
     private const int MaximumUploadChunks = 10000;
     private static readonly TimeSpan UploadSessionLifetime = TimeSpan.FromDays(1);
 
-    [HttpPost("uploads")]
-    public async Task<IActionResult> StartUpload([FromQuery] string username,
+    public async Task<IResult> StartUpload([FromQuery] string username,
         StartDocumentUploadRequest request, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
         if (actor is null) return NotFound();
         if (request.SizeBytes <= 0 || request.SizeBytes > MaximumStorageLimit ||
             (request.SizeBytes + UploadChunkSize - 1) / UploadChunkSize > MaximumUploadChunks)
-            return StatusCode(StatusCodes.Status413PayloadTooLarge,
-                new { code = "storage_limit", message = "The file is larger than the available upload limit." });
+            return Json(new { code = "storage_limit", message = "The file is larger than the available upload limit." }, statusCode: StatusCodes.Status413PayloadTooLarge);
         if (request.Fingerprint is null || request.Fingerprint.Length != 64 || !request.Fingerprint.All(Uri.IsHexDigit) ||
             request.Conflict is not ("ask" or "replace" or "keepBoth"))
             return BadRequest(new { message = "Invalid upload details." });
@@ -56,8 +55,7 @@ public sealed partial class DocumentsController
         }
 
         if (request.SizeBytes > await StorageLimitBytes(ownerId, cancellationToken))
-            return StatusCode(StatusCodes.Status413PayloadTooLarge,
-                new { code = "storage_limit", message = "The file is larger than the owner's storage limit." });
+            return Json(new { code = "storage_limit", message = "The file is larger than the owner's storage limit." }, statusCode: StatusCodes.Status413PayloadTooLarge);
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await LockLibrary(ownerId, cancellationToken);
@@ -78,8 +76,7 @@ public sealed partial class DocumentsController
             x.CompletedAt == null && x.ExpiresAt > now)
             .SumAsync(x => (long?)x.SizeBytes, cancellationToken) ?? 0;
         if (await UsedStorage(ownerId, cancellationToken) + reserved + request.SizeBytes > await StorageLimitBytes(ownerId, cancellationToken))
-            return StatusCode(StatusCodes.Status413PayloadTooLarge,
-                new { code = "storage_limit", message = "This upload would exceed the owner's storage limit." });
+            return Json(new { code = "storage_limit", message = "This upload would exceed the owner's storage limit." }, statusCode: StatusCodes.Status413PayloadTooLarge);
         var session = new DocumentUploadSession
         {
             ActorUserId = actor.Id,
@@ -101,8 +98,7 @@ public sealed partial class DocumentsController
         return Ok(ToUploadStatus(session, []));
     }
 
-    [HttpGet("uploads/{id:guid}")]
-    public async Task<IActionResult> UploadStatus(Guid id, [FromQuery] string username,
+    public async Task<IResult> UploadStatus(Guid id, [FromQuery] string username,
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
@@ -122,9 +118,7 @@ public sealed partial class DocumentsController
             session.Chunks.ToDictionary(x => x.Index, x => x.Sha256)));
     }
 
-    [HttpPut("uploads/{id:guid}/chunks/{index:int}")]
-    [RequestSizeLimit(UploadChunkSize + 1024)]
-    public async Task<IActionResult> PutUploadChunk(Guid id, int index,
+    public async Task<IResult> PutUploadChunk(HttpContext httpContext, Guid id, int index,
         [FromQuery] string username, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
@@ -135,13 +129,13 @@ public sealed partial class DocumentsController
         if (session is null || index < 0 || index >= session.ChunkCount) return NotFound();
         var expectedSize = (int)Math.Min(session.ChunkSize,
             session.SizeBytes - (long)index * session.ChunkSize);
-        if (Request.ContentLength is long declared && declared != expectedSize)
+        if (httpContext.Request.ContentLength is long declared && declared != expectedSize)
             return BadRequest(new { message = "The chunk size is incorrect." });
-        var expectedHash = Request.Headers["X-Chunk-SHA256"].ToString().ToLowerInvariant();
+        var expectedHash = httpContext.Request.Headers["X-Chunk-SHA256"].ToString().ToLowerInvariant();
         if (expectedHash.Length != 64 || !expectedHash.All(Uri.IsHexDigit))
             return BadRequest(new { message = "A SHA-256 chunk checksum is required." });
         await using var buffer = new MemoryStream(expectedSize);
-        await Request.Body.CopyToAsync(buffer, cancellationToken);
+        await httpContext.Request.Body.CopyToAsync(buffer, cancellationToken);
         if (buffer.Length != expectedSize ||
             !string.Equals(Convert.ToHexStringLower(SHA256.HashData(buffer.GetBuffer().AsSpan(0, expectedSize))),
                 expectedHash, StringComparison.Ordinal))
@@ -186,8 +180,7 @@ public sealed partial class DocumentsController
         }
     }
 
-    [HttpPost("uploads/{id:guid}/complete")]
-    public async Task<IActionResult> CompleteUpload(Guid id, [FromQuery] string username,
+    public async Task<IResult> CompleteUpload(Guid id, [FromQuery] string username,
         CompleteDocumentUploadRequest request, CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
@@ -244,8 +237,7 @@ public sealed partial class DocumentsController
             x.Id != id && x.CompletedAt == null && x.ExpiresAt > DateTimeOffset.UtcNow)
             .SumAsync(x => (long?)x.SizeBytes, cancellationToken) ?? 0;
         if (await UsedStorage(session.OwnerUserId, cancellationToken) + reservedOther + session.SizeBytes > await StorageLimitBytes(session.OwnerUserId, cancellationToken))
-            return StatusCode(StatusCodes.Status413PayloadTooLarge,
-                new { code = "storage_limit", message = "This upload would exceed the owner's storage limit." });
+            return Json(new { code = "storage_limit", message = "This upload would exceed the owner's storage limit." }, statusCode: StatusCodes.Status413PayloadTooLarge);
         var key = $"documents/{session.OwnerUserId:N}/{Guid.NewGuid():N}";
         var chunkKeys = chunks.Select(x => x.StorageKey).ToArray();
         try
@@ -299,8 +291,7 @@ public sealed partial class DocumentsController
         }
     }
 
-    [HttpDelete("uploads/{id:guid}")]
-    public async Task<IActionResult> CancelUpload(Guid id, [FromQuery] string username,
+    public async Task<IResult> CancelUpload(Guid id, [FromQuery] string username,
         CancellationToken cancellationToken)
     {
         var actor = await FindOwner(username, cancellationToken);
