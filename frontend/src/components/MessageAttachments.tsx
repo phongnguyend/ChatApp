@@ -12,6 +12,12 @@ import {
 } from 'lucide-react'
 import { type ChangeEvent, useEffect, useRef, useState } from 'react'
 import {
+  MAX_MESSAGE_ATTACHMENTS as MAX_FILES,
+  MAX_MESSAGE_ATTACHMENT_SIZE as MAX_FILE_SIZE,
+  appendMessageAttachments,
+  validateMessageAttachments,
+} from '../utils/messageAttachments'
+import {
   formatMediaDuration,
   resolveUnknownVideoDuration,
 } from './mediaDuration'
@@ -33,8 +39,6 @@ type MessageAttachmentPickerProps = {
   onError: (message: string) => void
 }
 
-const MAX_FILES = 5
-const MAX_FILE_SIZE = 15 * 1024 * 1024
 const MAX_RECORDING_SECONDS = 30
 type CaptureMode = 'photo' | 'video' | 'screen' | 'audio'
 
@@ -193,18 +197,13 @@ export function MessageAttachmentPicker({
   }
 
   function addFiles(selected: File[]) {
-    if (files.length + selected.length > MAX_FILES) {
-      onError('Add up to 5 attachments per message.')
+    const error = validateMessageAttachments(files, selected)
+    if (error) {
+      onError(error)
       return
     }
 
-    const oversized = selected.find((file) => file.size > MAX_FILE_SIZE)
-    if (oversized) {
-      onError(`"${oversized.name}" is larger than 15 MB.`)
-      return
-    }
-
-    onChange([...files, ...selected])
+    onChange(appendMessageAttachments(files, selected))
   }
 
   async function takePhoto() {

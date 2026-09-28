@@ -1,11 +1,12 @@
-import { Camera, ImagePlus, LoaderCircle, X } from 'lucide-react'
-import { type ChangeEvent, useEffect, useRef, useState } from 'react'
+import { Camera, ClipboardPaste, ImagePlus, LoaderCircle, X } from 'lucide-react'
+import { type ChangeEvent, type ClipboardEvent, useEffect, useRef, useState } from 'react'
 
 type AvatarPickerProps = {
   imageUrl: string | null
   fallback: string
   label: string
   capture?: 'user' | 'environment'
+  disabled?: boolean
   onSelect: (file: File) => Promise<void>
 }
 
@@ -16,6 +17,7 @@ export function AvatarPicker({
   fallback,
   label,
   capture = 'user',
+  disabled = false,
   onSelect,
 }: AvatarPickerProps) {
   const galleryInputRef = useRef<HTMLInputElement | null>(null)
@@ -23,6 +25,7 @@ export function AvatarPicker({
   const previewUrlRef = useRef<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [isReadingClipboard, setIsReadingClipboard] = useState(false)
   const [isCameraOpen, setIsCameraOpen] = useState(false)
   const [isCameraReady, setIsCameraReady] = useState(false)
   const [cameraError, setCameraError] = useState('')
@@ -80,6 +83,9 @@ export function AvatarPicker({
   }, [capture, isCameraOpen])
 
   async function uploadFile(file: File) {
+    if (disabled || isUploading) {
+      return
+    }
     if (!file.type.startsWith('image/')) {
       setError('Choose an image file.')
       return
@@ -114,6 +120,46 @@ export function AvatarPicker({
     const file = event.target.files?.[0]
     event.target.value = ''
     if (file) await uploadFile(file)
+  }
+
+  function handlePaste(event: ClipboardEvent<HTMLDivElement>) {
+    const image = Array.from(event.clipboardData.files).find((file) => file.type.startsWith('image/'))
+    if (!image) {
+      return
+    }
+    event.preventDefault()
+    event.stopPropagation()
+    void uploadFile(image)
+  }
+
+  async function pasteImage() {
+    if (disabled || isUploading || isReadingClipboard) {
+      return
+    }
+    if (!navigator.clipboard?.read) {
+      setError('Click the photo preview and press Ctrl+V (or Command+V) to paste an image.')
+      return
+    }
+
+    setIsReadingClipboard(true)
+    setError('')
+    try {
+      const items = await navigator.clipboard.read()
+      for (const item of items) {
+        const type = item.types.find((value) => value.startsWith('image/'))
+        if (type) {
+          const blob = await item.getType(type)
+          const extension = type.split('/')[1].replace('jpeg', 'jpg')
+          await uploadFile(new File([blob], `avatar.${extension}`, { type }))
+          return
+        }
+      }
+      setError('No image found in the clipboard. Copy an image and try again.')
+    } catch {
+      setError('Could not read the clipboard. Allow clipboard access, or click the preview and press Ctrl+V (or Command+V).')
+    } finally {
+      setIsReadingClipboard(false)
+    }
   }
 
   async function takePhoto() {
@@ -195,8 +241,15 @@ export function AvatarPicker({
   }
 
   return (
-    <div className="avatar-picker">
-      <div className="avatar-picker-preview" aria-label={`${label} preview`}>
+    <div className="avatar-picker" onPaste={handlePaste}>
+      <div
+        className="avatar-picker-preview"
+        role="group"
+        tabIndex={disabled || isUploading ? -1 : 0}
+        aria-disabled={disabled || isUploading}
+        aria-label={`${label} preview`}
+        title="Click here and paste an image"
+      >
         {previewUrl ?? imageUrl ? (
           <img src={previewUrl ?? imageUrl ?? undefined} alt="" />
         ) : (
@@ -213,7 +266,7 @@ export function AvatarPicker({
         <button
           className="secondary-button"
           type="button"
-          disabled={isUploading}
+          disabled={disabled || isUploading}
           onClick={() => galleryInputRef.current?.click()}
         >
           <ImagePlus size={17} />
@@ -222,7 +275,7 @@ export function AvatarPicker({
         <button
           className="secondary-button"
           type="button"
-          disabled={isUploading}
+          disabled={disabled || isUploading}
           onClick={() => {
             setError('')
             setIsCameraOpen(true)
@@ -231,6 +284,15 @@ export function AvatarPicker({
           <Camera size={17} />
           Take photo
         </button>
+        <button
+          className="secondary-button"
+          type="button"
+          disabled={disabled || isUploading || isReadingClipboard}
+          onClick={() => void pasteImage()}
+        >
+          {isReadingClipboard ? <LoaderCircle className="spin" size={17} /> : <ClipboardPaste size={17} />}
+          Paste image
+        </button>
       </div>
 
       <input
@@ -238,6 +300,7 @@ export function AvatarPicker({
         className="visually-hidden"
         type="file"
         accept="image/jpeg,image/png,image/webp,image/gif"
+        disabled={disabled || isUploading}
         onChange={(event) => void handleFile(event)}
       />
 
@@ -246,7 +309,7 @@ export function AvatarPicker({
           {error}
         </p>
       )}
-      <p className="avatar-picker-note">JPEG, PNG, WebP, or GIF up to 5 MB.</p>
+      <p className="avatar-picker-note">Click the preview to paste an image. JPEG, PNG, WebP, or GIF up to 5 MB.</p>
     </div>
   )
 }

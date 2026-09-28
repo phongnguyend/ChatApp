@@ -73,6 +73,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  type ClipboardEvent,
   type FormEvent,
   type KeyboardEvent,
   type ReactNode,
@@ -94,6 +95,7 @@ import {
   type ThemePreference,
 } from "./theme";
 import { AvatarPicker } from "./components/AvatarPicker";
+import { appendMessageAttachments, validateMessageAttachments } from "./utils/messageAttachments";
 import { CalendarView } from "./pages/CalendarView";
 import { MeetingsView } from "./pages/MeetingsView";
 import { DocumentsView } from "./pages/DocumentsView";
@@ -3280,6 +3282,29 @@ function ChatApp({
     setMessageJumpVersion((current) => current + 1);
   }
 
+  function handleComposerPaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    if (!activeConversation || !isOnline || isSendingMessage || isActiveDirectMessagingBlocked) {
+      return;
+    }
+
+    const images = Array.from(event.clipboardData.files).filter((file) =>
+      file.type.startsWith("image/"),
+    );
+    if (images.length === 0) {
+      return;
+    }
+
+    event.preventDefault();
+    const validationError = validateMessageAttachments(attachmentFiles, images);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    setAttachmentFiles((files) => appendMessageAttachments(files, images));
+    setError("");
+  }
+
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (mentionSearch && mentionOptions.length > 0) {
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -6157,6 +6182,7 @@ function ChatApp({
               )
             }
             onKeyDown={handleComposerKeyDown}
+            onPaste={handleComposerPaste}
           />
           {mentionOptions.length > 0 && (
             <div

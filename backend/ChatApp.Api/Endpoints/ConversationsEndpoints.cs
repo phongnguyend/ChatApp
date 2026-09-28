@@ -130,14 +130,14 @@ public sealed class ConversationsEndpoints(
             [FromServices] ConversationsEndpoints handler,
             Guid id,
             [FromQuery] string username,
-            [FromForm] List<IFormFile> files,
+            IFormFileCollection files,
             [FromForm] string? content,
             [FromForm] string clientMessageId,
             [FromForm] Guid? replyToMessageId,
             [FromForm] List<Guid>? mentionedUserIds,
             CancellationToken cancellationToken,
             [FromForm] bool mentionEveryone = default) =>
-            handler.SendAttachmentMessage(id, username, files, content, clientMessageId, replyToMessageId, mentionedUserIds, mentionEveryone, cancellationToken))
+            handler.SendAttachmentMessage(id, username, files.GetFiles("files").ToList(), content, clientMessageId, replyToMessageId, mentionedUserIds, mentionEveryone, cancellationToken))
             .WithName("ConversationsEndpoints.SendAttachmentMessage")
             .WithMetadata(new RequestSizeLimitAttribute(80 * 1024 * 1024))
             .DisableAntiforgery();

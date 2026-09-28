@@ -57,7 +57,7 @@ export function AccountPage({ user, avatarUrl, onAvatarSelected, onBack, onSaved
     {error && <p role="alert" className="form-error">{error}</p>}{notice && <p role="status">{notice}</p>}
     <div className="profile-settings-grid">
     <section className="profile-settings-section profile-photo-section"><div className="profile-section-heading"><Camera size={19} aria-hidden="true" /><div><h2>Profile photo</h2><p>Choose an image or take a photo. Preview it before saving.</p></div></div>
-      <fieldset className="profile-avatar-editor" disabled={savingPhoto} aria-label="Profile photo editor"><AvatarPicker imageUrl={photoPreview ?? avatarUrl} fallback={(user.firstName || user.username).slice(0, 1).toUpperCase()} label="Your profile photo" onSelect={async file => {
+      <fieldset className="profile-avatar-editor" disabled={savingPhoto} aria-label="Profile photo editor"><AvatarPicker disabled={savingPhoto} imageUrl={photoPreview ?? avatarUrl} fallback={(user.firstName || user.username).slice(0, 1).toUpperCase()} label="Your profile photo" onSelect={async file => {
         setError(''); setNotice('');
         setPendingPhoto(file);
       }} />

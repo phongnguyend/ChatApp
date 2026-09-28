@@ -4043,6 +4043,11 @@
   object-fit: cover;
 }
 
+.avatar-picker-preview:focus-visible {
+  outline: 2px solid var(--coral);
+  outline-offset: 4px;
+}
+
 .avatar-picker-loading {
   position: absolute;
   inset: 0;
@@ -4056,15 +4061,22 @@
   width: 100%;
   margin-top: 24px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
 .avatar-picker-actions .secondary-button {
+  min-width: 0;
+  padding: 8px 6px;
+  font-size: 11px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 5px;
+}
+
+.avatar-picker-actions .secondary-button svg {
+  flex-shrink: 0;
 }
 
 .avatar-picker .form-error {
