@@ -1,5 +1,4 @@
 using ChatApp.Api;
-using ChatApp.Api.Endpoints;
 using ChatApp.Api.Authentication;
 using ChatApp.Api.Hubs;
 using ChatApp.Persistence;

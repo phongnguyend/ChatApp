@@ -104,7 +104,7 @@ Logging, and Monitoring contain extension-point documentation until shared
 implementations are needed.
 
 HTTP feature routes are Minimal API groups in `ChatApp.Api/Endpoints`.
-`EndpointRegistration` registers their scoped handlers and maps them from
+`DependencyInjection.cs` registers their scoped handlers and maps them from
 `Program.cs`. Route mappings declare binding, authorization, and upload limits;
 shared endpoint filters validate request bodies and reject username impersonation.
 Authentication and account routes remain in `ChatApp.Api/Authentication`.
