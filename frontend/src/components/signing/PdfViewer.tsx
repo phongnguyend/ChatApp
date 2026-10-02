@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useEffectEvent, useState } from 'react'
+import { lazy, Suspense, useEffect, useEffectEvent, useState, type ReactNode } from 'react'
 import { Download, FileText, Globe, PenLine, X } from 'lucide-react'
 import { ErrorBanner, MaximizeButton, Modal } from './ui'
 
@@ -6,12 +6,13 @@ import { useViewerMaximized } from './useViewerMaximized'
 
 const PdfJsViewer = lazy(() => import('./PdfJsViewer'))
 
-export function PdfViewer({ name, sourceKey, load, onClose, onSignatures }: {
+export function PdfViewer({ name, sourceKey, load, onClose, onSignatures, footer }: {
   name: string
   sourceKey: string
   load: (signal: AbortSignal) => Promise<Blob>
   onClose: () => void
   onSignatures?: () => void
+  footer?: ReactNode
 }) {
   const [url, setUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -45,6 +46,7 @@ export function PdfViewer({ name, sourceKey, load, onClose, onSignatures }: {
   }, [sourceKey])
 
   return <Modal open title={`Preview ${name}`} className={maximized ? 'pdf-preview-modal is-maximized' : 'pdf-preview-modal'} onClose={onClose}
+    footer={footer}
     headerActions={<div className="pdf-preview-actions">
       <div className="pdf-viewer-switch" role="group" aria-label="PDF viewer">
         <button aria-pressed={viewer === 'in-app'} onClick={() => setViewer('in-app')}><FileText size={14} aria-hidden="true" />In-app</button>

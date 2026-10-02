@@ -277,6 +277,16 @@ npm --prefix frontend run test:smoke
 ```
 
 
+## Image and Office previews in My Documents
+
+Open an image, `.docx`, `.xlsx`, or `.pptx` file in My Documents to preview it in the app. Files are downloaded with the current user's permissions and rendered locally in the browser; these previews do not require public links or upload files to an external Office viewer.
+
+- Images fit the preview area, with download and maximize/restore controls.
+- Word documents render as pages. Excel previews include worksheet tabs, formatted values, merged cells, and row/column paging. PowerPoint previews include slide thumbnails and previous/next navigation.
+- Properties, version history, and permitted clone/replace actions remain available in the preview footer. Escape closes the viewer.
+
+These are read-only previews of modern Office formats. Complex layouts may differ from Microsoft Office, and spreadsheet formulas display stored results rather than recalculating. Older `.doc`, `.xls`, and `.ppt` files retain the download fallback. Download the original when exact Office fidelity is needed.
+
 ## PDF signing in My Documents
 
 Choose **Signatures** on a PDF row or in its preview. Only a file owner or editor can start a request; requests and their downloads belong to the user who created them. Public links and viewer access do not grant signing access.

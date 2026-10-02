@@ -2,6 +2,9 @@ import { expect, test } from '@playwright/test';
 import { PDFDocument, degrees } from 'pdf-lib';
 import { adminEmail, adminPassword, apiUrl, createUser, headersFor, login, openSection, tokenFor, uniqueName } from './helpers.js';
 
+// Full Chromium includes the native PDF viewer; the headless shell only shows its fallback.
+test.use({ channel: 'chromium' });
+
 test('sign a PDF, preserve the original, and download signed and audit documents', async ({ page, request }) => {
   const user = await createUser(request, 'pdf-sign');
   const stranger = await createUser(request, 'pdf-stranger');

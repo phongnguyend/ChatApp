@@ -43,6 +43,9 @@ export default defineConfig({
           'endpoint=https://example.communication.azure.com/;accesskey=YWJjZA==',
         AllowedOrigins__0: frontendUrl,
         Monitoring__OpenTelemetry__IsEnabled: 'false',
+        DocumentSigning__InApp__Enabled: 'true',
+        DocumentSigning__DocuSign__Enabled: 'false',
+        DocumentSigning__AdobeSign__Enabled: 'false',
       },
     },
     {

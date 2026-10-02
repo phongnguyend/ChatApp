@@ -1,5 +1,6 @@
 /* Shared signing dialogs use Huddle's existing theme tokens. */
 .signing-modal {
+  --signing-danger: #c62828;
   --bg: var(--paper); --panel: var(--paper); --border: var(--line); --text: var(--ink);
   --accent: var(--coral); --critical: var(--coral); --surface: var(--cream); --surface-1: var(--paper); --surface-2: var(--cream); --text-muted: var(--muted); --accent-text: var(--coral); --radius: 8px; --accent-soft: color-mix(in srgb, var(--coral) 12%, var(--paper));
   color: var(--ink); background: var(--paper); border: 1px solid var(--line);
@@ -12,8 +13,9 @@
 .signing-modal .modal-body { padding: 20px 24px; }
 .signing-modal button, .signing-modal .button-link { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--paper); cursor: pointer; text-decoration: none; }
 .signing-modal button:disabled { opacity: .5; cursor: not-allowed; }
-.signing-modal button.danger { color: #c62828; border-color: currentColor; background: color-mix(in srgb, #c62828 8%, var(--paper)); }
-.signing-modal button.danger:hover:not(:disabled) { background: color-mix(in srgb, #c62828 16%, var(--paper)); }
+.signing-modal button.danger { color: var(--signing-danger); border-color: currentColor; background: color-mix(in srgb, var(--signing-danger) 8%, var(--paper)); }
+.signing-modal button.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--signing-danger) 16%, var(--paper)); }
+html[data-theme='dark'] .signing-modal { --signing-danger: #ff8787; }
 .signing-modal button.primary, .signing-modal .signature-create-draft { background: var(--coral); color: white; }
 .signing-modal input, .signing-modal textarea { width: 100%; box-sizing: border-box; background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
 .signing-modal .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -135,7 +137,12 @@
 
 &.pdf-preview-modal[open] {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+&.pdf-preview-modal .modal-foot {
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
 }
 
 .pdf-preview-actions {

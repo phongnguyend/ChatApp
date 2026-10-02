@@ -8,6 +8,10 @@ import "./DocumentsView.css";
 import "../components/signing/signing.css";
 const SignatureRequests = lazy(() => import("../components/signing/SignatureRequests").then(module => ({ default: module.SignatureRequests })));
 
+const PdfViewer = lazy(() => import("../components/signing/PdfViewer").then(module => ({ default: module.PdfViewer })));
+const ImageViewer = lazy(() => import("../components/viewers/ImageViewer").then(module => ({ default: module.ImageViewer })));
+const OfficeViewer = lazy(() => import("../components/viewers/OfficeViewer").then(module => ({ default: module.OfficeViewer })));
+
 type Permission = "owner" | "editor" | "viewer";
 type FolderItem = { id: string; parentFolderId: string | null; name: string; createdAt: string; updatedAt: string; deletedAt: string | null; permission: Permission; ownerUsername: string | null };
 type FileItem = { id: string; folderId: string | null; name: string; contentType: string; sizeBytes: number; createdAt: string; updatedAt: string; deletedAt: string | null; permission: Permission; ownerUsername: string | null };
@@ -55,10 +59,6 @@ function expiryDateValue(expiresAt: string | null) {
 function endOfLocalDay(value: string) {
   const [year, month, day] = value.split("-").map(Number);
   return new Date(year, month - 1, day + 1).toISOString();
-}
-
-function canPreview(file: FileItem) {
-  return file.contentType === "application/pdf" || ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.contentType);
 }
 
 function sharingSummary(summary?: SharingSummary) {
@@ -638,6 +638,19 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, onOpenConversat
     finally { setBusy(false); }
   }
 
+  async function loadPreview(signal: AbortSignal) {
+    if (!preview) {
+      throw new Error("No file selected.");
+    }
+    const response = await fetch(contentUrl(preview, false), { signal });
+    if (!response.ok) {
+      throw new Error(await errorMessage(response));
+    }
+    return response.blob();
+  }
+
+  const previewFooter = preview && <div className="documents-preview-footer"><span>{formatSize(preview.sizeBytes)} · Modified {formatDate(preview.updatedAt)}</span><div className="documents-preview-actions">{preview.contentType === "application/pdf" && preview.permission !== "viewer" && <button type="button" onClick={() => { setSigningFile(preview); setPreview(null); }}><Signature size={16} /> Signatures</button>}<button type="button" onClick={() => openProperties("file", preview.id)}><Info size={16} /> Properties</button><button type="button" onClick={() => { setVersionFile(preview); setVersions([]); setVersionToDelete(null); setPreview(null); }}><History size={16} /> Version history</button>{preview.permission === "owner" && <button type="button" disabled={busy} onClick={() => void cloneFile(preview)}><Copy size={16} /> Clone</button>}{preview.permission !== "viewer" && <><input ref={replaceInput} type="file" hidden onChange={(event) => void replaceContent(event)} aria-label="Choose replacement file" /><button type="button" disabled={busy} onClick={() => replaceInput.current?.click()}><Upload size={16} /> Replace content</button></>}<button type="button" onClick={() => void downloadFile(preview)}><Download size={16} /> Download</button></div></div>;
+
   return (
     <section className="documents-view" aria-label="My Documents" hidden={hidden}
       onDragEnter={(event) => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); if (canEditCurrent) setDragging(true); } }}
@@ -803,11 +816,23 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, onOpenConversat
         {versionToDelete && <div className="documents-version-confirm"><p>Delete version {versionToDelete.number} permanently? This frees {formatSize(versionToDelete.sizeBytes)} and cannot be undone.</p><div><button type="button" onClick={() => setVersionToDelete(null)} disabled={busy}>Cancel</button><button type="button" className="danger" onClick={() => void deleteVersion()} disabled={busy}>Delete version</button></div></div>}
       </div></div>}
       {signingFile && !hidden && <Suspense fallback={null}><SignatureRequests id={signingFile.id} name={signingFile.name} readOnly={false} onClose={() => { setSigningFile(null); refresh(); }} /></Suspense>}
-      {preview && <div className="documents-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreview(null); }}><div className="documents-modal documents-preview" role="dialog" aria-modal="true" aria-labelledby="documents-preview-title">
+      {preview && !hidden && preview.contentType === "application/pdf" && <Suspense fallback={<p role="status">Loading preview?</p>}>
+        <PdfViewer key={preview.id} name={preview.name} sourceKey={preview.id + preview.updatedAt} load={loadPreview} onClose={() => setPreview(null)} footer={previewFooter} />
+      </Suspense>}
+      {preview && !hidden && (preview.contentType.startsWith("image/") || /\.(docx|xlsx|pptx)$/i.test(preview.name)) && <Suspense fallback={<p role="status">Loading preview?</p>}>
+        {preview.contentType.startsWith("image/")
+          ? <ImageViewer key={preview.id} name={preview.name} sourceKey={preview.id + preview.updatedAt} load={loadPreview} onClose={() => setPreview(null)} footer={previewFooter} />
+          : <OfficeViewer key={preview.id} name={preview.name} sourceKey={preview.id + preview.updatedAt} load={loadPreview} onClose={() => setPreview(null)} footer={previewFooter} />}
+      </Suspense>}
+      {preview && !hidden && preview.contentType !== "application/pdf" && !preview.contentType.startsWith("image/") && !/\.(docx|xlsx|pptx)$/i.test(preview.name) && <div className="documents-modal-backdrop" onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          setPreview(null);
+        }
+      }}><div className="documents-modal documents-preview" role="dialog" aria-modal="true" aria-labelledby="documents-preview-title">
         <div className="documents-modal-heading"><h2 id="documents-preview-title">{preview.name}</h2><button type="button" aria-label="Close preview" onClick={() => setPreview(null)}><X size={18} /></button></div>
-        {canPreview(preview) ? preview.contentType.startsWith("image/") ? <img src={contentUrl(preview, false)} alt={preview.name} /> : <iframe src={contentUrl(preview, false)} title={preview.name} /> : <div className="documents-preview-fallback"><FileText size={40} /><p>Preview is not available for this file type.</p></div>}
+        <div className="documents-preview-fallback"><FileText size={40} /><p>Preview is not available for this file type.</p></div>
         {error && <p className="documents-modal-error" role="alert">{error}</p>}
-        <div className="documents-preview-footer"><span>{formatSize(preview.sizeBytes)} · Modified {formatDate(preview.updatedAt)}</span><div className="documents-preview-actions">{preview.contentType === "application/pdf" && preview.permission !== "viewer" && <button type="button" onClick={() => { setSigningFile(preview); setPreview(null); }}><Signature size={16} /> Signatures</button>}<button type="button" onClick={() => openProperties("file", preview.id)}><Info size={16} /> Properties</button><button type="button" onClick={() => { setVersionFile(preview); setVersions([]); setVersionToDelete(null); setPreview(null); }}><History size={16} /> Version history</button>{preview.permission === "owner" && <button type="button" disabled={busy} onClick={() => void cloneFile(preview)}><Copy size={16} /> Clone</button>}{preview.permission !== "viewer" && <><input ref={replaceInput} type="file" hidden onChange={(event) => void replaceContent(event)} aria-label="Choose replacement file" /><button type="button" disabled={busy} onClick={() => replaceInput.current?.click()}><Upload size={16} /> Replace content</button></>}<button type="button" onClick={() => void downloadFile(preview)}><Download size={16} /> Download</button></div></div>
+        {previewFooter}
       </div></div>}
     </section>
   );
