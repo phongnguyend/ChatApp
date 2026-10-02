@@ -276,6 +276,41 @@ $env:TEST_ADMIN_PASSWORD = Read-Host 'Test administrator password'
 npm --prefix frontend run test:smoke
 ```
 
+
+## PDF signing in My Documents
+
+Choose **Signatures** on a PDF row or in its preview. Only a file owner or editor can start a request; requests and their downloads belong to the user who created them. Public links and viewer access do not grant signing access.
+
+- **In-App Signature** is enabled by default. Choose **Open signing editor**, place Signature, Initials, Date, and Text fields, save the layout, switch to **Sign**, draw the signature, and choose **Finish**. Fields can be dragged, resized, and nudged with arrow keys. The signed PDF and its audit record can be previewed and downloaded from **Signing requests**. Optional signer names/emails are recorded only; this mode does not notify or collect signatures from other people. These are drawn signatures, not certificate-based digital signatures.
+- **DocuSign** and **Adobe Acrobat Sign** use a shared organization sender account. Enter the subject, optional message, and 1?20 recipients in signing order. **Create draft** uploads the PDF but does not send invitations. **Open preparation screen** opens the provider so you can place fields, review, and send. Back in Huddle, **Refresh status** retrieves the latest state; signed documents and audit records become available when all recipients finish.
+
+Each request saves an immutable copy of the original PDF. Replacing the source later does not change an existing signing request, and signing never overwrites the source. PDFs must be at most 30 MB; completed uploads allow up to 60 MB. In-app signing rejects encrypted PDFs. Source snapshots and in-app signed copies count against the requesting user's document storage limit. Documents referenced by signing requests cannot be permanently deleted. In-app drafts may be discarded; completed requests cannot be edited or removed. A provider call whose result is uncertain is marked **NeedsReview** and is never automatically resent: check the provider account before deleting the local record or starting a replacement.
+
+The `AddDocumentSigning` migration adds signing requests, using database-generated IDs. It runs through the existing database initialization flow. Only the creator can save fields or complete a request. In-app audit PDFs record account identity, timestamps, fields, and SHA-256 hashes; the browser generates the flattened PDF, while the server validates the saved field state and records the uploaded bytes. This is not independent server verification that the PDF contains those fields.
+
+### Signing provider configuration
+
+Configure API runtime settings through user secrets locally or App Service configuration / Key Vault references in Azure. Never put provider credentials in frontend settings. No personal provider login is required in Huddle. Both external providers are disabled by default.
+
+| API setting | Purpose |
+| --- | --- |
+| `DocumentSigning__InApp__Enabled` | Defaults to `true`; set `false` to disable new in-app requests. |
+| `DocumentSigning__ReturnUrl` | Huddle frontend URL used when leaving the DocuSign preparation screen; HTTPS in production. |
+| `DocumentSigning__DocuSign__Enabled` | Enable after configuring the shared sender. |
+| `DocumentSigning__DocuSign__Demo` | `true` for developer accounts, `false` for production. |
+| `DocumentSigning__DocuSign__ApiBaseUrl` | Account REST base URL ending in `/restapi/v2.1/`, such as `https://demo.docusign.net/restapi/v2.1/`. |
+| `DocumentSigning__DocuSign__AccountId` | API account GUID. |
+| `DocumentSigning__DocuSign__ClientId` | Integration key GUID. |
+| `DocumentSigning__DocuSign__SenderUserId` | Shared sender API user GUID. |
+| `DocumentSigning__DocuSign__PrivateKeyPem` | Secret: registered RSA private key PEM, including header and footer. |
+| `DocumentSigning__AdobeSign__Enabled` | Enable after configuring the shared sender. |
+| `DocumentSigning__AdobeSign__ApiAccessPoint` | Regional API origin returned by OAuth, e.g. `https://api.na1.adobesign.com`, without `/api/rest/v6`. |
+| `DocumentSigning__AdobeSign__ClientId` | OAuth client ID. |
+| `DocumentSigning__AdobeSign__ClientSecret` | Secret: OAuth client secret. |
+| `DocumentSigning__AdobeSign__RefreshToken` | Secret: refresh token authorized by the shared sender. |
+
+For DocuSign, register the integration and RSA key and obtain sender consent to `signature impersonation`; production also requires the account-specific production REST base URL. See [DocuSign shared-system-user authentication](https://www.docusign.com/blog/developers/the-trenches-authenticate-without-user-interaction-system-user). For Adobe, authorize the shared sender with `agreement_read:self agreement_write:self agreement_send:self user_login:self`; retain the refresh token and regional API access point from the OAuth response. See [Adobe OAuth setup](https://opensource.adobe.com/acrobat-sign/developer_guide/gstarted.html). Provider tests use fake HTTP responses and do not send documents or invitations to real accounts.
+
 # Database Schema
 
 Below is the relational schema for the collaboration application, covering:

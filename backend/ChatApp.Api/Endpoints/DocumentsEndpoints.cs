@@ -1225,6 +1225,10 @@ public sealed partial class DocumentsEndpoints(
             return NotFound();
         }
 
+        if (await db.SignatureRequests.AnyAsync(x => x.DocumentId == id, cancellationToken))
+        {
+            return Conflict(new { message = "Documents with signing requests cannot be permanently deleted." });
+        }
         var keys = await db.DocumentVersions.Where(x => x.DocumentId == id)
             .Select(x => x.StorageKey).ToListAsync(cancellationToken);
         keys.Add(file.StorageKey);
@@ -1266,6 +1270,10 @@ public sealed partial class DocumentsEndpoints(
             x.FolderId != null && descendants.Contains(x.FolderId.Value))
             .ToListAsync(cancellationToken);
         var fileIds = files.Select(x => x.Id).ToArray();
+        if (await db.SignatureRequests.AnyAsync(x => fileIds.Contains(x.DocumentId), cancellationToken))
+        {
+            return Conflict(new { message = "This folder contains documents with signing requests and cannot be permanently deleted." });
+        }
         var keys = await db.DocumentVersions.Where(x => fileIds.Contains(x.DocumentId))
             .Select(x => x.StorageKey).ToListAsync(cancellationToken);
         keys.AddRange(files.Select(x => x.StorageKey));
@@ -1760,7 +1768,9 @@ public sealed partial class DocumentsEndpoints(
             .SumAsync(x => (long?)x.SizeBytes, ct) ?? 0;
         var versionBytes = await db.DocumentVersions.Where(x => x.Document.OwnerUserId == ownerId)
             .SumAsync(x => (long?)x.SizeBytes, ct) ?? 0;
-        return currentBytes + versionBytes;
+        var signingBytes = await db.SignatureRequests.Where(x => x.CreatedById == ownerId)
+            .SumAsync(x => (long?)(x.OriginalSizeBytes + x.SignedSizeBytes), ct) ?? 0;
+        return currentBytes + versionBytes + signingBytes;
     }
 
     private async Task<long> ReservedStorage(Guid ownerId, CancellationToken ct) =>
@@ -1822,6 +1832,12 @@ public sealed partial class DocumentsEndpoints(
             .Select(x => x.Permission).ToListAsync(ct);
         return permissions.Contains("editor") ? "editor" :
             permissions.Contains("viewer") ? "viewer" : null;
+    }
+
+    public async Task<bool> CanSignAsync(Guid id, Guid userId, CancellationToken ct)
+    {
+        var file = await db.StoredDocuments.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
+        return file is not null && await FilePermission(file, userId, ct) is "owner" or "editor";
     }
 
     private async Task<string?> FilePermission(StoredDocument file, Guid actorId, CancellationToken ct)

@@ -1,0 +1,635 @@
+/* Shared signing dialogs use Huddle's existing theme tokens. */
+.signing-modal {
+  --bg: var(--paper); --panel: var(--paper); --border: var(--line); --text: var(--ink);
+  --accent: var(--coral); --critical: var(--coral); --surface: var(--cream); --surface-1: var(--paper); --surface-2: var(--cream); --text-muted: var(--muted); --accent-text: var(--coral); --radius: 8px; --accent-soft: color-mix(in srgb, var(--coral) 12%, var(--paper));
+  color: var(--ink); background: var(--paper); border: 1px solid var(--line);
+  border-radius: 16px; padding: 0; width: min(850px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px); overflow: auto;
+}
+.signing-modal::backdrop { background: #0008; }
+.signing-modal .modal-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 24px; border-bottom: 1px solid var(--line); }
+.signing-modal h2 { font-size: 20px; margin: 0; }
+.signing-modal .modal-body { padding: 20px 24px; }
+.signing-modal button, .signing-modal .button-link { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--paper); cursor: pointer; text-decoration: none; }
+.signing-modal button:disabled { opacity: .5; cursor: not-allowed; }
+.signing-modal button.danger { color: #c62828; border-color: currentColor; background: color-mix(in srgb, #c62828 8%, var(--paper)); }
+.signing-modal button.danger:hover:not(:disabled) { background: color-mix(in srgb, #c62828 16%, var(--paper)); }
+.signing-modal button.primary, .signing-modal .signature-create-draft { background: var(--coral); color: white; }
+.signing-modal input, .signing-modal textarea { width: 100%; box-sizing: border-box; background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+.signing-modal .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.signing-modal .attachment-tabs { display: flex; gap: 8px; margin-bottom: 18px; }
+.signing-modal [role=tab][aria-selected=true] { color: var(--coral); border-color: var(--coral); }
+.signing-modal .form-error { padding: 12px; background: color-mix(in srgb, var(--coral) 12%, var(--paper)); }
+
+.signing-modal {
+&.modal.pdf-preview-modal {
+  width: min(1200px, calc(100vw - 32px));
+  height: min(900px, calc(100dvh - 32px));
+  min-width: min(360px, calc(100vw - 24px));
+  min-height: min(260px, calc(100dvh - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  resize: both;
+  container-type: inline-size;
+}
+
+&.modal.signature-requests-modal {
+  width: min(850px, calc(100vw - 32px));
+}
+
+.signature-form {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.signature-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.signature-provider-field {
+  display: grid;
+  gap: 6px;
+}
+
+.signature-provider-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.signature-provider-options button[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.signature-provider-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+}
+
+.signature-provider-icon {
+  flex-shrink: 0;
+}
+
+.signature-provider-icon.docusign {
+  color: #7356d8;
+}
+
+.signature-provider-icon.adobe-sign {
+  color: #e53935;
+}
+
+.signature-recipient {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+}
+
+.signature-recipient label {
+  flex: 1 1 180px;
+}
+
+.signature-request {
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.signature-list-toolbar {
+  justify-content: flex-end;
+}
+
+.signature-request-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  line-height: 20px;
+}
+
+.signature-create-draft {
+  margin-inline-start: auto;
+}
+
+.signature-request .row,
+.signature-form .row {
+  flex-wrap: wrap;
+}
+
+&.pdf-preview-modal .modal-head h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+&.pdf-preview-modal[open] {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.pdf-preview-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.pdf-viewer-switch {
+  display: flex;
+  gap: 8px;
+}
+
+@container (max-width: 700px) {
+  &.pdf-preview-modal .modal-head,
+  .pdf-preview-actions {
+    flex-wrap: wrap;
+  }
+
+  .pdf-preview-actions {
+    flex-shrink: 1;
+  }
+}
+
+&.pdf-preview-modal .modal-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+&.pdf-preview-modal .modal-body > object {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+}
+
+.pdf-viewer-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.pdf-thumbnail-toggle {
+  justify-self: start;
+}
+
+.pdf-page-navigation,
+.pdf-zoom-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.pdf-zoom-control {
+  justify-self: end;
+}
+
+@container (max-width: 800px) {
+  .pdf-viewer-controls {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pdf-page-navigation {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: center;
+  }
+}
+
+.pdf-viewer-controls button[aria-pressed="true"],
+.pdf-viewer-switch button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+
+.pdf-js-viewer {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.pdf-js-pages {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  background: var(--surface-2);
+}
+
+.pdf-js-document {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pdf-js-document .pdf-js-pages {
+  min-width: 0;
+}
+
+.pdf-thumbnail-list {
+  flex: 0 0 148px;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.pdf-thumbnail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: calc(100% - 12px);
+  height: 166px;
+  margin: 4px 6px;
+  padding: 6px;
+  background: transparent;
+}
+
+.pdf-thumbnail[aria-current="page"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.pdf-thumbnail-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 110px;
+  height: 132px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.pdf-thumbnail-preview .react-pdf__Page canvas {
+  max-height: 132px;
+  object-fit: contain;
+}
+
+&.pdf-preview-modal .modal-body p,
+&.pdf-preview-modal .modal-body > .error-banner {
+  margin: 16px;
+}
+
+.signature-provider-icon.in-app {
+  color: var(--accent);
+}
+
+/* Full screen, so fields can be placed and signed on the largest possible page. */
+&.modal&.in-app-signing-modal {
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+&.in-app-signing-modal[open] {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+&.in-app-signing-modal .modal-head {
+  flex-wrap: wrap;
+}
+
+&.in-app-signing-modal .modal-head h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+&.in-app-signing-modal .modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.in-app-signing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.in-app-signing-layout {
+  display: flex;
+  flex: 1;
+  gap: 12px;
+  min-height: 0;
+}
+
+.signing-notice {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  background: var(--accent-soft);
+}
+
+.signing-palette {
+  display: flex;
+  flex: 0 0 180px;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.signing-palette p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.signing-palette-item {
+  justify-content: flex-start;
+  cursor: grab;
+}
+
+.signing-palette-item:active {
+  cursor: grabbing;
+}
+
+.signing-palette .signing-palette-count {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.signing-pages {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  padding: 16px;
+  overflow: auto;
+  /* Reserve the scrollbar so its appearance does not change the page width and redraw every page. */
+  scrollbar-gutter: stable;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.signing-pages .react-pdf__Document {
+  display: contents;
+}
+
+.signing-page {
+  position: relative;
+  flex-shrink: 0;
+  background: #ffffff;
+  box-shadow: 0 1px 6px rgb(0 0 0 / 0.18);
+}
+
+.signing-page > p {
+  padding: 16px;
+  color: #52514e;
+}
+
+.signing-page-overlay {
+  position: absolute;
+  inset: 0;
+  touch-action: pan-y;
+}
+
+.signing-field {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  border: 1.5px dashed #2a78d6;
+  border-radius: 3px;
+  background: rgb(42 120 214 / 0.12);
+  color: #1c5ba6;
+  font-size: 12px;
+  box-shadow: none;
+}
+
+.signing-field.is-filled {
+  border-style: solid;
+  border-color: rgb(42 120 214 / 0.45);
+  background: rgb(42 120 214 / 0.04);
+}
+
+.signing-field.is-selected,
+.signing-field:focus-visible {
+  outline: 2px solid #2a78d6;
+  outline-offset: 1px;
+}
+
+.signing-field.is-missing {
+  border-color: #e34948;
+  background: rgb(227 73 72 / 0.14);
+}
+
+.signing-field-signature,
+.signing-field-initials {
+  background-color: rgb(237 161 0 / 0.16);
+  border-color: #c98a00;
+  color: #7a5400;
+}
+
+.is-placing .signing-field {
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+
+button.signing-field:hover:not(:disabled) {
+  background: rgb(237 161 0 / 0.26);
+}
+
+input.signing-field {
+  justify-content: flex-start;
+  padding: 0 4px;
+  color: #111111;
+  font-size: max(10px, 1.1em);
+}
+
+input.signing-field::placeholder {
+  color: #7b7a74;
+}
+
+.signing-field img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.signing-field-label,
+.signing-field-prompt {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.signing-field-value {
+  width: 100%;
+  padding: 0 4px;
+  overflow: hidden;
+  color: #111111;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+button.signing-field-remove {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  display: none;
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  padding: 0;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid #c4c4bc;
+  background: #ffffff;
+  color: #e34948;
+  cursor: pointer;
+}
+
+.signing-field-resize {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  display: none;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #ffffff;
+  border-radius: 2px;
+  background: #2a78d6;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.signing-field.is-selected .signing-field-remove,
+.signing-field.is-selected .signing-field-resize,
+.signing-field:hover .signing-field-remove,
+.signing-field:hover .signing-field-resize {
+  display: flex;
+}
+
+&.modal&.signature-pad-modal {
+  width: min(680px, calc(100vw - 32px));
+}
+
+.signature-pad-help {
+  margin: 0 0 8px;
+  color: var(--text-secondary);
+}
+
+.signature-pad-canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 1;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm, 6px);
+  background: #ffffff;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.signature-pad-surface {
+  position: relative;
+}
+
+.signature-pad-baseline {
+  position: absolute;
+  right: 6%;
+  bottom: 26%;
+  left: 6%;
+  border-bottom: 1px dashed #c4c4bc;
+  pointer-events: none;
+}
+
+.signature-pad-actions {
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.signature-pad-spacer {
+  flex: 1;
+}
+
+@media (max-width: 700px) {
+  .in-app-signing-layout {
+    flex-direction: column;
+  }
+
+  .signing-palette {
+    flex: 0 0 auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .signing-palette p {
+    flex-basis: 100%;
+  }
+
+  .signing-pages {
+    padding: 8px;
+  }
+}
+
+.signature-request-details {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 6px 0 10px;
+  font-size: 13px;
+}
+
+.signature-request-details dt {
+  color: var(--text-secondary);
+}
+
+.signature-request-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.signature-request-details ol {
+  margin: 0;
+  padding-left: 18px;
+}
+
+
+}
+.signing-modal.modal.pdf-preview-modal.is-maximized { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; border-radius: 0; resize: none; }

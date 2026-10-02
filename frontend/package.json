@@ -18,8 +18,10 @@
     "@microsoft/signalr": "^10.0.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.26.0",
+    "pdf-lib": "^1.17.1",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "react-pdf": "^11.0.0"
   },
   "devDependencies": {
     "@types/leaflet": "^1.9.21",
@@ -29,6 +31,7 @@
     "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
     "typescript": "~6.0.2",
-    "vite": "^8.1.1"
+    "vite": "^8.1.1",
+    "vite-plugin-static-copy": "^4.1.1"
   }
 }

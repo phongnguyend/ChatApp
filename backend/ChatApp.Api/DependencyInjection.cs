@@ -1,4 +1,5 @@
 using ChatApp.Api.Services;
+using ChatApp.Infrastructure.DocumentSigning;
 using ChatApp.Api.Endpoints;
 using ChatApp.Api.Authentication;
 using Microsoft.AspNetCore.SignalR;
@@ -18,6 +19,7 @@ public static class DependencyInjection
         services.AddHttpClient();
         services.AddPersistence(configuration);
         services.AddInfrastructure(configuration);
+        services.AddDocumentSigningServices(configuration);
         services.AddSingleton<PresenceTracker>();
         services.AddSingleton<CallStateTracker>();
         services.AddSingleton<GroupMeetingStateTracker>();
@@ -69,6 +71,7 @@ public static class DependencyInjection
         CallingEndpoints.Map(app);
         ConversationsEndpoints.Map(app);
         DocumentsEndpoints.Map(app);
+        SignatureEndpoints.Map(app);
         LiveStreamsEndpoints.Map(app);
         MeetingsEndpoints.Map(app);
         MessagesEndpoints.Map(app);

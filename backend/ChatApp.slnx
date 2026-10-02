@@ -7,4 +7,5 @@
   <Project Path="ChatApp.Domain/ChatApp.Domain.csproj" />
   <Project Path="ChatApp.Infrastructure/ChatApp.Infrastructure.csproj" />
   <Project Path="ChatApp.Persistence/ChatApp.Persistence.csproj" />
+  <Project Path="ChatApp.Tests/ChatApp.Tests.csproj" />
 </Solution>

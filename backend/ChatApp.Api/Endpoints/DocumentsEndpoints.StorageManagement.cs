@@ -55,6 +55,10 @@ public sealed partial class DocumentsEndpoints
             .GroupBy(x => x.Document.OwnerUserId)
             .Select(x => new { UserId = x.Key, Bytes = x.Sum(version => version.SizeBytes) })
             .ToDictionaryAsync(x => x.UserId, x => x.Bytes, cancellationToken);
+        var signingBytes = await db.SignatureRequests.AsNoTracking()
+            .Where(x => ids.Contains(x.CreatedById)).GroupBy(x => x.CreatedById)
+            .Select(x => new { UserId = x.Key, Bytes = x.Sum(row => row.OriginalSizeBytes + row.SignedSizeBytes) })
+            .ToDictionaryAsync(x => x.UserId, x => x.Bytes, cancellationToken);
         var reservations = await db.DocumentUploadSessions.AsNoTracking()
             .Where(x => ids.Contains(x.OwnerUserId) && x.CompletedAt == null &&
                 x.ExpiresAt > DateTimeOffset.UtcNow)
@@ -63,7 +67,7 @@ public sealed partial class DocumentsEndpoints
             .ToDictionaryAsync(x => x.UserId, x => x.Bytes, cancellationToken);
         var defaultLimit = DefaultStorageLimitBytes();
         var items = page.Select(x => new StorageUserDto(x.Id, x.Username, x.DisplayName,
-            x.Status, documentBytes.GetValueOrDefault(x.Id) + versionBytes.GetValueOrDefault(x.Id),
+            x.Status, documentBytes.GetValueOrDefault(x.Id) + versionBytes.GetValueOrDefault(x.Id) + signingBytes.GetValueOrDefault(x.Id),
             reservations.GetValueOrDefault(x.Id), x.CustomLimitBytes ?? defaultLimit,
             x.CustomLimitBytes)).ToArray();
 
@@ -71,10 +75,11 @@ public sealed partial class DocumentsEndpoints
             .SumAsync(x => (long?)x.SizeBytes, cancellationToken) ?? 0;
         var allVersionBytes = await db.DocumentVersions.AsNoTracking()
             .SumAsync(x => (long?)x.SizeBytes, cancellationToken) ?? 0;
+        var allSigningBytes = await db.SignatureRequests.SumAsync(x => (long?)(x.OriginalSizeBytes + x.SignedSizeBytes), cancellationToken) ?? 0;
         var userCount = await db.Users.CountAsync(cancellationToken);
 
         return Ok(new StorageUsersPageDto(items, totalCount, offset + items.Length < totalCount,
-            defaultLimit, userCount, allDocumentBytes + allVersionBytes));
+            defaultLimit, userCount, allDocumentBytes + allVersionBytes + allSigningBytes));
     }
 
     public async Task<IResult> SetStorageLimit(Guid userId,

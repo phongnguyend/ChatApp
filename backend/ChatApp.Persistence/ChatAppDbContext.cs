@@ -38,6 +38,7 @@ public sealed class ChatAppDbContext(DbContextOptions<ChatAppDbContext> options)
     public DbSet<UserNote> UserNotes => Set<UserNote>();
     public DbSet<UserNoteShare> UserNoteShares => Set<UserNoteShare>();
     public DbSet<DocumentFolder> DocumentFolders => Set<DocumentFolder>();
+    public DbSet<SignatureRequestEntity> SignatureRequests => Set<SignatureRequestEntity>();
     public DbSet<StoredDocument> StoredDocuments => Set<StoredDocument>();
     public DbSet<DocumentShare> DocumentShares => Set<DocumentShare>();
     public DbSet<DocumentPublicLink> DocumentPublicLinks => Set<DocumentPublicLink>();
@@ -48,6 +49,26 @@ public sealed class ChatAppDbContext(DbContextOptions<ChatAppDbContext> options)
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        modelBuilder.Entity<SignatureRequestEntity>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()").ValueGeneratedOnAdd();
+            entity.Property(x => x.Provider).HasMaxLength(32);
+            entity.Property(x => x.ExternalId).HasMaxLength(256);
+            entity.Property(x => x.Subject).HasMaxLength(100);
+            entity.Property(x => x.Message).HasMaxLength(2000);
+            entity.Property(x => x.Status).HasMaxLength(64);
+            entity.Property(x => x.OriginalFileName).HasMaxLength(255);
+            entity.Property(x => x.OriginalStorageKey).HasMaxLength(1024);
+            entity.Property(x => x.SignedDocumentBlobName).HasMaxLength(1024);
+            entity.Property(x => x.OriginalSha256).HasMaxLength(64);
+            entity.Property(x => x.SignedSha256).HasMaxLength(64);
+            entity.HasIndex(x => new { x.CreatedById, x.ClientRequestId }).IsUnique();
+            entity.HasIndex(x => new { x.DocumentId, x.CreatedAtUtc });
+            entity.HasOne<StoredDocument>().WithMany().HasForeignKey(x => x.DocumentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ChatUser>().WithMany().HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<IdentityRole<Guid>>().Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
         modelBuilder.Entity<ChatUser>().Property(x => x.FirstName).HasMaxLength(100);
         modelBuilder.Entity<ChatUser>().Property(x => x.LastName).HasMaxLength(100);
