@@ -289,6 +289,10 @@ These are read-only previews of modern Office formats. Complex layouts may diffe
 
 ## PDF signing in My Documents
 
+In the in-app signature or initials dialog, you can draw, upload, drag and drop, or paste a PNG, JPEG, or WebP image (up to 5 MB). Imported images are resized and converted to PNG locally, with a preview before **Apply**. **Clear** returns to drawing, and **Apply to all** reuses the image in the remaining fields of the same type. Nothing is applied until you confirm it.
+
+Under **Place fields → Templates**, save the current layout as a personal template, rename or update it, or delete it. Loading a template can replace the current fields or add to them; fields beyond the current document's page count are skipped. Templates store positions and field types only—signature images, dates, and text values are removed. Review the layout and choose **Save fields** after loading. Each user can keep up to 100 templates, and templates remain private even from other administrators. The `AddSigningTemplates` migration adds the template table with database-generated IDs.
+
 Choose **Signatures** on a PDF row or in its preview. Only a file owner or editor can start a request; requests and their downloads belong to the user who created them. Public links and viewer access do not grant signing access.
 
 - **In-App Signature** is enabled by default. Choose **Open signing editor**, place Signature, Initials, Date, and Text fields, save the layout, switch to **Sign**, draw the signature, and choose **Finish**. Fields can be dragged, resized, and nudged with arrow keys. The signed PDF and its audit record can be previewed and downloaded from **Signing requests**. Optional signer names/emails are recorded only; this mode does not notify or collect signatures from other people. These are drawn signatures, not certificate-based digital signatures.

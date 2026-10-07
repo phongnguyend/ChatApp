@@ -71,3 +71,39 @@ export const completeInAppSigning = (id: string, requestId: string, pdf: Blob) =
   `${signaturesPath(id)}/${encodeURIComponent(requestId)}/complete`, {
     method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: pdf,
   })
+
+export interface SigningTemplateSummary {
+  id: string
+  name: string
+  fieldCount: number
+  pageCount: number
+  updatedAtUtc: string
+}
+
+/** A personal field layout. Values are never stored, so every field comes back empty. */
+export interface SigningTemplate {
+  id: string
+  name: string
+  pageCount: number
+  fields: SigningField[]
+  updatedAtUtc: string
+}
+
+const templatesPath = '/api/signing-templates'
+
+export const listSigningTemplates = (signal?: AbortSignal) => request<SigningTemplateSummary[]>(templatesPath, { signal, cache: 'no-store' })
+export const getSigningTemplate = (templateId: string) => request<SigningTemplate>(
+  `${templatesPath}/${encodeURIComponent(templateId)}`, { cache: 'no-store' })
+export const createSigningTemplate = (input: { name: string; fields: SigningField[]; pageCount: number }) => request<SigningTemplate>(templatesPath, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+})
+export const updateSigningTemplate = (templateId: string, input: { name: string; fields: SigningField[]; pageCount: number }) => request<SigningTemplate>(
+  `${templatesPath}/${encodeURIComponent(templateId)}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+  })
+export const renameSigningTemplate = (templateId: string, name: string) => request<SigningTemplate>(
+  `${templatesPath}/${encodeURIComponent(templateId)}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
+  })
+export const deleteSigningTemplate = (templateId: string) => request<{ deleted: boolean }>(
+  `${templatesPath}/${encodeURIComponent(templateId)}`, { method: 'DELETE' })

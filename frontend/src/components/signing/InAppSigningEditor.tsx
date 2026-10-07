@@ -1,15 +1,16 @@
 import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
-import { CalendarDays, CheckCheck, Eye, Hand, PenLine, Save, Signature, TextCursorInput, Trash2, Type, X } from 'lucide-react'
+import { CalendarDays, CheckCheck, Eye, Hand, LayoutTemplate, PenLine, Save, Signature, TextCursorInput, Trash2, Type, X } from 'lucide-react'
 import { Document, Page } from 'react-pdf'
 import {
   completeInAppSigning, downloadAttachmentFile, getSigningFields, saveSigningFields,
-  type SigningField, type SigningFieldType,
+  type SigningField, type SigningFieldType, type SigningTemplate,
 } from './client'
 import { flattenSignedPdf, isImageField } from './flattenSignedPdf'
 import { pdfDocumentOptions } from './pdfjs'
 import { ErrorBanner, LoadingBar, Modal } from './ui'
 import { PdfViewer } from './PdfViewer'
 import { SignaturePad } from './SignaturePad'
+import { SigningTemplatesDialog, type TemplateLoadMode } from './SigningTemplatesDialog'
 
 const FIELD_MIME = 'application/x-signing-field'
 
@@ -79,6 +80,7 @@ export default function InAppSigningEditor({ attachmentId, requestId, name, onCl
   const [savedJson, setSavedJson] = useState('[]')
   const [mode, setMode] = useState<'place' | 'sign'>('place')
   const [selected, setSelected] = useState<string | null>(null)
+  const [showTemplates, setShowTemplates] = useState(false)
   const [padFieldId, setPadFieldId] = useState<string | null>(null)
   const [missing, setMissing] = useState<Set<string>>(new Set())
   const [activePage, setActivePage] = useState(1)
@@ -223,6 +225,23 @@ export default function InAppSigningEditor({ attachmentId, requestId, name, onCl
   const removeField = (id: string) => {
     setFields(values => values.filter(x => x.id !== id))
     setSelected(null)
+  }
+
+  const loadTemplate = (template: SigningTemplate, loadMode: TemplateLoadMode) => {
+    // Templates are reused across documents, so skip fields on pages this document does not have.
+    const loaded = template.fields
+      .filter(x => x.page <= pageSizes.length)
+      .map(x => ({ ...x, id: crypto.randomUUID(), value: null }))
+    const skipped = template.fields.length - loaded.length
+    setFields(values => loadMode === 'replace' ? loaded : [...values, ...loaded])
+    setSelected(null)
+    setMissing(new Set())
+    setMode('place')
+    setShowTemplates(false)
+    setError(null)
+    setNotice(`Loaded ${loaded.length} field${loaded.length === 1 ? '' : 's'} from "${template.name}"`
+      + (skipped ? `; ${skipped} on pages beyond this document's ${pageSizes.length} were skipped` : '')
+      + '. Review their positions, then choose Save fields.')
   }
 
   const save = async () => {
@@ -422,8 +441,10 @@ export default function InAppSigningEditor({ attachmentId, requestId, name, onCl
               {spec.icon}{spec.label}
             </button>)}
             <p className="signing-palette-count">{fields.length} field{fields.length === 1 ? '' : 's'}{dirty ? ' · unsaved' : ''}</p>
+            <button type="button" className="signing-palette-templates" disabled={busy || !pageSizes.length}
+              onClick={() => setShowTemplates(true)}><LayoutTemplate size={16} aria-hidden="true" />Templates</button>
           </> : <>
-            <p>Click each signature or initials field to draw it, and fill in the date and text fields.</p>
+            <p>Click each signature or initials field to draw, upload, drop, or paste an image. Fill in the date and text fields.</p>
             <p className="signing-palette-count">{signedCount} of {fields.length} complete{dirty ? ' · unsaved' : ''}</p>
             {imageFields.length === 0 && <p>Add a signature field in Place fields first.</p>}
           </>}
@@ -471,6 +492,8 @@ export default function InAppSigningEditor({ attachmentId, requestId, name, onCl
         </div>
       </div>
     </Modal>
+    {showTemplates && <SigningTemplatesDialog fields={fields} pageCount={pageSizes.length}
+      onLoad={loadTemplate} onClose={() => setShowTemplates(false)} />}
     {padField && <SignaturePad
       title={padField.type === 'initials' ? 'Draw your initials' : 'Draw your signature'}
       previous={fields.find(x => x.id !== padField.id && x.type === padField.type && x.value)?.value ?? null}

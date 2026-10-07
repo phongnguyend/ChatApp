@@ -44,6 +44,19 @@ export function Modal({
       ref={ref}
       aria-label={title}
       className={className ? `modal signing-modal ${className}` : 'modal signing-modal'}
+      onDragEnter={(event) => event.stopPropagation()}
+      onDragOver={(event) => {
+        event.stopPropagation()
+        if (event.dataTransfer.types.includes('Files')) {
+          event.preventDefault()
+        }
+      }}
+      onDragLeave={(event) => event.stopPropagation()}
+      onDrop={(event) => {
+        // Keep modal drags out of the document library's upload handlers.
+        event.stopPropagation()
+        event.preventDefault()
+      }}
       onCancel={(event) => {
         // File-picker cancellation bubbles from the input; only the dialog's own
         // cancel event (Escape) should close this modal.

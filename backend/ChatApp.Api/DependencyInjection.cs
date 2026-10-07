@@ -72,6 +72,9 @@ public static class DependencyInjection
         ConversationsEndpoints.Map(app);
         DocumentsEndpoints.Map(app);
         SignatureEndpoints.Map(app);
+
+        SigningTemplateEndpoints.Map(app);
+
         LiveStreamsEndpoints.Map(app);
         MeetingsEndpoints.Map(app);
         MessagesEndpoints.Map(app);

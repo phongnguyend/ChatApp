@@ -39,6 +39,9 @@ public sealed class ChatAppDbContext(DbContextOptions<ChatAppDbContext> options)
     public DbSet<UserNoteShare> UserNoteShares => Set<UserNoteShare>();
     public DbSet<DocumentFolder> DocumentFolders => Set<DocumentFolder>();
     public DbSet<SignatureRequestEntity> SignatureRequests => Set<SignatureRequestEntity>();
+
+    public DbSet<SigningTemplateEntity> SigningTemplates => Set<SigningTemplateEntity>();
+
     public DbSet<StoredDocument> StoredDocuments => Set<StoredDocument>();
     public DbSet<DocumentShare> DocumentShares => Set<DocumentShare>();
     public DbSet<DocumentPublicLink> DocumentPublicLinks => Set<DocumentPublicLink>();
@@ -49,6 +52,16 @@ public sealed class ChatAppDbContext(DbContextOptions<ChatAppDbContext> options)
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<SigningTemplateEntity>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()").ValueGeneratedOnAdd();
+            entity.Property(x => x.Name).HasMaxLength(100);
+            entity.HasIndex(x => new { x.CreatedById, x.Name }).IsUnique();
+            entity.HasOne<ChatUser>().WithMany().HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<SignatureRequestEntity>(entity =>
         {
             entity.HasKey(x => x.Id);

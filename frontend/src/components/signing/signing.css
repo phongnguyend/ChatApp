@@ -640,3 +640,169 @@ button.signing-field-remove {
 
 }
 .signing-modal.modal.pdf-preview-modal.is-maximized { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; border-radius: 0; resize: none; }
+
+.signing-modal {
+.signature-pad-input {
+  border-radius: 6px;
+}
+
+.signature-pad-input.is-dragging {
+  outline: 2px dashed var(--accent, #2563eb);
+  outline-offset: 6px;
+}
+
+.signature-pad-upload {
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.signature-pad-upload span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.signature-pad-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 3 / 1;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.signature-pad-preview img {
+  max-width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+}
+
+.signature-pad-canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 1;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm, 6px);
+  background: #ffffff;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.signature-pad-surface {
+  position: relative;
+}
+
+.signature-pad-baseline {
+  position: absolute;
+  right: 6%;
+  bottom: 26%;
+  left: 6%;
+  border-bottom: 1px dashed #c4c4bc;
+  pointer-events: none;
+}
+
+
+.signing-palette .signing-palette-templates {
+  justify-content: flex-start;
+  margin-top: 8px;
+}
+
+&.modal.signing-templates-modal {
+  width: min(720px, calc(100vw - 32px));
+}
+
+&.signing-templates-modal .modal-body {
+  display: grid;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+&.signing-templates-modal h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.signing-template-save {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.signing-template-save p,
+.signing-template-list > p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.signing-template-save .row {
+  flex-wrap: wrap;
+}
+
+.signing-template-save input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.signing-template-list {
+  display: grid;
+  gap: 4px;
+}
+
+.signing-template-list-head {
+  justify-content: space-between;
+}
+
+.signing-template-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.signing-template-info {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.signing-template-info strong {
+  overflow-wrap: anywhere;
+}
+
+.signing-template-info span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.signing-template-actions,
+.signing-template-confirm {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.signing-template-confirm span {
+  font-size: 13px;
+}
+
+.signing-template-rename {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.signing-template-rename input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.signing-template-row:has(.signing-template-rename) .signing-template-info {
+  flex: 1 1 100%;
+}
+
+}
