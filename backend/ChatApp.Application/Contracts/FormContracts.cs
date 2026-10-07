@@ -8,6 +8,14 @@ public sealed record FormNode
 
     public string Kind { get; init; } = "text";
 
+    public string? ImageDataUrl { get; init; }
+
+    public string ImageDisplay { get; init; } = "banner";
+
+    public int? ImageHeight { get; init; }
+
+    public int? ImageWidth { get; init; }
+
     public string Label { get; init; } = "";
 
     public string Description { get; init; } = "";

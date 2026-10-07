@@ -3,6 +3,78 @@ import { randomUUID } from 'node:crypto';
 import { apiUrl, createUser, headersFor, login } from './helpers.js';
 import { createNode, csvCell, definitionIssues, flatten, moveNode, visibleAnswers, type FormDefinition, type FormDetail, type ResponsePage } from '../../frontend/src/components/forms/formModel.js';
 
+test('owner uploads, drops, and pastes a base64 image that respondents cannot edit', async ({ page, browser, request }) => {
+  const user = await createUser(request, 'formimage');
+  await login(page, user.username);
+  await page.getByRole('navigation', { name: 'Main sections' }).getByRole('button', { name: 'Forms', exact: true }).click();
+  await page.getByRole('button', { name: 'New form', exact: true }).click();
+  await page.getByLabel('Title', { exact: true }).fill('Image survey');
+  await page.locator('.forms-palette').getByRole('button', { name: 'Logo / banner', exact: true }).click();
+  await page.getByLabel('Alternative text', { exact: true }).fill('Acme logo');
+  const images = await page.evaluate(() => ['red', 'green', 'blue'].map(color => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 8;
+    canvas.height = 8;
+    const context = canvas.getContext('2d')!;
+    context.fillStyle = color;
+    context.fillRect(0, 0, 8, 8);
+    return canvas.toDataURL('image/png');
+  }));
+  const upload = page.getByLabel('Upload logo or banner', { exact: true });
+  await upload.setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: Buffer.from(images[0].split(',')[1], 'base64') });
+  await expect(page.locator('.forms-image-preview img')).toHaveAttribute('src', images[0]);
+  await upload.setInputFiles({ name: 'bad.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg/>') });
+  await expect(page.getByRole('alert')).toContainText('Choose a PNG, JPEG, or WebP');
+  await expect(page.locator('.forms-image-preview img')).toHaveAttribute('src', images[0]);
+  const dropped = await page.evaluateHandle(dataUrl => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([Uint8Array.from(atob(dataUrl.split(',')[1]), value => value.charCodeAt(0))], 'drop.png', { type: 'image/png' }));
+    return transfer;
+  }, images[1]);
+  await page.getByRole('group', { name: 'Image upload area' }).dispatchEvent('drop', { dataTransfer: dropped });
+  await dropped.dispose();
+  await expect(page.locator('.forms-image-preview img')).toHaveAttribute('src', images[1]);
+  await page.getByRole('group', { name: 'Image upload area' }).evaluate((element, dataUrl) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([Uint8Array.from(atob(dataUrl.split(',')[1]), value => value.charCodeAt(0))], 'paste.png', { type: 'image/png' }));
+    element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true }));
+  }, images[2]);
+  await expect(page.locator('.forms-image-preview img')).toHaveAttribute('src', images[2]);
+  await page.getByRole('combobox', { name: 'Image display', exact: true }).selectOption('logo');
+  await page.getByRole('spinbutton', { name: 'Image height (px)' }).fill('180');
+  await page.getByRole('spinbutton', { name: 'Image width (px)' }).fill('300');
+  await expect(page.locator('.forms-image-preview img')).toHaveCSS('width', '300px');
+  await expect(page.locator('.forms-image-preview img')).toHaveCSS('height', '180px');
+  await page.locator('.forms-palette').getByRole('button', { name: 'Short answer', exact: true }).click();
+  await page.getByRole('button', { name: 'Publish form', exact: true }).click();
+  const url = await page.getByLabel('Response link').inputValue();
+  const anonymous = await browser.newPage();
+  try {
+    await anonymous.goto(url);
+    const logo = anonymous.getByRole('img', { name: 'Acme logo', exact: true });
+    await expect(logo).toHaveAttribute('src', images[2]);
+    await expect(logo).toHaveCSS('height', '180px');
+    await expect(logo).toHaveCSS('width', '300px');
+    await expect.poll(() => logo.evaluate(element => (element as HTMLImageElement).naturalWidth)).toBe(8);
+    await expect(anonymous.locator('input[type=file]')).toHaveCount(0);
+    await expect(anonymous.getByRole('button', { name: /Upload image|Replace image|Remove image/ })).toHaveCount(0);
+    await anonymous.getByRole('button', { name: 'Submit response' }).click();
+    await expect(anonymous.getByRole('heading', { name: 'Response submitted' })).toBeVisible();
+  } finally {
+    await anonymous.close();
+  }
+  const headers = headersFor(user.username);
+  const list = await (await request.get(`${apiUrl}/api/forms/`, { headers })).json() as FormDetail[];
+  const form = list.find(item => item.title === 'Image survey')!;
+  const saved = await (await request.get(`${apiUrl}/api/forms/${form.id}`, { headers })).json() as FormDetail;
+  expect(saved.definition.nodes[0].imageDataUrl).toBe(images[2]);
+  expect(saved.definition.nodes[0].imageHeight).toBe(180);
+  expect(saved.definition.nodes[0].imageWidth).toBe(300);
+  const responses = await (await request.get(`${apiUrl}/api/forms/${form.id}/responses`, { headers })).json() as ResponsePage;
+  expect(responses.items[0].answers).not.toHaveProperty(saved.definition.nodes[0].id);
+  await request.delete(`${apiUrl}/api/forms/${form.id}?revision=${form.revision}`, { headers });
+});
+
 test('form model preserves nested moves, prevents cycles, and excludes hidden answers', () => {
   const choice = { ...createNode('yesno'), id: 'choice' };
   const hidden = { ...createNode('text'), id: 'hidden', conditions: [{ questionId: 'choice', operator: 'equals', value: 'Yes' }] };

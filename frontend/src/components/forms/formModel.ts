@@ -3,6 +3,10 @@ export type FormNode = {
   id: string; kind: string; label: string; description: string; required: boolean;
   options: string[]; min: number | null; max: number | null; children: FormNode[];
   conditionMode: 'all' | 'any'; conditions: Condition[];
+  imageDataUrl?: string;
+  imageDisplay?: 'logo' | 'banner';
+  imageHeight?: number | null;
+  imageWidth?: number | null;
 };
 export type FormDefinition = { title: string; description: string; confirmationMessage: string; nodes: FormNode[] };
 export type Answers = Record<string, string[]>;
@@ -16,13 +20,17 @@ export const questionTypes = [
   ['number', 'Number'], ['date', 'Date'], ['time', 'Time'], ['datetime', 'Date & time'], ['radio', 'Single choice'],
   ['checkbox', 'Multiple choice'], ['select', 'Dropdown'], ['rating', 'Rating'], ['yesno', 'Yes / No'],
 ] as const;
-export const isQuestion = (node: FormNode) => node.kind !== 'section' && node.kind !== 'columns';
+export const isQuestion = (node: FormNode) => questionTypes.some(([kind]) => kind === node.kind);
 export function createNode(kind: string): FormNode {
   const node: FormNode = {
-    id: crypto.randomUUID(), kind, label: questionTypes.find(([value]) => value === kind)?.[1] ?? (kind === 'section' ? 'Section' : 'Columns'),
+    id: crypto.randomUUID(), kind, label: questionTypes.find(([value]) => value === kind)?.[1] ?? (kind === 'image' ? 'Logo / banner' : kind === 'section' ? 'Section' : 'Columns'),
     description: '', required: false, options: ['Option 1', 'Option 2'], min: null, max: null,
     children: [], conditionMode: 'all', conditions: [],
   };
+  if (kind === 'image') {
+    node.imageDataUrl = '';
+    node.imageDisplay = 'banner';
+  }
   if (kind === 'columns') {
     node.children = [createNode('section'), createNode('section')];
     node.children.forEach((column, index) => { column.label = `Column ${index + 1}`; });
@@ -102,6 +110,12 @@ export function definitionIssues(definition: FormDefinition): string[] {
       issues.push('Layouts can be nested up to eight levels.');
     }
     for (const node of items) {
+      if (node.kind === 'image' && node.imageWidth != null && (!Number.isInteger(node.imageWidth) || node.imageWidth < 24 || node.imageWidth > 2400)) {
+        issues.push(`${node.label}: image width must be a whole number from 24 to 2400 pixels, or empty for automatic sizing.`);
+      }
+      if (node.kind === 'image' && node.imageHeight != null && (!Number.isInteger(node.imageHeight) || node.imageHeight < 24 || node.imageHeight > 1200)) {
+        issues.push(`${node.label}: image height must be a whole number from 24 to 1200 pixels, or empty for automatic sizing.`);
+      }
       if (node.conditions.some(condition => !earlier.has(condition.questionId))) {
         issues.push(`${node.label}: a condition refers to a missing or later question. Update its logic or move the source question earlier.`);
       }

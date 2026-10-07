@@ -15,6 +15,9 @@ export function FormRenderer({ definition, onSubmit, busy = false, errors = {}, 
   };
   function render(nodes: FormNode[], structuralColumns = false) {
     return nodes.filter(node => visible.ids.has(node.id)).map(node => {
+      if (node.kind === 'image') {
+        return node.imageDataUrl ? <figure key={node.id} className="form-image-block"><img className={`form-image form-image-${node.imageDisplay ?? 'banner'}`} style={{ width: node.imageWidth ?? undefined, height: node.imageHeight ?? undefined, maxWidth: node.imageWidth != null ? '100%' : undefined, maxHeight: node.imageHeight != null || node.imageWidth != null ? 'none' : undefined }} src={node.imageDataUrl} alt={node.label} draggable={false} />{node.description && <figcaption>{node.description}</figcaption>}</figure> : null;
+      }
       if (!isQuestion(node)) {
         return <section key={node.id} className={`form-layout form-layout-${node.kind}`}>
           {node.kind === 'section' && !structuralColumns && <><h3>{node.label}</h3>{node.description && <p>{node.description}</p>}</>}

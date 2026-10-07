@@ -106,7 +106,7 @@ public static class FormsEndpoints
             Touch(form);
             await db.SaveChangesAsync(ct);
             return Results.Ok(Detail(form));
-        }).WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(512_000));
+        }).WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(6 * 1024 * 1024));
 
         owner.MapPost("/{id:guid}/publish", async (Guid id, FormRevisionRequest request, ClaimsPrincipal user, ChatAppDbContext db, CancellationToken ct) =>
         {

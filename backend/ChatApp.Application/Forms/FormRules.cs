@@ -23,6 +23,7 @@ public static class FormRules
         var ids = new HashSet<string>();
         var questions = new HashSet<string>();
         var count = 0;
+        var imageBytes = 0;
         void Visit(FormNode[]? nodes, int depth)
         {
             if (nodes is null || depth > 8)
@@ -42,7 +43,7 @@ public static class FormRules
                 {
                     errors[key] = "Block identifiers must be unique and nonempty.";
                 }
-                if (!QuestionKinds.Contains(node.Kind) && node.Kind is not ("section" or "columns"))
+                if (!QuestionKinds.Contains(node.Kind) && node.Kind is not ("section" or "columns" or "image"))
                 {
                     errors[key] = "Unknown block type.";
                 }
@@ -76,7 +77,37 @@ public static class FormRules
                 {
                     errors[key] = "Check the minimum and maximum; ratings use 1 to 2–10.";
                 }
-                if (QuestionKinds.Contains(node.Kind))
+                if (node.Kind == "image")
+                {
+                    if (node.ImageWidth is < 24 or > 2400)
+                    {
+                        errors[key] = "Image width must be between 24 and 2400 pixels, or empty for automatic sizing.";
+                    }
+                    if (node.ImageHeight is < 24 or > 1200)
+                    {
+                        errors[key] = "Image height must be between 24 and 1200 pixels, or empty for automatic sizing.";
+                    }
+                    if (node.Required || node.Children is null || node.Children.Length != 0 || node.ImageDisplay is not ("logo" or "banner"))
+                    {
+                        errors[key] = "Images are display-only blocks with logo or banner sizing and no child blocks.";
+                    }
+                    if (string.IsNullOrEmpty(node.ImageDataUrl))
+                    {
+                        if (publishing)
+                        {
+                            errors[key] = "Upload an image or remove the empty image block before publishing.";
+                        }
+                    }
+                    else if (!TryValidateImage(node.ImageDataUrl, out var size))
+                    {
+                        errors[key] = "Use a base64 PNG, JPEG, or WebP image up to 1 MiB.";
+                    }
+                    else
+                    {
+                        imageBytes += size;
+                    }
+                }
+                else if (QuestionKinds.Contains(node.Kind))
                 {
                     if (node.Children is null || node.Children.Length != 0)
                     {
@@ -95,11 +126,43 @@ public static class FormRules
             }
         }
         Visit(definition.Nodes, 1);
+        if (imageBytes > 4 * 1024 * 1024)
+        {
+            errors["images"] = "Embedded images must total no more than 4 MiB per form.";
+        }
         if (publishing && questions.Count == 0)
         {
             errors["nodes"] = "Add at least one question before publishing.";
         }
         return errors;
+    }
+
+    private static bool TryValidateImage(string dataUrl, out int size)
+    {
+        size = 0;
+        var separator = dataUrl.IndexOf(',');
+        if (separator < 0 || separator > 30 || dataUrl.Length - separator - 1 > 1_398_104)
+        {
+            return false;
+        }
+        var prefix = dataUrl[..separator];
+        if (prefix is not ("data:image/png;base64" or "data:image/jpeg;base64" or "data:image/webp;base64"))
+        {
+            return false;
+        }
+        var bytes = new byte[1024 * 1024];
+        if (!Convert.TryFromBase64String(dataUrl[(separator + 1)..], bytes, out size) || size == 0)
+        {
+            return false;
+        }
+        var data = bytes.AsSpan(0, size);
+        return prefix switch
+        {
+            "data:image/png;base64" => size >= 24 && data[..8].SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }),
+            "data:image/jpeg;base64" => size >= 4 && data[0] == 255 && data[1] == 216 && data[2] == 255 && data[^2] == 255 && data[^1] == 217,
+            "data:image/webp;base64" => size >= 20 && data[..4].SequenceEqual("RIFF"u8) && data.Slice(8, 4).SequenceEqual("WEBP"u8),
+            _ => false
+        };
     }
 
     public static bool IsVisible(FormNode node, IReadOnlyDictionary<string, string[]> visibleAnswers)

@@ -6,6 +6,65 @@ namespace ChatApp.Tests;
 
 public sealed class FormRulesTests
 {
+    private const string PngImage = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(24, true)]
+    [InlineData(180, true)]
+    [InlineData(1200, true)]
+    [InlineData(0, false)]
+    [InlineData(-1, false)]
+    [InlineData(1201, false)]
+    public void ValidatesOptionalImageHeight(int? height, bool valid)
+    {
+        var image = new FormNode { Id = "image", Kind = "image", ImageDataUrl = PngImage, ImageHeight = height };
+        Assert.Equal(valid, FormRules.ValidateDefinition(Definition(image, Question("q")), true).Count == 0);
+    }
+
+    [Fact]
+    public void ImageBlocksAreDisplayOnlyAndNeverBecomeAnswers()
+    {
+        var image = new FormNode { Id = "logo", Kind = "image", Label = "Company logo", ImageDataUrl = PngImage, ImageDisplay = "logo" };
+        var definition = Definition(image, Question("name", required: true));
+        Assert.Empty(FormRules.ValidateDefinition(definition, true));
+        var result = FormRules.ValidateAnswers(definition, new() { ["logo"] = ["forged replacement"], ["name"] = ["Alice"] });
+        Assert.Empty(result.Errors);
+        Assert.False(result.Answers.ContainsKey("logo"));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(image with { Required = true })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(image with { Children = [Question("nested")] })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(image, Question("q") with { Conditions = [new("logo", "answered", "")] })));
+        Assert.Empty(FormRules.ValidateDefinition(Definition(image with { ImageWidth = 300, ImageHeight = 180 })));
+        Assert.Empty(FormRules.ValidateDefinition(Definition(image with { ImageWidth = 24 })));
+        Assert.Empty(FormRules.ValidateDefinition(Definition(image with { ImageWidth = 2400 })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(image with { ImageWidth = 0 })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(image with { ImageWidth = 2401 })));
+    }
+
+    [Theory]
+    [InlineData("https://example.com/logo.png")]
+    [InlineData("data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=")]
+    [InlineData("data:image/png;base64,invalid!")]
+    [InlineData("data:image/png;base64,SGVsbG8=")]
+    public void RejectsUnsupportedOrMalformedImages(string image)
+    {
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(new FormNode { Id = "image", Kind = "image", ImageDataUrl = image })));
+    }
+
+    [Fact]
+    public void RequiresImageForPublicationAndEnforcesImageBudgets()
+    {
+        var image = new FormNode { Id = "image", Kind = "image" };
+        Assert.Empty(FormRules.ValidateDefinition(Definition(image, Question("q"))));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(image, Question("q")), true));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(image with { ImageDataUrl = PngImage.Replace("image/png", "image/jpeg") })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(image with { ImageDataUrl = "data:image/png;base64," + new string('A', 1_398_108) })));
+        var bytes = new byte[1024 * 1024];
+        Convert.FromBase64String(PngImage.Split(',')[1]).CopyTo(bytes, 0);
+        var largeImage = "data:image/png;base64," + Convert.ToBase64String(bytes);
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(Enumerable.Range(0, 5).Select(index => image with { Id = $"image-{index}", ImageDataUrl = largeImage }).ToArray())));
+    }
+
     private static FormNode Question(string id, string kind = "text", bool required = false) => new() { Id = id, Kind = kind, Label = id, Required = required };
 
     private static FormDefinition Definition(params FormNode[] nodes) => new("Survey", "", "Thanks", nodes);

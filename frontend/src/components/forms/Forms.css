@@ -71,6 +71,17 @@
 .forms-palette button[draggable] { cursor: grab; }
 .forms-palette h3:not(:first-child) { margin-top: 20px; }
 .forms-canvas { min-width: 0; min-height: 0; height: 100%; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 2px; }
+.forms-image-editor { display: grid; gap: 12px; }
+.forms-image-drop { display: grid; justify-items: center; gap: 10px; border: 1px dashed var(--forms-accent); border-radius: 8px; padding: 14px; text-align: center; }
+.forms-image-drop p { margin: 0; }
+.forms-image-drop small { font-size: 11px; color: var(--muted, #657774); }
+.forms-image-preview { width: calc(100% - 28px); margin: 0 14px 14px; min-height: 80px; }
+.forms-image-preview > span { display: grid; justify-items: center; gap: 8px; font-size: 12px; }
+.form-image-block { margin: 0; min-width: 0; }
+.form-image { display: block; max-width: 100%; height: auto; object-fit: contain; }
+.form-image-banner { width: 100%; max-height: 420px; }
+.form-image-logo { width: auto; max-width: min(240px, 100%); max-height: 140px; margin-inline: auto; }
+.form-image-block figcaption { text-align: center; margin-top: 8px; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted, #657774); }
 .forms-cover-editor { background: var(--paper, white); border: 1px solid var(--line, #d6dfdc); border-top: 5px solid var(--forms-accent); border-radius: 10px; padding: 22px; display: grid; gap: 16px; }
 .forms-cover-editor input { font-size: 21px !important; font-weight: 650; }
 .forms-block { background: var(--paper, white); border: 1px solid var(--line, #d6dfdc); border-radius: 8px; min-width: 0; }
