@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, ClipboardList, Copy, Download, ExternalLink, Eye, ListChecks, LoaderCircle, PencilRuler, Plus, Redo2, RefreshCw, Save, Search, Send, Share2, Square, Trash2, Undo2, X } from 'lucide-react';
 import { FormBuilder } from '../components/forms/FormBuilder';
+import { FormSchemaDialog } from '../components/forms/FormSchemaDialog';
+import { Braces } from 'lucide-react';
 import { InvitationQrCode } from '../components/InvitationQrCode';
 import { API_URL } from '../services/auth';
 import { FormRenderer } from '../components/forms/FormRenderer';
@@ -28,6 +30,7 @@ export function FormsView({ hidden, onBack }: { hidden: boolean; onBack: () => v
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [schemaOpen, setSchemaOpen] = useState(false);
   const [responses, setResponses] = useState<ResponsePage | null>(null);
   const dirty = !!form && !!draft && JSON.stringify(form.definition) !== JSON.stringify(draft);
   const issues = draft ? definitionIssues(draft) : [];
@@ -84,6 +87,7 @@ export function FormsView({ hidden, onBack }: { hidden: boolean; onBack: () => v
     }
   }
   function open(detail: FormDetail) {
+    setSchemaOpen(false);
     setForm(detail);
     setDraft(detail.definition);
     setPast([]);
@@ -191,6 +195,7 @@ export function FormsView({ hidden, onBack }: { hidden: boolean; onBack: () => v
         setNotice(`Version ${published.publishedVersion} published. Your share link is ready.`);
       }); }}>{busy ? <LoaderCircle size={16} className="forms-spin" aria-hidden="true" /> : <Send size={16} aria-hidden="true" />}{busy ? 'Working…' : form.isPublished ? 'Publish changes' : 'Publish form'}</button></div>
         : <button className="forms-primary" type="button" disabled={busy} onClick={() => { void run(async () => open(await formsApi<FormDetail>('forms/', 'POST'))); }}><Plus size={17} />New form</button>}
+      {form && draft && <button type="button" disabled={busy} title="View JSON schema" aria-label="View JSON schema" onClick={() => setSchemaOpen(true)}><Braces size={16} aria-hidden="true" />JSON</button>}
     </header>
     {error && <div role="alert" className="forms-banner forms-error">{error}<button type="button" onClick={() => setError('')}><X size={16} aria-hidden="true" />Dismiss</button>{form && <button type="button" disabled={busy} onClick={() => {
       if (!dirty || window.confirm('Reload this form and discard unsaved changes?')) {
@@ -223,5 +228,6 @@ export function FormsView({ hidden, onBack }: { hidden: boolean; onBack: () => v
         {responses && responses.total > responses.pageSize && <div className="forms-pagination"><button type="button" disabled={busy || responses.page <= 1} onClick={() => { void run(() => loadResponses(responses.page - 1)); }}><ChevronLeft size={16} aria-hidden="true" />Previous</button><span>Page {responses.page} of {Math.ceil(responses.total / responses.pageSize)}</span><button type="button" disabled={busy || responses.page * responses.pageSize >= responses.total} onClick={() => { void run(() => loadResponses(responses.page + 1)); }}>Next<ChevronRight size={16} aria-hidden="true" /></button></div>}
       </div>}
     </>}
+    {schemaOpen && draft && <FormSchemaDialog definition={draft} onClose={() => setSchemaOpen(false)} />}
   </section>;
 }
