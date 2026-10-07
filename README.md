@@ -1417,7 +1417,7 @@ uploads to be cleaned up without creating long-lived document relationships.
 
 The API applies pending migrations during startup with
 `Database.MigrateAsync()`. The current migration tip is
-`20260926144543_RemoveStoredDisplayName`.
+`20261007112917_AddForms`.
 
 User names are derived from `FirstName` and `LastName`, falling back to the username when both are empty. `DisplayName` remains a read-only API value and is not stored in the database. The migration preserves legacy display names in `FirstName` only where both name fields are empty, then drops `Users.DisplayName`.
 
@@ -1452,3 +1452,25 @@ migration that has already been deployed; create a new migration instead.
 Global Admins can open **Activity log** to search authentication and user-management events by category, event, user name or ID, and date range. The log includes sign-in success/failure, lockout, logout, account creation/profile edits, role changes, account enable/disable, password changes, password authentication settings, and external login linking. It excludes chat, document, meeting, and other feature activity. Passwords, tokens, and provider credentials are never stored in log metadata. Entries use SQL-generated IDs and preserve user identity snapshots.
 
 `backend/ChatApp.Api/appsettings.json` lists JWT, Google, Microsoft, and recording callback settings. Supply blank secrets through user-secrets or environment variables; do not commit signing keys or callback keys. Provider client and tenant IDs remain optional.
+
+## 23. Forms
+
+Open **Forms** in the sidebar to create, search, duplicate, publish, close, or delete your forms. The builder supports short and long text, email, number, date, time, date & time, single choice, multiple choice, dropdown, rating, and yes/no questions. Time and date & time answers use minute precision and retain local values without timezone conversion (`HH:mm` and `yyyy-MM-ddTHH:mm`). Drag blocks from the palette or use its buttons, reorder with the arrow controls, and use **Move into** to move blocks between sections without dragging. Undo and redo preserve the last 50 edits.
+
+Sections and two-to-four-column layouts can nest up to eight levels, with at most 200 blocks per form. Select a block to set required answers, choices, numeric bounds, or visibility rules. Conditions match all or any rules against earlier questions; moving or deleting a source question reports invalid references before saving. Hidden questions and descendants are excluded from submissions and required-field validation. Column layouts collapse on small screens.
+
+Save a draft, then publish it to create an immutable version and activate the response link (`?form=<token>`). Editing a draft does not change the live form. Republish to activate a new version; respondents with an older version must reload before submitting. Closing stops new submissions while retaining responses. Anyone with a published link can submit without an account. Forms and response management remain owner-only.
+
+The Share & settings tab displays a QR code for the response link and lets the owner download it as a PNG for print or sharing. The code preserves the application's URL path and continues to work across published versions; the form must be published to accept responses.
+
+The Responses tab shows paginated submissions with their original version's questions. CSV export includes all responses as one row per visible question, uses a consistent submission cutoff, and escapes spreadsheet formulas. Anonymous submission retries use an idempotency key; submissions are limited to 30 requests per minute per IP and 512 KB per request. Form and publication changes use optimistic concurrency checks.
+
+Frontend entry points are `src/pages/FormsView.tsx` and `src/pages/PublicFormView.tsx`; reusable UI and model helpers live in `src/components/forms`, and API access lives in `src/services/formsApi.ts`. The `AddForms` EF migration creates SQL-generated GUID keys for forms, publication snapshots, and responses and is applied by the existing API startup migration workflow.
+
+Run validation with:
+
+```powershell
+dotnet test backend/ChatApp.Tests/ChatApp.Tests.csproj
+cd e2e
+npx playwright test tests/forms.spec.ts
+```

@@ -66,6 +66,8 @@ public static class DependencyInjection
 
     public static void MapApplicationEndpoints(this WebApplication app)
     {
+        FormsEndpoints.Map(app);
+
         AttachmentsEndpoints.Map(app);
         AvatarsEndpoints.Map(app);
         CallingEndpoints.Map(app);

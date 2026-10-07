@@ -8,6 +8,12 @@ namespace ChatApp.Persistence;
 public sealed class ChatAppDbContext(DbContextOptions<ChatAppDbContext> options)
     : IdentityDbContext<ChatUser, IdentityRole<Guid>, Guid>(options)
 {
+    public DbSet<UserForm> Forms => Set<UserForm>();
+
+    public DbSet<FormPublication> FormPublications => Set<FormPublication>();
+
+    public DbSet<FormResponse> FormResponses => Set<FormResponse>();
+
     public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
     public DbSet<Conversation> Conversations => Set<Conversation>();
     public DbSet<ConversationMember> ConversationMembers => Set<ConversationMember>();
@@ -52,6 +58,33 @@ public sealed class ChatAppDbContext(DbContextOptions<ChatAppDbContext> options)
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<UserForm>(entity =>
+        {
+            entity.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()").ValueGeneratedOnAdd();
+            entity.Property(x => x.Title).HasMaxLength(200);
+            entity.Property(x => x.ShareToken).HasMaxLength(64);
+            entity.Property(x => x.Revision).IsConcurrencyToken();
+            entity.HasIndex(x => x.ShareToken).IsUnique();
+            entity.HasIndex(x => new { x.OwnerId, x.UpdatedAt });
+            entity.HasOne<ChatUser>().WithMany().HasForeignKey(x => x.OwnerId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<FormPublication>(entity =>
+        {
+            entity.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()").ValueGeneratedOnAdd();
+            entity.HasIndex(x => new { x.FormId, x.Version }).IsUnique();
+            entity.HasOne<UserForm>().WithMany().HasForeignKey(x => x.FormId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<FormResponse>(entity =>
+        {
+            entity.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()").ValueGeneratedOnAdd();
+            entity.HasIndex(x => new { x.FormId, x.SubmissionKey }).IsUnique();
+            entity.HasIndex(x => new { x.FormId, x.SubmittedAt });
+            entity.HasOne<UserForm>().WithMany().HasForeignKey(x => x.FormId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<FormPublication>().WithMany().HasForeignKey(x => x.PublicationId).OnDelete(DeleteBehavior.Cascade);
+        });
 
         modelBuilder.Entity<SigningTemplateEntity>(entity =>
         {
