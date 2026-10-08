@@ -233,3 +233,14 @@
   .documents-tools, .documents-search { width: 100%; }
   .documents-actions button { flex: 1; }
 }
+.documents-orphan-panel { padding: 20px; min-height: 0; overflow: auto; }
+.documents-orphan-panel button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 12px; border: 1px solid var(--line, #d6dfdc); border-radius: 8px; background: var(--paper, white); color: inherit; cursor: pointer; }
+.documents-orphan-panel button:disabled { opacity: .5; cursor: not-allowed; }
+.documents-orphan-panel select { padding: 8px; margin-left: 8px; border: 1px solid var(--line, #d6dfdc); border-radius: 8px; background: var(--paper, white); color: inherit; }
+.documents-orphan-panel h2 { margin: 0; font-size: 18px; }
+.documents-orphan-panel p { line-height: 1.5; }
+.documents-orphan-list { display: grid; gap: 10px; }
+.documents-orphan-item { display: flex; align-items: center; gap: 14px; padding: 14px; border: 1px solid var(--line, #d6dfdc); border-radius: 10px; }
+.documents-orphan-item > div { display: grid; gap: 6px; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.documents-orphan-item > svg, .documents-orphan-item > button { flex-shrink: 0; }
+.documents-orphan-item small { color: var(--muted, #657774); }

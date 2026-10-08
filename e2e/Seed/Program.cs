@@ -7,9 +7,16 @@ using Microsoft.EntityFrameworkCore;
 // Test-only provisioning, deliberately separate from API startup and configuration.
 var connection = Environment.GetEnvironmentVariable("E2E_CONNECTION_STRING")
     ?? @"Server=(localdb)\mssqllocaldb;Database=ChatAppE2E;Trusted_Connection=True;TrustServerCertificate=True";
+await using var db = new ChatAppDbContext(new DbContextOptionsBuilder<ChatAppDbContext>().UseSqlServer(connection).Options);
+if (args.Length > 1 && args[0] == "expire-form-attachments")
+{
+    var ids = args.Skip(1).Select(Guid.Parse).ToArray();
+    await db.FormAttachmentUploads.Where(x => ids.Contains(x.Id))
+        .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.ExpiresAt, DateTimeOffset.UtcNow.AddMinutes(-1)));
+    return;
+}
 var email = Environment.GetEnvironmentVariable("E2E_ADMIN_EMAIL") ?? throw new InvalidOperationException("E2E_ADMIN_EMAIL required.");
 var password = Environment.GetEnvironmentVariable("E2E_ADMIN_PASSWORD") ?? throw new InvalidOperationException("E2E_ADMIN_PASSWORD required.");
-await using var db = new ChatAppDbContext(new DbContextOptionsBuilder<ChatAppDbContext>().UseSqlServer(connection).Options);
 await db.Database.MigrateAsync();
 await using var transaction = await db.Database.BeginTransactionAsync();
 var role = await db.Roles.SingleOrDefaultAsync(x => x.NormalizedName == "GLOBAL ADMIN");

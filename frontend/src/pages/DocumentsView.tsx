@@ -2,6 +2,7 @@ import { authFetch as fetch } from "../services/auth";
 import { ArrowLeft, Signature, CheckSquare2, ChevronRight, Copy, Download, FileImage, FileText, Folder, FolderInput, FolderOpen, FolderPlus, Globe2, History, Info, Link2, LoaderCircle, Pencil, QrCode, RotateCcw, Search, Send, Share2, Trash2, Upload, Users, X } from "lucide-react";
 import { lazy, Suspense, type ChangeEvent, type DragEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ConversationFilesPanel } from "../components/ConversationFilesPanel";
+import { OrphanAttachmentsPanel } from "../components/OrphanAttachmentsPanel";
 import { DocumentsStorageUsage } from "../components/DocumentsStorageUsage";
 import { discardDocumentUpload, uploadDocument, type UploadProgress } from "../components/documentUploads";
 import "./DocumentsView.css";
@@ -18,7 +19,7 @@ type FileItem = { id: string; folderId: string | null; name: string; contentType
 type SharingSummary = { peopleCount: number; hasPublicLink: boolean; publicLinkExpired: boolean };
 type Listing = { currentFolder: FolderItem | null; breadcrumbs: FolderItem[]; folders: FolderItem[]; files: FileItem[]; sharingSummaries?: Record<string, SharingSummary> | null; locations?: Record<string, string> | null };
 type Selection = { kind: "folder" | "file"; id: string };
-type DocumentMode = "mine" | "shared" | "outgoing" | "conversationMine" | "conversationOthers" | "trash";
+type DocumentMode = "mine" | "shared" | "outgoing" | "conversationMine" | "conversationOthers" | "trash" | "orphans";
 const documentDragType = "application/x-chatapp-documents";
 type ShareItem = { id: string; username: string; displayName: string; permission: "viewer" | "editor" };
 type PublicLink = { token: string; createdAt: string; expiresAt: string | null };
@@ -144,7 +145,9 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, onOpenConversat
   }
 
   useEffect(() => {
-    if (hidden || isConversationMode) return;
+    if (hidden || isConversationMode || mode === "orphans") {
+      return;
+    }
     const controller = new AbortController();
     setLoading(true);
     setError("");
@@ -670,9 +673,10 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, onOpenConversat
         <button type="button" role="tab" aria-selected={mode === "outgoing"} onClick={() => changeMode("outgoing")}><Send size={15} aria-hidden="true" /> Shared by me</button>
         <button type="button" role="tab" aria-selected={mode === "conversationMine"} onClick={() => changeMode("conversationMine")}><Send size={15} aria-hidden="true" /> Files I shared in chats</button>
         <button type="button" role="tab" aria-selected={mode === "conversationOthers"} onClick={() => changeMode("conversationOthers")}><Download size={15} aria-hidden="true" /> Files others shared in chats</button>
+        <button type="button" role="tab" aria-selected={mode === "orphans"} onClick={() => changeMode("orphans")}><FileText size={15} aria-hidden="true" /> Orphan attachments</button>
         <button type="button" role="tab" aria-selected={mode === "trash"} onClick={() => changeMode("trash")}><Trash2 size={15} aria-hidden="true" /> Trash</button>
       </div>
-      {isConversationMode ? <ConversationFilesPanel key={mode} apiUrl={apiUrl} currentUsername={currentUsername} scope={mode === "conversationMine" ? "mine" : "others"} hidden={hidden} onOpenConversation={onOpenConversation} /> : <>
+      {mode === "orphans" ? <OrphanAttachmentsPanel apiUrl={apiUrl} username={currentUsername} hidden={hidden} /> : isConversationMode ? <ConversationFilesPanel key={mode} apiUrl={apiUrl} currentUsername={currentUsername} scope={mode === "conversationMine" ? "mine" : "others"} hidden={hidden} onOpenConversation={onOpenConversation} /> : <>
       <div className="documents-toolbar">
         <div className="documents-actions">
           {canEditCurrent && <><button type="button" onClick={() => setNameDialog({ kind: "create", name: "" })} disabled={busy}><FolderPlus size={17} /> New folder</button>

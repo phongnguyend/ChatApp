@@ -7,6 +7,7 @@ using ChatApp.Application.Abstractions;
 using ChatApp.Application.Forms;
 using ChatApp.Domain.Models;
 using ChatApp.Persistence;
+using ChatApp.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 using QRCoder;
 
@@ -177,14 +178,23 @@ public static class FormsEndpoints
             {
                 return Conflict();
             }
-            var keys = await (from attachment in db.FormResponseAttachments
+            var attachments = await (from attachment in db.FormResponseAttachments
                 join response in db.FormResponses on attachment.ResponseId equals response.Id
                 where response.FormId == id
-                select attachment.StorageKey).ToListAsync(ct);
+                select new { Attachment = attachment, response.PublicationId, response.SubmissionKey }).AsNoTracking().ToListAsync(ct);
+            var cleanup = attachments.Select(x => new FormAttachmentUpload
+            {
+                FormId = id, CreatedById = x.Attachment.CreatedById, FormOwnerId = x.Attachment.FormOwnerId ?? form.OwnerId, PublicationId = x.PublicationId,
+                SubmissionKey = x.SubmissionKey, QuestionId = x.Attachment.QuestionId,
+                FileName = x.Attachment.FileName, StorageKey = x.Attachment.StorageKey,
+                SizeBytes = x.Attachment.SizeBytes, Ready = true, ExpiresAt = DateTimeOffset.UtcNow
+            }).ToArray();
+            // Preserve accounting and a manual cleanup path if deleting an object fails after form deletion.
+            db.FormAttachmentUploads.AddRange(cleanup);
             db.Forms.Remove(form);
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
-            await CleanupFiles(keys, storage, loggerFactory);
+            await CleanupFiles(cleanup, db, storage, loggerFactory);
             return Results.NoContent();
         });
 
@@ -253,7 +263,7 @@ public static class FormsEndpoints
             .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(21 * 1024 * 1024));
     }
 
-    private static async Task<IResult> UploadAttachment(string token, HttpRequest request, ChatAppDbContext db, IUploadObjectStorage storage, CancellationToken ct)
+    private static async Task<IResult> UploadAttachment(string token, HttpRequest request, ChatAppDbContext db, IUploadObjectStorage storage, IConfiguration configuration, CancellationToken ct)
     {
         if (!request.HasFormContentType)
         {
@@ -275,9 +285,21 @@ public static class FormsEndpoints
             return Results.BadRequest(new { error = "Upload one file up to 20 MB with a valid submission key and form version." });
         }
         var file = data.Files[0];
+        var uploaderId = request.HttpContext.User.Identity?.IsAuthenticated == true ? UserId(request.HttpContext.User) : (Guid?)null;
+        var formOwnerId = await db.Forms.AsNoTracking().Where(x => x.ShareToken == token).Select(x => (Guid?)x.OwnerId).SingleOrDefaultAsync(ct);
+        if (formOwnerId is null)
+        {
+            return Results.NotFound(new { error = "This form is unavailable." });
+        }
+        var storageOwnerId = uploaderId ?? formOwnerId.Value;
         FormAttachmentUpload upload;
         await using (var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct))
         {
+            await FormStorageUsage.Lock(db, storageOwnerId, ct);
+            if (!await FormStorageUsage.HasCapacity(db, configuration, storageOwnerId, file.Length, ct))
+            {
+                return Results.Json(new { error = uploaderId is null ? "The form owner has no storage available for attachments. Please contact them." : "Your storage is full. Remove unused files in My Documents." }, statusCode: 413);
+            }
             var form = await db.Forms.FromSqlInterpolated($"SELECT * FROM [Forms] WITH (UPDLOCK, HOLDLOCK) WHERE [ShareToken] = {token}").SingleOrDefaultAsync(ct);
             if (form is null || !form.IsPublished)
             {
@@ -314,7 +336,7 @@ public static class FormsEndpoints
             }
             upload = new FormAttachmentUpload
             {
-                FormId = form.Id, PublicationId = publication.Id, SubmissionKey = submissionKey,
+                FormId = form.Id, CreatedById = uploaderId, FormOwnerId = form.OwnerId, PublicationId = publication.Id, SubmissionKey = submissionKey,
                 QuestionId = questionId, FileName = SafeFileName(file.FileName), SizeBytes = file.Length,
                 StorageKey = $"form-attachments/{form.Id:N}/pending/{NewToken()}", ExpiresAt = DateTimeOffset.UtcNow.AddHours(24)
             };
@@ -322,7 +344,7 @@ public static class FormsEndpoints
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
         }
-        // Reserve metadata before writing: interrupted uploads remain discoverable by the expiry worker.
+        // Reserve metadata before writing: interrupted uploads remain charged and visible for manual cleanup.
         await using var stream = file.OpenReadStream();
         await storage.WriteAsync(upload.StorageKey, stream, ct);
         upload.Ready = true;
@@ -351,6 +373,15 @@ public static class FormsEndpoints
         }
         // Lock publication state through the insert: closing or republishing cannot race acceptance.
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+        var uploaderId = httpRequest.HttpContext.User.Identity?.IsAuthenticated == true ? UserId(httpRequest.HttpContext.User) : (Guid?)null;
+        if (request.Attachments?.Count > 0)
+        {
+            var storageOwnerId = uploaderId ?? await db.Forms.AsNoTracking().Where(x => x.ShareToken == token).Select(x => (Guid?)x.OwnerId).SingleOrDefaultAsync(ct);
+            if (storageOwnerId is not null)
+            {
+                await FormStorageUsage.Lock(db, storageOwnerId, ct);
+            }
+        }
         var form = await db.Forms.FromSqlInterpolated($"SELECT * FROM [Forms] WITH (UPDLOCK, HOLDLOCK) WHERE [ShareToken] = {token}").SingleOrDefaultAsync(ct);
         if (form is null || request.SubmissionKey == Guid.Empty)
         {
@@ -382,7 +413,7 @@ public static class FormsEndpoints
             return Results.BadRequest(new { error = "Invalid or duplicate attachment references." });
         }
         var uploads = await db.FormAttachmentUploads.Where(x => uploadIds.Contains(x.Id) && x.FormId == form.Id &&
-            x.PublicationId == publication.Id && x.SubmissionKey == request.SubmissionKey && x.Ready && x.ExpiresAt > DateTimeOffset.UtcNow).ToListAsync(ct);
+            x.PublicationId == publication.Id && x.SubmissionKey == request.SubmissionKey && x.CreatedById == uploaderId && x.Ready && x.ExpiresAt > DateTimeOffset.UtcNow).ToListAsync(ct);
         if (uploads.Count != uploadIds.Length || uploads.Any(x => !references.TryGetValue(x.QuestionId, out var ids) || !ids.Contains(x.Id)))
         {
             return Results.BadRequest(new { error = "An upload is expired or unavailable. Remove it and upload the file again." });
@@ -418,7 +449,7 @@ public static class FormsEndpoints
         {
             db.FormResponseAttachments.Add(new FormResponseAttachment
             {
-                ResponseId = response.Id, QuestionId = upload.QuestionId, FileName = upload.FileName,
+                ResponseId = response.Id, CreatedById = upload.CreatedById, FormOwnerId = upload.FormOwnerId, QuestionId = upload.QuestionId, FileName = upload.FileName,
                 StorageKey = upload.StorageKey, SizeBytes = upload.SizeBytes
             });
             db.FormAttachmentUploads.Remove(upload);
@@ -428,17 +459,18 @@ public static class FormsEndpoints
         return Results.Ok(new { accepted = true });
     }
 
-    private static async Task CleanupFiles(IEnumerable<string> keys, IUploadObjectStorage storage, ILoggerFactory loggerFactory)
+    private static async Task CleanupFiles(IEnumerable<FormAttachmentUpload> uploads, ChatAppDbContext db, IUploadObjectStorage storage, ILoggerFactory loggerFactory)
     {
-        foreach (var key in keys)
+        foreach (var upload in uploads)
         {
             try
             {
-                await storage.DeleteAsync(key, CancellationToken.None);
+                await storage.DeleteAsync(upload.StorageKey, CancellationToken.None);
+                await db.FormAttachmentUploads.Where(x => x.Id == upload.Id).ExecuteDeleteAsync(CancellationToken.None);
             }
             catch (Exception exception)
             {
-                loggerFactory.CreateLogger("FormAttachments").LogWarning(exception, "Could not remove form attachment {StorageKey}", key);
+                loggerFactory.CreateLogger("FormAttachments").LogWarning(exception, "Could not remove form attachment {StorageKey}", upload.StorageKey);
             }
         }
     }

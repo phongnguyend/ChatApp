@@ -6,6 +6,10 @@ public sealed class FormAttachmentUpload
 
     public Guid FormId { get; set; }
 
+    public Guid? CreatedById { get; set; }
+
+    public Guid? FormOwnerId { get; set; }
+
     public Guid PublicationId { get; set; }
 
     public Guid SubmissionKey { get; set; }

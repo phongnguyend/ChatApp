@@ -27,7 +27,6 @@ public static class DependencyInjection
         services.AddScoped<IAvatarStorage, AvatarStorage>();
         services.AddScoped<IMessageAttachmentStorage, MessageAttachmentStorage>();
         services.AddHostedService<LiveLocationExpiryService>();
-        services.AddHostedService<FormAttachmentExpiryService>();
 
         var allowedOrigins = configuration
             .GetSection("AllowedOrigins")

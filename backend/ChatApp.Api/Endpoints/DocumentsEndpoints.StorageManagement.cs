@@ -66,8 +66,11 @@ public sealed partial class DocumentsEndpoints
             .Select(x => new { UserId = x.Key, Bytes = x.Sum(session => session.SizeBytes) })
             .ToDictionaryAsync(x => x.UserId, x => x.Bytes, cancellationToken);
         var defaultLimit = DefaultStorageLimitBytes();
+        var formBytes = await ChatApp.Infrastructure.Storage.FormStorageUsage.Allocations(db).Where(x => ids.Contains(x.OwnerId))
+            .GroupBy(x => x.OwnerId).Select(x => new { UserId = x.Key, Bytes = x.Sum(row => row.SizeBytes) })
+            .ToDictionaryAsync(x => x.UserId, x => x.Bytes, cancellationToken);
         var items = page.Select(x => new StorageUserDto(x.Id, x.Username, x.DisplayName,
-            x.Status, documentBytes.GetValueOrDefault(x.Id) + versionBytes.GetValueOrDefault(x.Id) + signingBytes.GetValueOrDefault(x.Id),
+            x.Status, documentBytes.GetValueOrDefault(x.Id) + versionBytes.GetValueOrDefault(x.Id) + signingBytes.GetValueOrDefault(x.Id) + formBytes.GetValueOrDefault(x.Id),
             reservations.GetValueOrDefault(x.Id), x.CustomLimitBytes ?? defaultLimit,
             x.CustomLimitBytes)).ToArray();
 
@@ -79,7 +82,7 @@ public sealed partial class DocumentsEndpoints
         var userCount = await db.Users.CountAsync(cancellationToken);
 
         return Ok(new StorageUsersPageDto(items, totalCount, offset + items.Length < totalCount,
-            defaultLimit, userCount, allDocumentBytes + allVersionBytes + allSigningBytes));
+            defaultLimit, userCount, allDocumentBytes + allVersionBytes + allSigningBytes + (await ChatApp.Infrastructure.Storage.FormStorageUsage.Allocations(db).SumAsync(x => (long?)x.SizeBytes, cancellationToken) ?? 0) + await ChatApp.Infrastructure.Storage.FormStorageUsage.UnattributedBytes(db, cancellationToken)));
     }
 
     public async Task<IResult> SetStorageLimit(Guid userId,

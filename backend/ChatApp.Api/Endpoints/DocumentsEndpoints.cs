@@ -113,6 +113,12 @@ public sealed partial class DocumentsEndpoints(
             handler.StorageUsage(username, cancellationToken))
             .WithName("DocumentsEndpoints.StorageUsage");
 
+        group.MapGet("orphan-attachments", ([FromServices] DocumentsEndpoints handler, [FromQuery] string username, int? page, bool? unattributed, HttpContext context, CancellationToken ct) =>
+            handler.OrphanAttachments(username, page, unattributed ?? false, context.User.IsInRole(ChatApp.Domain.Security.AppRoles.GlobalAdmin), ct));
+
+        group.MapDelete("orphan-attachments/{id:guid}", ([FromServices] DocumentsEndpoints handler, [FromQuery] string username, Guid id, bool? unattributed, HttpContext context, CancellationToken ct) =>
+            handler.DeleteOrphanAttachment(username, id, unattributed ?? false, context.User.IsInRole(ChatApp.Domain.Security.AppRoles.GlobalAdmin), ct));
+
         group.MapGet("", (
             [FromServices] DocumentsEndpoints handler,
             [FromQuery] string username,
@@ -1770,7 +1776,7 @@ public sealed partial class DocumentsEndpoints(
             .SumAsync(x => (long?)x.SizeBytes, ct) ?? 0;
         var signingBytes = await db.SignatureRequests.Where(x => x.CreatedById == ownerId)
             .SumAsync(x => (long?)(x.OriginalSizeBytes + x.SignedSizeBytes), ct) ?? 0;
-        return currentBytes + versionBytes + signingBytes;
+        return currentBytes + versionBytes + signingBytes + await ChatApp.Infrastructure.Storage.FormStorageUsage.UsedBytes(db, ownerId, ct);
     }
 
     private async Task<long> ReservedStorage(Guid ownerId, CancellationToken ct) =>

@@ -70,7 +70,8 @@ public sealed class SigningStorage(IUploadObjectStorage storage, ChatAppDbContex
         {
             throw new InvalidOperationException("The document library is busy. Please try again.");
         }
-        var used = (await db.StoredDocuments.Where(x => x.OwnerUserId == userId).SumAsync(x => (long?)x.SizeBytes, ct) ?? 0)
+        var used = await ChatApp.Infrastructure.Storage.FormStorageUsage.UsedBytes(db, userId, ct)
+            + (await db.StoredDocuments.Where(x => x.OwnerUserId == userId).SumAsync(x => (long?)x.SizeBytes, ct) ?? 0)
             + (await db.DocumentVersions.Where(x => x.Document.OwnerUserId == userId).SumAsync(x => (long?)x.SizeBytes, ct) ?? 0)
             + (await db.SignatureRequests.Where(x => x.CreatedById == userId).SumAsync(x => (long?)(x.OriginalSizeBytes + x.SignedSizeBytes), ct) ?? 0)
             + (await db.DocumentUploadSessions.Where(x => x.OwnerUserId == userId && x.CompletedAt == null && x.ExpiresAt > DateTimeOffset.UtcNow)

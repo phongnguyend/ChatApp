@@ -36,8 +36,9 @@ export function PublicFormView({ token }: { token: string }) {
     body.append('submissionKey', submissionKey);
     body.append('questionId', questionId);
     body.append('file', file);
-    const uploaded = await formsApi<{ id: string }>(`public/forms/${encodeURIComponent(token)}/attachments`, 'POST', body, true);
+    const uploaded = await formsApi<{ id: string }>(`public/forms/${encodeURIComponent(token)}/attachments`, 'POST', body);
     uploadedFiles.current.set(file, uploaded.id);
+    window.dispatchEvent(new Event('documents-storage-changed'));
   }
   async function submit(answers: Answers, files: Record<string, File[]>) {
     if (!data || busy) {
@@ -54,7 +55,7 @@ export function PublicFormView({ token }: { token: string }) {
         }
         return id;
       })]));
-      await formsApi(`public/forms/${encodeURIComponent(token)}/responses`, 'POST', { version: data.version, submissionKey, answers, attachments }, true);
+      await formsApi(`public/forms/${encodeURIComponent(token)}/responses`, 'POST', { version: data.version, submissionKey, answers, attachments });
       setDone(true);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Submission failed. Please try again.');

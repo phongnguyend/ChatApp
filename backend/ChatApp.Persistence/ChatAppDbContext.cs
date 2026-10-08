@@ -63,19 +63,23 @@ public sealed class ChatAppDbContext(DbContextOptions<ChatAppDbContext> options)
     {
         base.OnModelCreating(modelBuilder);
 
-        // Staging records survive form deletion so the expiry worker can remove abandoned objects.
+        // Staging records retain ownership after form deletion for manual storage cleanup.
         modelBuilder.Entity<FormAttachmentUpload>(entity =>
         {
+            entity.HasIndex(x => x.FormOwnerId);
             entity.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()").ValueGeneratedOnAdd();
             entity.Property(x => x.QuestionId).HasMaxLength(100);
             entity.Property(x => x.FileName).HasMaxLength(255);
             entity.Property(x => x.StorageKey).HasMaxLength(500);
             entity.HasIndex(x => x.ExpiresAt);
+            entity.HasIndex(x => x.CreatedById);
             entity.HasIndex(x => new { x.FormId, x.SubmissionKey });
         });
 
         modelBuilder.Entity<FormResponseAttachment>(entity =>
         {
+            entity.HasIndex(x => x.FormOwnerId);
+            entity.HasIndex(x => x.CreatedById);
             entity.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()").ValueGeneratedOnAdd();
             entity.Property(x => x.QuestionId).HasMaxLength(100);
             entity.Property(x => x.FileName).HasMaxLength(255);

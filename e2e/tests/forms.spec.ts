@@ -1,7 +1,95 @@
 import { expect, test } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
-import { apiUrl, createUser, headersFor, login } from './helpers.js';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { adminEmail, adminPassword, apiUrl, createUser, headersFor, login, tokenFor } from './helpers.js';
 import { createNode, csvCell, definitionIssues, flatten, moveNode, visibleAnswers, type FormDefinition, type FormDetail, type ResponsePage } from '../../frontend/src/components/forms/formModel.js';
+
+test('orphan attachments charge their creator and can be cleaned manually', async ({ page, request }) => {
+  const owner = await createUser(request, 'orphanowner');
+  const uploader = await createUser(request, 'orphanuploader');
+  const ownerHeaders = headersFor(owner.username);
+  const uploaderHeaders = headersFor(uploader.username);
+  let form = await (await request.post(`${apiUrl}/api/forms/`, { headers: ownerHeaders })).json() as FormDetail;
+  const base = `${apiUrl}/api/forms/${form.id}`;
+  const definition = { ...form.definition, nodes: [{ ...createNode('attachment'), id: 'file' }] };
+  form = await (await request.put(base, { headers: ownerHeaders, data: { revision: form.revision, definition } })).json();
+  form = await (await request.post(`${base}/publish`, { headers: ownerHeaders, data: { revision: form.revision } })).json();
+  const submissionKey = randomUUID();
+  async function upload(name: string, authenticated: boolean) {
+    const result = await request.post(`${apiUrl}/api/public/forms/${form.shareToken}/attachments`, { headers: authenticated ? uploaderHeaders : undefined, multipart: {
+      version: '1', questionId: 'file', submissionKey,
+      file: { name, mimeType: 'text/plain', buffer: Buffer.alloc(100) },
+    } });
+    expect(result.ok(), await result.text()).toBeTruthy();
+    return (await result.json()).id as string;
+  }
+  async function usage(username: string) {
+    const result = await request.get(`${apiUrl}/api/documents/storage?username=${encodeURIComponent(username)}`, { headers: headersFor(username) });
+    expect(result.ok(), await result.text()).toBeTruthy();
+    return (await result.json()).usedBytes as number;
+  }
+  const retained = await upload('submitted.txt', true);
+  const orphan = await upload('orphan.txt', true);
+  const anonymous = await upload('anonymous.txt', false);
+  expect(await usage(uploader.username)).toBe(200);
+  expect(await usage(owner.username)).toBe(100);
+  const quotaAdminHeaders = { Authorization: `Bearer ${await tokenFor(request, adminEmail, adminPassword)}` };
+  const quotaAdmin = await (await request.post(`${apiUrl}/api/session`, { headers: quotaAdminHeaders })).json();
+  const quotaBase = `${apiUrl}/api/documents/storage-management`;
+  expect((await request.put(`${quotaBase}/${uploader.id}/limit?username=${encodeURIComponent(quotaAdmin.username)}`, { headers: quotaAdminHeaders, data: { limitBytes: 200 } })).ok()).toBeTruthy();
+  const overQuota = await request.post(`${apiUrl}/api/public/forms/${form.shareToken}/attachments`, { headers: uploaderHeaders, multipart: {
+    version: '1', questionId: 'file', submissionKey,
+    file: { name: 'over-quota.txt', mimeType: 'text/plain', buffer: Buffer.from('x') },
+  } });
+  expect(overQuota.status()).toBe(413);
+  expect((await request.put(`${quotaBase}/${owner.id}/limit?username=${encodeURIComponent(quotaAdmin.username)}`, { headers: quotaAdminHeaders, data: { limitBytes: 100 } })).ok()).toBeTruthy();
+  const anonymousOverQuota = await request.post(`${apiUrl}/api/public/forms/${form.shareToken}/attachments`, { multipart: {
+    version: '1', questionId: 'file', submissionKey,
+    file: { name: 'over-quota.txt', mimeType: 'text/plain', buffer: Buffer.from('x') },
+  } });
+  expect(anonymousOverQuota.status()).toBe(413);
+  const managed = await request.get(`${quotaBase}?username=${encodeURIComponent(quotaAdmin.username)}&query=${encodeURIComponent(uploader.username)}&offset=0`, { headers: quotaAdminHeaders });
+  expect(managed.ok(), await managed.text()).toBeTruthy();
+  expect((await managed.json()).items[0].usedBytes).toBe(200);
+  const orphanBase = `${apiUrl}/api/documents/orphan-attachments`;
+  expect((await request.delete(`${orphanBase}/${orphan}?username=${encodeURIComponent(owner.username)}`, { headers: ownerHeaders })).status()).toBe(404);
+  expect((await request.get(`${orphanBase}?username=${encodeURIComponent(uploader.username)}&unattributed=true`, { headers: uploaderHeaders })).status()).toBe(403);
+  expect((await request.delete(`${orphanBase}/${orphan}?username=${encodeURIComponent(uploader.username)}`, { headers: uploaderHeaders })).status()).toBe(409);
+  expect((await request.delete(`${orphanBase}/${anonymous}?username=${encodeURIComponent(owner.username)}`, { headers: ownerHeaders })).status()).toBe(409);
+  await login(page, uploader.username);
+  await page.getByRole('navigation', { name: 'Main sections' }).getByRole('button', { name: /My Documents/ }).click();
+  await page.getByRole('tab', { name: 'Orphan attachments', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Delete orphan.txt', exact: true })).toBeDisabled();
+  execFileSync('dotnet', ['run', '--project', fileURLToPath(new URL('../Seed/Seed.csproj', import.meta.url)), '--configuration', 'Release', '--no-build', '--', 'expire-form-attachments', orphan, anonymous], { stdio: 'pipe' });
+  const expiredSubmission = await request.post(`${apiUrl}/api/public/forms/${form.shareToken}/responses`, { headers: uploaderHeaders, data: { version: 1, submissionKey, answers: {}, attachments: { file: [orphan] } } });
+  expect(expiredSubmission.status()).toBe(400);
+  expect((await expiredSubmission.json()).error).toContain('expired');
+  expect(await usage(uploader.username)).toBe(200);
+  const submitted = await request.post(`${apiUrl}/api/public/forms/${form.shareToken}/responses`, { headers: uploaderHeaders, data: { version: 1, submissionKey, answers: {}, attachments: { file: [retained] } } });
+  expect(submitted.ok(), await submitted.text()).toBeTruthy();
+  expect(await usage(uploader.username)).toBe(200);
+  const personal = await (await request.get(`${orphanBase}?username=${encodeURIComponent(uploader.username)}`, { headers: uploaderHeaders })).json();
+  expect(personal.items.map((item: { id: string }) => item.id)).toEqual([orphan]);
+  expect((await request.delete(`${orphanBase}/${retained}?username=${encodeURIComponent(uploader.username)}`, { headers: uploaderHeaders })).status()).toBe(404);
+  const anonPage = await request.get(`${orphanBase}?username=${encodeURIComponent(owner.username)}`, { headers: ownerHeaders });
+  expect(anonPage.ok(), await anonPage.text()).toBeTruthy();
+  expect((await anonPage.json()).items.some((item: { id: string }) => item.id === anonymous)).toBeTruthy();
+  expect((await request.delete(`${orphanBase}/${anonymous}?username=${encodeURIComponent(uploader.username)}`, { headers: uploaderHeaders })).status()).toBe(404);
+  expect((await request.delete(`${base}?revision=${form.revision}`, { headers: ownerHeaders })).status()).toBe(204);
+  expect(await usage(uploader.username)).toBe(100);
+  expect(await usage(owner.username)).toBe(100);
+  expect((await request.delete(`${orphanBase}/${anonymous}?username=${encodeURIComponent(owner.username)}`, { headers: ownerHeaders })).status()).toBe(204);
+  expect(await usage(owner.username)).toBe(0);
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect(page.getByText('orphan.txt', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Deleted form/)).toBeVisible();
+  await page.screenshot({ path: 'test-results/orphan-attachments.png', fullPage: true });
+  page.once('dialog', dialog => { void dialog.accept(); });
+  await page.getByRole('button', { name: 'Delete orphan.txt', exact: true }).click();
+  await expect(page.getByText('No orphan attachments.')).toBeVisible();
+  expect(await usage(uploader.username)).toBe(0);
+});
 
 test('owner links and respondent URL questions publish and collect only URL answers', async ({ page, browser, request }) => {
   const user = await createUser(request, 'formlinks');
