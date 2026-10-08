@@ -3,6 +3,44 @@ import { randomUUID } from 'node:crypto';
 import { apiUrl, createUser, headersFor, login } from './helpers.js';
 import { createNode, csvCell, definitionIssues, flatten, moveNode, visibleAnswers, type FormDefinition, type FormDetail, type ResponsePage } from '../../frontend/src/components/forms/formModel.js';
 
+test('owner links and respondent URL questions publish and collect only URL answers', async ({ page, browser, request }) => {
+  const user = await createUser(request, 'formlinks');
+  await login(page, user.username);
+  await page.getByRole('navigation', { name: 'Main sections' }).getByRole('button', { name: 'Forms', exact: true }).click();
+  await page.getByRole('button', { name: 'New form', exact: true }).click();
+  await page.getByLabel('Title', { exact: true }).fill('Links survey');
+  await page.locator('.forms-palette').getByRole('button', { name: 'Link', exact: true }).click();
+  await page.getByLabel('Link label', { exact: true }).fill('Read guidelines');
+  await page.getByLabel('Link URL', { exact: true }).fill('https://example.com/guidelines');
+  await expect(page.getByLabel('Open in a new tab')).toBeChecked();
+  await page.locator('.forms-palette').getByRole('button', { name: 'Website / URL', exact: true }).click();
+  await page.getByLabel('Question', { exact: true }).fill('Your website');
+  await page.getByLabel('Required answer').check();
+  await page.getByRole('button', { name: 'Publish form', exact: true }).click();
+  const shareUrl = await page.getByLabel('Response link').inputValue();
+  const anonymous = await browser.newPage();
+  try {
+    await anonymous.goto(shareUrl);
+    const link = anonymous.getByRole('link', { name: /Read guidelines/ });
+    await expect(link).toHaveAttribute('href', 'https://example.com/guidelines');
+    await expect(link).toHaveAttribute('target', '_blank');
+    await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    const website = anonymous.getByRole('textbox', { name: 'Your website', exact: true });
+    await expect(website).toHaveAttribute('type', 'url');
+    await website.fill('https://example.com/portfolio');
+    await anonymous.getByRole('button', { name: 'Submit response' }).click();
+    await expect(anonymous.getByRole('heading', { name: 'Response submitted' })).toBeVisible();
+  } finally {
+    await anonymous.close();
+  }
+  const headers = headersFor(user.username);
+  const forms = await (await request.get(`${apiUrl}/api/forms/`, { headers })).json() as FormDetail[];
+  const form = forms.find(item => item.title === 'Links survey')!;
+  const responses = await (await request.get(`${apiUrl}/api/forms/${form.id}/responses`, { headers })).json() as ResponsePage;
+  expect(Object.values(responses.items[0].answers)).toEqual([['https://example.com/portfolio']]);
+  expect((await request.delete(`${apiUrl}/api/forms/${form.id}?revision=${form.revision}`, { headers })).status()).toBe(204);
+});
+
 test('attachment questions upload single and multiple files with owner-only downloads', async ({ page, request }) => {
   const user = await createUser(request, 'formfiles');
   const other = await createUser(request, 'formfilesother');

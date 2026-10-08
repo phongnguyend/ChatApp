@@ -8,6 +8,10 @@ public sealed record FormNode
 
     public string Kind { get; init; } = "text";
 
+    public string LinkUrl { get; init; } = "";
+
+    public bool LinkOpenNewTab { get; init; } = true;
+
     public string? ImageDataUrl { get; init; }
 
     public string ImageDisplay { get; init; } = "banner";

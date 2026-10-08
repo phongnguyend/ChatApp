@@ -9,7 +9,11 @@ public static class FormRules
     public static bool IsAllowedAttachment(FormNode node, string fileName) =>
         node.AllowedExtensions?.Contains(Path.GetExtension(fileName), StringComparer.OrdinalIgnoreCase) == true;
 
-    public static readonly HashSet<string> QuestionKinds = ["text", "textarea", "email", "number", "date", "time", "datetime", "radio", "checkbox", "select", "rating", "yesno", "attachment"];
+    public static readonly HashSet<string> QuestionKinds = ["text", "textarea", "email", "url", "number", "date", "time", "datetime", "radio", "checkbox", "select", "rating", "yesno", "attachment"];
+    public static bool IsValidLinkUrl(string value) => value.Length <= 2048 &&
+        !value.Any(c => char.IsWhiteSpace(c) || char.IsControl(c) || c == '\\') &&
+        Uri.TryCreate(value, UriKind.Absolute, out var url) && url.Scheme is "https" or "http" &&
+        !string.IsNullOrEmpty(url.Host) && string.IsNullOrEmpty(url.UserInfo);
     private static readonly HashSet<string> Operators = ["equals", "notEquals", "contains", "answered", "notAnswered"];
 
     public static Dictionary<string, string> ValidateDefinition(FormDefinition definition, bool publishing = false)
@@ -46,7 +50,7 @@ public static class FormRules
                 {
                     errors[key] = "Block identifiers must be unique and nonempty.";
                 }
-                if (!QuestionKinds.Contains(node.Kind) && node.Kind is not ("section" or "columns" or "image"))
+                if (!QuestionKinds.Contains(node.Kind) && node.Kind is not ("section" or "columns" or "image" or "link"))
                 {
                     errors[key] = "Unknown block type.";
                 }
@@ -94,7 +98,25 @@ public static class FormRules
                 {
                     errors[key] = "Check the minimum and maximum; ratings use 1 to 2–10.";
                 }
-                if (node.Kind == "image")
+                if (node.Kind == "link")
+                {
+                    if (node.Required || node.Children is null || node.Children.Length != 0 || string.IsNullOrWhiteSpace(node.Label))
+                    {
+                        errors[key] = "Links need a label and cannot be required or contain child blocks.";
+                    }
+                    if (string.IsNullOrEmpty(node.LinkUrl))
+                    {
+                        if (publishing)
+                        {
+                            errors[key] = "Enter a link URL before publishing.";
+                        }
+                    }
+                    else if (!IsValidLinkUrl(node.LinkUrl))
+                    {
+                        errors[key] = "Use a complete HTTP or HTTPS URL, without credentials, up to 2048 characters.";
+                    }
+                }
+                else if (node.Kind == "image")
                 {
                     if (node.ImageWidth is < 24 or > 2400)
                     {
@@ -247,6 +269,7 @@ public static class FormRules
                 var value = values[0];
                 var valid = node.Kind switch
                 {
+                    "url" => IsValidLinkUrl(value),
                     "attachment" => values.Length <= (node.AllowMultipleFiles ? node.MaxFiles : 1) && values.All(name => IsAllowedAttachment(node, name)),
                     "radio" or "select" or "checkbox" => values.All(x => node.Options.Contains(x, StringComparer.Ordinal)),
                     "yesno" => value is "Yes" or "No",

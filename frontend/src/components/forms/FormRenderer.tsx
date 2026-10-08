@@ -1,10 +1,10 @@
 import { useId, useState } from 'react';
-import { FlaskConical, LoaderCircle, Send } from 'lucide-react';
+import { ExternalLink, FlaskConical, Link as LinkIcon, LoaderCircle, Send } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { type Answers, type FormDefinition, type FormNode, isQuestion, visibleAnswers } from './formModel';
 import './Forms.css';
 import { FormAttachmentInput } from './FormAttachmentInput';
-import { defaultAttachmentExtensions } from './formModel';
+import { defaultAttachmentExtensions, isValidLinkUrl } from './formModel';
 
 export function FormRenderer({ definition, onSubmit, onUploadFile, busy = false, errors = {}, preview = false }: {
   definition: FormDefinition; onSubmit: (answers: Answers, files: Record<string, File[]>) => void; busy?: boolean; errors?: Record<string, string>; preview?: boolean;
@@ -24,6 +24,12 @@ export function FormRenderer({ definition, onSubmit, onUploadFile, busy = false,
   };
   function render(nodes: FormNode[], structuralColumns = false) {
     return nodes.filter(node => visible.ids.has(node.id)).map(node => {
+      if (node.kind === 'link') {
+        return <div key={node.id} className="form-link-block">
+          {isValidLinkUrl(node.linkUrl ?? '') ? <a href={node.linkUrl} target={node.linkOpenNewTab !== false ? '_blank' : undefined} rel="noopener noreferrer"><LinkIcon size={18} aria-hidden="true" /><span>{node.label}</span>{node.linkOpenNewTab !== false && <ExternalLink size={14} aria-label="Opens in a new tab" />}</a> : <span>{node.label}</span>}
+          {node.description && <p>{node.description}</p>}
+        </div>;
+      }
       if (node.kind === 'image') {
         return node.imageDataUrl ? <figure key={node.id} className="form-image-block"><img className={`form-image form-image-${node.imageDisplay ?? 'banner'}`} style={{ width: node.imageWidth ?? undefined, height: node.imageHeight ?? undefined, maxWidth: node.imageWidth != null ? '100%' : undefined, maxHeight: node.imageHeight != null || node.imageWidth != null ? 'none' : undefined }} src={node.imageDataUrl} alt={node.label} draggable={false} />{node.description && <figcaption>{node.description}</figcaption>}</figure> : null;
       }
@@ -91,9 +97,15 @@ export function FormRenderer({ definition, onSubmit, onUploadFile, busy = false,
       } else if (node.kind === 'textarea') {
         input = <textarea {...common} maxLength={10000} rows={4} value={value} onChange={event => set(node.id, [event.target.value])} />;
       } else {
-        input = <input {...common} type={node.kind === 'datetime' ? 'datetime-local' : ['email', 'number', 'date', 'time'].includes(node.kind) ? node.kind : 'text'} maxLength={node.kind === 'email' ? 254 : 2000}
+        input = <input {...common} type={node.kind === 'datetime' ? 'datetime-local' : ['email', 'url', 'number', 'date', 'time'].includes(node.kind) ? node.kind : 'text'} maxLength={node.kind === 'url' ? 2048 : node.kind === 'email' ? 254 : 2000}
+          placeholder={node.kind === 'url' ? 'https://example.com' : undefined}
           min={node.kind === 'number' ? node.min ?? undefined : undefined} max={node.kind === 'number' ? node.max ?? undefined : undefined} step={node.kind === 'number' ? 'any' : ['time', 'datetime'].includes(node.kind) ? 60 : undefined}
-          value={value} onChange={event => set(node.id, [event.target.value])} />;
+          value={value} onChange={event => {
+            if (node.kind === 'url') {
+              event.target.setCustomValidity(!event.target.value || isValidLinkUrl(event.target.value) ? '' : 'Enter a complete HTTP or HTTPS URL without credentials.');
+            }
+            set(node.id, [event.target.value]);
+          }} />;
       }
       return <fieldset key={node.id} className="form-question">
         <legend>{node.label}{node.required && <span className="form-required" aria-label="required"> *</span>}</legend>

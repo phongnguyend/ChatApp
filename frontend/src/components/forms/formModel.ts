@@ -12,6 +12,8 @@ export type FormNode = {
   maxFiles?: number;
   maxFileSizeMb?: number;
   allowedExtensions?: string[];
+  linkUrl?: string;
+  linkOpenNewTab?: boolean;
 };
 export type FormDefinition = { title: string; description: string; confirmationMessage: string; nodes: FormNode[] };
 export type Answers = Record<string, string[]>;
@@ -25,6 +27,7 @@ export const questionTypes = [
   ['number', 'Number'], ['date', 'Date'], ['time', 'Time'], ['datetime', 'Date & time'], ['radio', 'Single choice'],
   ['checkbox', 'Multiple choice'], ['select', 'Dropdown'], ['rating', 'Rating'], ['yesno', 'Yes / No'],
   ['attachment', 'Attachment'],
+  ['url', 'Website / URL'],
 ] as const;
 export const isQuestion = (node: FormNode) => questionTypes.some(([kind]) => kind === node.kind);
 export function createNode(kind: string): FormNode {
@@ -37,6 +40,11 @@ export function createNode(kind: string): FormNode {
     node.imageDataUrl = '';
     node.imageDisplay = 'banner';
   }
+  if (kind === 'link') {
+    node.label = 'Learn more';
+    node.linkUrl = '';
+    node.linkOpenNewTab = true;
+  }
   if (kind === 'columns') {
     node.children = [createNode('section'), createNode('section')];
     node.children.forEach((column, index) => { column.label = `Column ${index + 1}`; });
@@ -45,6 +53,17 @@ export function createNode(kind: string): FormNode {
 }
 export function flatten(nodes: FormNode[]): FormNode[] {
   return nodes.flatMap(node => [node, ...flatten(node.children)]);
+}
+export function isValidLinkUrl(value: string): boolean {
+  if (value.length > 2048 || !/^https?:\/\//i.test(value) || /[\s\\]/.test(value) || Array.from(value).some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) {
+    return false;
+  }
+  try {
+    const url = new URL(value);
+    return !!url.hostname && !url.username && !url.password;
+  } catch {
+    return false;
+  }
 }
 export function updateNode(nodes: FormNode[], id: string, update: (node: FormNode) => FormNode): FormNode[] {
   return nodes.map(node => node.id === id ? update(node) : { ...node, children: updateNode(node.children, id, update) });
@@ -118,6 +137,9 @@ export function definitionIssues(definition: FormDefinition): string[] {
     for (const node of items) {
       if (node.kind === 'attachment' && (!Number.isInteger(node.maxFiles ?? 10) || (node.maxFiles ?? 10) < 1 || (node.maxFiles ?? 10) > 10)) {
         issues.push(`${node.label}: choose a maximum of 1 to 10 files.`);
+      }
+      if (node.kind === 'link' && (!node.label.trim() || !!node.linkUrl && !isValidLinkUrl(node.linkUrl))) {
+        issues.push(`${node.label || 'Link'}: provide a label and a complete HTTP or HTTPS URL without credentials.`);
       }
       if (node.kind === 'attachment') {
         const size = node.maxFileSizeMb ?? 5;

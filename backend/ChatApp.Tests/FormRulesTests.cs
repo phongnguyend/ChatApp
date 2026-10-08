@@ -7,6 +7,35 @@ namespace ChatApp.Tests;
 public sealed class FormRulesTests
 {
     [Theory]
+    [InlineData("https://example.com/path?q=1#details", true)]
+    [InlineData("http://example.com", true)]
+    [InlineData("javascript:alert(1)", false)]
+    [InlineData("data:text/html,test", false)]
+    [InlineData("//example.com", false)]
+    [InlineData("https://user:password@example.com", false)]
+    [InlineData("https://example.com/white space", false)]
+    public void ValidatesOwnerAndRespondentLinks(string url, bool valid)
+    {
+        var link = new FormNode { Id = "link", Kind = "link", Label = "Read more", LinkUrl = url };
+        var question = new FormNode { Id = "website", Kind = "url", Label = "Your website", Required = true };
+        Assert.Equal(valid, FormRules.ValidateDefinition(Definition(link, question), true).Count == 0);
+        var result = FormRules.ValidateAnswers(Definition(link, question), new() { ["link"] = ["forged"], ["website"] = [url] });
+        Assert.Equal(valid, result.Errors.Count == 0);
+        Assert.False(result.Answers.ContainsKey("link"));
+        Assert.NotEmpty(FormRules.ValidateAnswers(Definition(question), new()).Errors);
+    }
+
+    [Fact]
+    public void OwnerLinkAllowsEmptyDraftButRequiresUrlToPublish()
+    {
+        var link = new FormNode { Id = "link", Kind = "link", Label = "Read more" };
+        Assert.Empty(FormRules.ValidateDefinition(Definition(link, Question("q"))));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(link, Question("q")), true));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(link with { Required = true })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(link with { Children = [Question("child")] })));
+    }
+
+    [Theory]
     [InlineData(0, false)]
     [InlineData(1, true)]
     [InlineData(5, true)]

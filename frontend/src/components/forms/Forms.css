@@ -188,6 +188,11 @@
   .form-cover { padding: 22px; }
 }
 .form-attachment-input { display: grid; gap: 12px; min-width: 0; }
+.form-link-block { padding: 16px 18px; border: 1px solid var(--line, #d6dfdc); border-radius: 9px; background: var(--paper, white); overflow-wrap: anywhere; }
+.form-link-block a { display: inline-flex; align-items: center; gap: 8px; color: var(--forms-accent); text-decoration: underline; text-underline-offset: 3px; font-weight: 600; }
+.form-link-block a svg { flex-shrink: 0; }
+.form-link-block a:focus-visible { outline: 2px solid var(--forms-accent); outline-offset: 4px; border-radius: 3px; }
+.form-link-block p { margin: 8px 0 0; font-size: 13px; color: var(--muted, #657774); }
 .form-attachment-dropzone { position: relative; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 16px; padding: 24px 20px; border: 1.5px dashed var(--line, #d6dfdc); border-radius: 12px; background: color-mix(in srgb, var(--forms-accent) 3%, var(--paper, white)); transition: border-color 120ms, background 120ms; }
 .form-attachment-dropzone.is-dragging { border-color: var(--forms-accent); background: color-mix(in srgb, var(--forms-accent) 12%, var(--paper, white)); }
 .form-attachment-dropzone:focus-within { outline: 2px solid var(--forms-accent); outline-offset: 3px; }
