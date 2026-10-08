@@ -14,6 +14,10 @@ public sealed class ChatAppDbContext(DbContextOptions<ChatAppDbContext> options)
 
     public DbSet<FormResponse> FormResponses => Set<FormResponse>();
 
+    public DbSet<FormResponseAttachment> FormResponseAttachments => Set<FormResponseAttachment>();
+
+    public DbSet<FormAttachmentUpload> FormAttachmentUploads => Set<FormAttachmentUpload>();
+
     public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
     public DbSet<Conversation> Conversations => Set<Conversation>();
     public DbSet<ConversationMember> ConversationMembers => Set<ConversationMember>();
@@ -58,6 +62,26 @@ public sealed class ChatAppDbContext(DbContextOptions<ChatAppDbContext> options)
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        // Staging records survive form deletion so the expiry worker can remove abandoned objects.
+        modelBuilder.Entity<FormAttachmentUpload>(entity =>
+        {
+            entity.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()").ValueGeneratedOnAdd();
+            entity.Property(x => x.QuestionId).HasMaxLength(100);
+            entity.Property(x => x.FileName).HasMaxLength(255);
+            entity.Property(x => x.StorageKey).HasMaxLength(500);
+            entity.HasIndex(x => x.ExpiresAt);
+            entity.HasIndex(x => new { x.FormId, x.SubmissionKey });
+        });
+
+        modelBuilder.Entity<FormResponseAttachment>(entity =>
+        {
+            entity.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()").ValueGeneratedOnAdd();
+            entity.Property(x => x.QuestionId).HasMaxLength(100);
+            entity.Property(x => x.FileName).HasMaxLength(255);
+            entity.Property(x => x.StorageKey).HasMaxLength(500);
+            entity.HasOne<FormResponse>().WithMany().HasForeignKey(x => x.ResponseId).OnDelete(DeleteBehavior.Cascade);
+        });
 
         modelBuilder.Entity<UserForm>(entity =>
         {

@@ -1,4 +1,5 @@
 export type Condition = { questionId: string; operator: string; value: string };
+export const defaultAttachmentExtensions = ['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp', '.rtf', '.txt', '.csv', '.pdf', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tif', '.tiff', '.heic', '.heif'];
 export type FormNode = {
   id: string; kind: string; label: string; description: string; required: boolean;
   options: string[]; min: number | null; max: number | null; children: FormNode[];
@@ -7,18 +8,23 @@ export type FormNode = {
   imageDisplay?: 'logo' | 'banner';
   imageHeight?: number | null;
   imageWidth?: number | null;
+  allowMultipleFiles?: boolean;
+  maxFiles?: number;
+  maxFileSizeMb?: number;
+  allowedExtensions?: string[];
 };
 export type FormDefinition = { title: string; description: string; confirmationMessage: string; nodes: FormNode[] };
 export type Answers = Record<string, string[]>;
 export type FormDetail = { id: string; title: string; revision: number; isPublished: boolean; publishedVersion: number; shareToken: string; updatedAt: string; definition: FormDefinition };
 export type FormSummary = Omit<FormDetail, 'definition'> & { responseCount: number };
-export type ResponseRow = { id: string; version: number; submittedAt: string; answers: Answers; definition: FormDefinition };
+export type ResponseRow = { id: string; version: number; submittedAt: string; answers: Answers; definition: FormDefinition; attachments?: { id: string; questionId: string; fileName: string; size: number }[] };
 export type ResponsePage = { total: number; snapshot: string; page: number; pageSize: number; items: ResponseRow[] };
 
 export const questionTypes = [
   ['text', 'Short answer'], ['textarea', 'Long answer'], ['email', 'Email'],
   ['number', 'Number'], ['date', 'Date'], ['time', 'Time'], ['datetime', 'Date & time'], ['radio', 'Single choice'],
   ['checkbox', 'Multiple choice'], ['select', 'Dropdown'], ['rating', 'Rating'], ['yesno', 'Yes / No'],
+  ['attachment', 'Attachment'],
 ] as const;
 export const isQuestion = (node: FormNode) => questionTypes.some(([kind]) => kind === node.kind);
 export function createNode(kind: string): FormNode {
@@ -110,6 +116,19 @@ export function definitionIssues(definition: FormDefinition): string[] {
       issues.push('Layouts can be nested up to eight levels.');
     }
     for (const node of items) {
+      if (node.kind === 'attachment' && (!Number.isInteger(node.maxFiles ?? 10) || (node.maxFiles ?? 10) < 1 || (node.maxFiles ?? 10) > 10)) {
+        issues.push(`${node.label}: choose a maximum of 1 to 10 files.`);
+      }
+      if (node.kind === 'attachment') {
+        const size = node.maxFileSizeMb ?? 5;
+        if (!Number.isInteger(size) || size < 1 || size > 20) {
+          issues.push(`${node.label}: maximum file size must be a whole number between 1 and 20 MB.`);
+        }
+        const extensions = node.allowedExtensions ?? defaultAttachmentExtensions;
+        if (extensions.length < 1 || extensions.length > 50 || extensions.some(extension => !/^\.[a-z0-9]{1,16}$/i.test(extension)) || new Set(extensions.map(extension => extension.toLowerCase())).size !== extensions.length) {
+          issues.push(`${node.label}: provide 1–50 unique extensions such as .pdf, .docx, .jpg.`);
+        }
+      }
       if (node.kind === 'image' && node.imageWidth != null && (!Number.isInteger(node.imageWidth) || node.imageWidth < 24 || node.imageWidth > 2400)) {
         issues.push(`${node.label}: image width must be a whole number from 24 to 2400 pixels, or empty for automatic sizing.`);
       }

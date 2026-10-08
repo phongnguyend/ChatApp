@@ -11,8 +11,8 @@ export class FormsError extends Error {
 }
 export async function formsApi<T>(path: string, method = 'GET', body?: unknown, publicRequest = false): Promise<T> {
   const response = await (publicRequest ? window.fetch.bind(window) : authFetch)(`${API_URL}/api/${path}`, {
-    method, headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    method, headers: body === undefined || body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
   });
   if (!response.ok) {
     const problem = await response.json().catch(() => ({}));

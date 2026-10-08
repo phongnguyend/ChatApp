@@ -22,6 +22,14 @@ public sealed record FormNode
 
     public bool Required { get; init; }
 
+    public bool AllowMultipleFiles { get; init; }
+
+    public int MaxFiles { get; init; } = 10;
+
+    public int MaxFileSizeMb { get; init; } = 5;
+
+    public string[] AllowedExtensions { get; init; } = [".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp", ".rtf", ".txt", ".csv", ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif"];
+
     public string[] Options { get; init; } = [];
 
     public decimal? Min { get; init; }
@@ -41,4 +49,4 @@ public sealed record SaveFormRequest(int Revision, FormDefinition Definition);
 
 public sealed record FormRevisionRequest(int Revision);
 
-public sealed record SubmitFormRequest(int Version, Guid SubmissionKey, Dictionary<string, string[]> Answers);
+public sealed record SubmitFormRequest(int Version, Guid SubmissionKey, Dictionary<string, string[]> Answers, Dictionary<string, Guid[]>? Attachments = null);

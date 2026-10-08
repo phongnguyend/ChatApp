@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { DragEvent } from 'react';
-import { ImagePlus } from 'lucide-react';
+import { ImagePlus, Paperclip, RotateCcw } from 'lucide-react';
+import { defaultAttachmentExtensions } from './formModel';
 import { FormImageEditor } from './FormImageEditor';
 import { AlignLeft, ArrowDown, ArrowUp, CalendarClock, CalendarDays, ChevronDown, CircleDot, Clock, Columns3, GitBranchPlus, GripVertical, Hash, ListChecks, Mail, PanelTop, Plus, Star, ToggleLeft, Trash2, Type, type LucideIcon } from 'lucide-react';
 import { createNode, flatten, insertNode, isQuestion, moveNode, questionTypes, removeNode, updateNode, type FormDefinition, type FormNode } from './formModel';
@@ -9,6 +10,7 @@ const dragType = 'application/x-chatapp-form-block';
 
 const questionIcons: Record<(typeof questionTypes)[number][0], LucideIcon> = {
   text: Type,
+  attachment: Paperclip,
   textarea: AlignLeft,
   email: Mail,
   number: Hash,
@@ -117,6 +119,15 @@ export function FormBuilder({ definition, onChange }: { definition: FormDefiniti
       {selected.kind === 'image' && <FormImageEditor key={selected.id} node={selected} onChange={patch} />}
       <label>Description<textarea maxLength={2000} rows={3} value={selected.description} onChange={event => patch({ description: event.target.value })} /></label>
       {isQuestion(selected) && <label className="forms-inline"><input type="checkbox" checked={selected.required} onChange={event => patch({ required: event.target.checked })} />Required answer</label>}
+      {selected.kind === 'attachment' && <>
+        <label>Maximum file size (MB)<input type="number" min={1} max={20} step={1} value={selected.maxFileSizeMb ?? 5} onChange={event => patch({ maxFileSizeMb: Number(event.target.value) })} /></label>
+        <label>Allowed extensions<textarea rows={4} value={(selected.allowedExtensions ?? defaultAttachmentExtensions).join(', ')} onChange={event => patch({ allowedExtensions: event.target.value.split(',').map(extension => extension.trim().toLowerCase()) })} /></label>
+        <small>Separate extensions with commas, including the dot (for example .pdf, .docx, .jpg).</small>
+        <button type="button" onClick={() => patch({ allowedExtensions: [...defaultAttachmentExtensions] })}><RotateCcw size={15} aria-hidden="true" />Reset file types</button>
+        <label className="forms-inline"><input type="checkbox" checked={selected.allowMultipleFiles ?? false} onChange={event => patch({ allowMultipleFiles: event.target.checked })} />Allow multiple files</label>
+        {selected.allowMultipleFiles && <label>Maximum files<input type="number" min={1} max={10} value={selected.maxFiles ?? 10} onChange={event => patch({ maxFiles: Number(event.target.value) })} /></label>}
+        <p className="forms-muted">Choose 1–20 MB per file (1 MB = 1,048,576 bytes). The total limit is 20 MB per response. Files are available only to the form owner.</p>
+      </>}
       {['radio', 'checkbox', 'select'].includes(selected.kind) && <div className="forms-choice-editor"><h4>Choices</h4>{selected.options.map((option, index) => <div key={index}><input aria-label={`Option ${index + 1}`} value={option} maxLength={300} onChange={event => patch({ options: selected.options.map((value, current) => current === index ? event.target.value : value) })} /><button type="button" aria-label={`Remove option ${index + 1}`} onClick={() => patch({ options: selected.options.filter((_, current) => current !== index) })}><Trash2 size={14} /></button></div>)}<button type="button" disabled={selected.options.length >= 100} onClick={() => patch({ options: [...selected.options, `Option ${selected.options.length + 1}`] })}><Plus size={15} aria-hidden="true" />Add choice</button></div>}
       {selected.kind === 'number' && <div className="forms-range"><label>Minimum<input type="number" step="any" value={selected.min ?? ''} onChange={event => patch({ min: event.target.value === '' ? null : Number(event.target.value) })} /></label><label>Maximum<input type="number" step="any" value={selected.max ?? ''} onChange={event => patch({ max: event.target.value === '' ? null : Number(event.target.value) })} /></label></div>}
       {selected.kind === 'rating' && <label>Rating scale<select value={selected.max ?? 5} onChange={event => patch({ max: Number(event.target.value) })}>{Array.from({ length: 9 }, (_, index) => <option key={index} value={index + 2}>1 to {index + 2}</option>)}</select></label>}

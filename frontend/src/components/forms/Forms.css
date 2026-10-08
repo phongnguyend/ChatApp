@@ -187,3 +187,30 @@
   .forms-public { padding: 20px 12px; }
   .form-cover { padding: 22px; }
 }
+.form-attachment-input { display: grid; gap: 12px; min-width: 0; }
+.form-attachment-dropzone { position: relative; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 16px; padding: 24px 20px; border: 1.5px dashed var(--line, #d6dfdc); border-radius: 12px; background: color-mix(in srgb, var(--forms-accent) 3%, var(--paper, white)); transition: border-color 120ms, background 120ms; }
+.form-attachment-dropzone.is-dragging { border-color: var(--forms-accent); background: color-mix(in srgb, var(--forms-accent) 12%, var(--paper, white)); }
+.form-attachment-dropzone:focus-within { outline: 2px solid var(--forms-accent); outline-offset: 3px; }
+.form-attachment-dropzone.is-disabled { opacity: .65; }
+.form-attachment-upload-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 12px; color: var(--forms-accent); background: color-mix(in srgb, var(--forms-accent) 9%, var(--paper, white)); flex-shrink: 0; }
+.form-attachment-prompt { display: grid; gap: 5px; flex: 1 1 170px; }
+.form-attachment-prompt strong { font-size: 14px; }
+.form-attachment-prompt > span, .form-attachment-limits, .form-attachment-details > span { font-size: 12px; color: var(--muted, #657774); }
+.forms-scope input.form-attachment-native[type=file] { position: absolute; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
+.form-attachment-limits { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; line-height: 1.5; }
+.form-attachment-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.form-attachment-types { font-size: 12px; color: var(--muted, #657774); overflow-wrap: anywhere; }
+.form-attachment-types summary { cursor: pointer; }
+.form-attachment-types p { margin: 8px 0 0; line-height: 1.6; }
+.form-attachment-file { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 12px; border: 1px solid var(--line, #d6dfdc); border-radius: 10px; background: var(--paper, white); }
+.form-attachment-file-icon { display: grid; place-items: center; width: 38px; height: 42px; border-radius: 8px; color: var(--forms-accent); background: color-mix(in srgb, var(--forms-accent) 6%, var(--paper, white)); flex-shrink: 0; }
+.form-attachment-details { display: grid; gap: 5px; min-width: 0; flex: 1; }
+.form-attachment-details strong { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.form-attachment-details > span { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
+.form-attachment-status { display: inline-flex; align-items: center; gap: 4px; color: var(--forms-accent); }
+.forms-scope .form-attachment-remove { padding: 9px; flex-shrink: 0; background: transparent; }
+.form-attachment-pending > svg { flex-shrink: 0; color: var(--forms-accent); }
+@media (max-width: 480px) {
+  .form-attachment-dropzone { padding: 18px 14px; gap: 12px; }
+  .form-attachment-dropzone > button { width: 100%; justify-content: center; }
+}

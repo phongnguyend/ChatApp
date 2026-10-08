@@ -6,7 +6,10 @@ namespace ChatApp.Application.Forms;
 
 public static class FormRules
 {
-    public static readonly HashSet<string> QuestionKinds = ["text", "textarea", "email", "number", "date", "time", "datetime", "radio", "checkbox", "select", "rating", "yesno"];
+    public static bool IsAllowedAttachment(FormNode node, string fileName) =>
+        node.AllowedExtensions?.Contains(Path.GetExtension(fileName), StringComparer.OrdinalIgnoreCase) == true;
+
+    public static readonly HashSet<string> QuestionKinds = ["text", "textarea", "email", "number", "date", "time", "datetime", "radio", "checkbox", "select", "rating", "yesno", "attachment"];
     private static readonly HashSet<string> Operators = ["equals", "notEquals", "contains", "answered", "notAnswered"];
 
     public static Dictionary<string, string> ValidateDefinition(FormDefinition definition, bool publishing = false)
@@ -64,6 +67,20 @@ public static class FormRules
                             errors[key] = "Conditions must reference an earlier question with a valid operator.";
                         }
                     }
+                }
+                if (node.Kind == "attachment" && (node.AllowedExtensions is null || node.AllowedExtensions.Length is < 1 or > 50 ||
+                    node.AllowedExtensions.Any(extension => extension is null || extension.Length is < 2 or > 17 || extension[0] != '.' || !extension[1..].All(char.IsAsciiLetterOrDigit)) ||
+                    node.AllowedExtensions.Distinct(StringComparer.OrdinalIgnoreCase).Count() != node.AllowedExtensions.Length))
+                {
+                    errors[key] = "Provide 1–50 unique extensions starting with a dot, followed by up to 16 letters or numbers (for example .pdf).";
+                }
+                if (node.Kind == "attachment" && node.MaxFileSizeMb is < 1 or > 20)
+                {
+                    errors[key] = "Maximum file size must be a whole number between 1 and 20 MB.";
+                }
+                if (node.Kind == "attachment" && node.MaxFiles is < 1 or > 10)
+                {
+                    errors[key] = "Attachments allow between 1 and 10 files.";
                 }
                 if (node.Options is null || node.Options.Length > 100 || node.Options.Any(x => string.IsNullOrWhiteSpace(x) || x.Length > 300) || node.Options.Distinct(StringComparer.Ordinal).Count() != node.Options.Length)
                 {
@@ -212,7 +229,7 @@ public static class FormRules
                     errors[node.Id] = "Answer is too long.";
                     continue;
                 }
-                values = values.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal).ToArray();
+                values = node.Kind == "attachment" ? values : values.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal).ToArray();
                 clean[node.Id] = values;
                 if (node.Required && values.Length == 0)
                 {
@@ -222,7 +239,7 @@ public static class FormRules
                 {
                     continue;
                 }
-                if (node.Kind != "checkbox" && values.Length != 1)
+                if (node.Kind is not ("checkbox" or "attachment") && values.Length != 1)
                 {
                     errors[node.Id] = "Provide one answer.";
                     continue;
@@ -230,6 +247,7 @@ public static class FormRules
                 var value = values[0];
                 var valid = node.Kind switch
                 {
+                    "attachment" => values.Length <= (node.AllowMultipleFiles ? node.MaxFiles : 1) && values.All(name => IsAllowedAttachment(node, name)),
                     "radio" or "select" or "checkbox" => values.All(x => node.Options.Contains(x, StringComparer.Ordinal)),
                     "yesno" => value is "Yes" or "No",
                     "email" => MailAddress.TryCreate(value, out var address) && address.Address == value && value.Length <= 254,

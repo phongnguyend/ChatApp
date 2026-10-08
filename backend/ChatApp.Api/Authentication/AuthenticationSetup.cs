@@ -111,6 +111,15 @@ public static class AuthenticationSetup
                         Window = TimeSpan.FromMinutes(1),
                         QueueLimit = 0
                     }));
+            options.AddPolicy("form-uploads", context =>
+                System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+                    context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 60,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0
+                    }));
             options.AddFixedWindowLimiter("password-auth", limiter =>
             {
                 limiter.PermitLimit = 60;

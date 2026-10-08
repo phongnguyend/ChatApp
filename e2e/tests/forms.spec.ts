@@ -3,6 +3,141 @@ import { randomUUID } from 'node:crypto';
 import { apiUrl, createUser, headersFor, login } from './helpers.js';
 import { createNode, csvCell, definitionIssues, flatten, moveNode, visibleAnswers, type FormDefinition, type FormDetail, type ResponsePage } from '../../frontend/src/components/forms/formModel.js';
 
+test('attachment questions upload single and multiple files with owner-only downloads', async ({ page, request }) => {
+  const user = await createUser(request, 'formfiles');
+  const other = await createUser(request, 'formfilesother');
+  const headers = headersFor(user.username);
+  let form = await (await request.post(`${apiUrl}/api/forms/`, { headers })).json() as FormDetail;
+  const base = `${apiUrl}/api/forms/${form.id}`;
+  const single = { ...createNode('attachment'), id: 'single', label: 'Resume', required: true, allowedExtensions: ['.txt'], maxFileSizeMb: 1 };
+  const multiple = { ...createNode('attachment'), id: 'multiple', label: 'Supporting files', allowMultipleFiles: true, maxFiles: 2, maxFileSizeMb: 10 };
+  const definition = { ...form.definition, title: 'Attachment survey', nodes: [single, multiple] };
+  const saved = await request.put(base, { headers, data: { revision: form.revision, definition } });
+  expect(saved.ok(), await saved.text()).toBeTruthy();
+  form = await saved.json();
+  form = await (await request.post(`${base}/publish`, { headers, data: { revision: form.revision } })).json();
+  const endpoint = `${apiUrl}/api/public/forms/${form.shareToken}/responses`;
+  expect((await request.post(endpoint, { data: { version: 1, submissionKey: randomUUID(), answers: { single: ['fake.txt'] } } })).status()).toBe(400);
+  const multipart = new FormData();
+  multipart.append('payload', JSON.stringify({ version: 1, submissionKey: randomUUID(), answers: {} }));
+  multipart.append('single', new File(['one'], 'one.txt'));
+  expect((await request.post(endpoint, { multipart })).status()).toBe(415);
+  const submissionKey = randomUUID();
+  const uploadEndpoint = `${apiUrl}/api/public/forms/${form.shareToken}/attachments`;
+  const disallowed = await request.post(uploadEndpoint, { multipart: {
+    version: '1', submissionKey, questionId: 'single',
+    file: { name: 'resume.pdf', mimeType: 'application/pdf', buffer: Buffer.from('PDF') },
+  } });
+  expect(disallowed.status()).toBe(400);
+  expect((await disallowed.json()).error).toContain('File extension is not allowed');
+  const oversized = await request.post(uploadEndpoint, { multipart: {
+    version: '1', submissionKey, questionId: 'single',
+    file: { name: 'large.txt', mimeType: 'text/plain', buffer: Buffer.alloc(1024 * 1024 + 1) },
+  } });
+  expect(oversized.status()).toBe(400);
+  expect((await oversized.json()).error).toBe('Each file must be at most 1 MB.');
+  const atLimit = await request.post(uploadEndpoint, { multipart: {
+    version: '1', submissionKey, questionId: 'single',
+    file: { name: 'boundary.txt', mimeType: 'text/plain', buffer: Buffer.alloc(1024 * 1024) },
+  } });
+  expect(atLimit.ok(), await atLimit.text()).toBeTruthy();
+  const largerAllowed = await request.post(uploadEndpoint, { multipart: {
+    version: '1', submissionKey, questionId: 'multiple',
+    file: { name: 'larger.txt', mimeType: 'text/plain', buffer: Buffer.alloc(6 * 1024 * 1024) },
+  } });
+  expect(largerAllowed.ok(), await largerAllowed.text()).toBeTruthy();
+  async function stage(questionId: string) {
+    const uploaded = await request.post(uploadEndpoint, { multipart: {
+      version: '1', submissionKey, questionId,
+      file: { name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('Notes') },
+    } });
+    expect(uploaded.ok(), await uploaded.text()).toBeTruthy();
+    return (await uploaded.json()).id as string;
+  }
+  const singleIds = [await stage('single'), await stage('single')];
+  const invalidSingle = await request.post(endpoint, { data: { version: 1, submissionKey, answers: {}, attachments: { single: singleIds } } });
+  expect(invalidSingle.status()).toBe(400);
+  expect((await invalidSingle.json()).errors).toHaveProperty('single');
+  const multipleIds: string[] = [];
+  for (let index = 0; index < 3; index++) {
+    multipleIds.push(await stage('multiple'));
+  }
+  const invalidMultiple = await request.post(endpoint, { data: { version: 1, submissionKey, answers: {}, attachments: { single: [singleIds[0]], multiple: multipleIds } } });
+  expect(invalidMultiple.status()).toBe(400);
+  expect((await invalidMultiple.json()).errors).toHaveProperty('multiple');
+  await page.goto(`/?form=${form.shareToken}`);
+  await expect(page.locator('input[type=file][aria-label="Resume"]')).toHaveAttribute('accept', '.txt');
+  await expect(page.locator('.form-attachment-limits').first()).toContainText('1 MB each');
+  await page.locator('input[type=file][aria-label="Resume"]').setInputFiles({ name: 'oversized.txt', mimeType: 'text/plain', buffer: Buffer.alloc(1024 * 1024 + 1) });
+  await expect(page.getByRole('alert')).toContainText('Each file must be at most 1 MB.');
+  await expect(page.locator('input[type=file][aria-label="Supporting files"]')).toHaveAttribute('accept', /\.docx.*\.pdf.*\.png/);
+  const firstUpload = page.waitForResponse(value => value.url().endsWith(`/api/public/forms/${form.shareToken}/attachments`) && value.request().method() === 'POST');
+  const chooserPromise = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Browse files for Resume' }).click();
+  await (await chooserPromise).setFiles({ name: 'resume.txt', mimeType: 'text/plain', buffer: Buffer.from('My resume') });
+  const uploadResponse = await firstUpload;
+  expect(uploadResponse.ok(), await uploadResponse.text()).toBeTruthy();
+  const uploadedFile = await uploadResponse.json() as { id: string };
+  expect((await request.post(endpoint, { data: { version: 1, submissionKey: randomUUID(), answers: {}, attachments: { single: [uploadedFile.id] } } })).status()).toBe(400);
+  const dropped = await page.evaluateHandle(() => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['Notes'], 'notes.txt', { type: 'text/plain' }));
+    transfer.items.add(new File(['Photo'], 'photo.txt', { type: 'text/plain' }));
+    return transfer;
+  });
+  const dropzone = page.getByRole('group', { name: 'Upload files for Supporting files', exact: true });
+  await expect(page.getByRole('button', { name: 'Browse files for Supporting files' })).toBeEnabled();
+  await dropzone.dispatchEvent('dragenter', { dataTransfer: dropped });
+  await expect(dropzone).toHaveClass(/is-dragging/);
+  await dropzone.dispatchEvent('drop', { dataTransfer: dropped });
+  await dropped.dispose();
+  await page.getByRole('button', { name: 'Remove photo.txt' }).click();
+  await page.locator('input[type=file][aria-label="Supporting files"]').setInputFiles({ name: 'extra.txt', mimeType: 'text/plain', buffer: Buffer.from('Extra') });
+  await expect(page.getByRole('button', { name: 'Submit response' })).toBeEnabled();
+  await expect(page.locator('.form-attachment-file')).toHaveCount(3);
+  await expect(page.locator('.form-attachment-file').first()).toContainText('Uploaded');
+  const rejectedDrop = await page.evaluateHandle(() => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['Not allowed'], 'resume.pdf', { type: 'application/pdf' }));
+    return transfer;
+  });
+  await page.getByRole('group', { name: 'Upload files for Resume', exact: true }).dispatchEvent('drop', { dataTransfer: rejectedDrop });
+  await rejectedDrop.dispose();
+  await expect(page.getByRole('alert')).toContainText('File extension is not allowed');
+  await expect(page.locator('.form-attachment-file')).toHaveCount(3);
+  await page.locator('input[type=file][aria-label="Supporting files"]').setInputFiles({ name: 'too-many.txt', mimeType: 'text/plain', buffer: Buffer.from('Extra') });
+  await expect(page.getByRole('alert').filter({ hasText: 'Choose up to 2 files' })).toBeVisible();
+  await expect(page.locator('.form-attachment-file')).toHaveCount(3);
+  await page.screenshot({ path: 'test-results/form-attachments-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole('button', { name: 'Browse files for Supporting files' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+  await page.screenshot({ path: 'test-results/form-attachments-mobile.png', fullPage: true });
+  const beforeSubmit = await (await request.get(`${base}/responses`, { headers })).json() as ResponsePage;
+  expect(beforeSubmit.total).toBe(0);
+  const submissionRequest = page.waitForRequest(value => value.url() === endpoint && value.method() === 'POST');
+  await page.getByRole('button', { name: 'Submit response' }).click();
+  const submitted = (await submissionRequest).postDataJSON();
+  expect(submitted.attachments.single).toHaveLength(1);
+  expect(submitted.attachments.multiple).toHaveLength(2);
+  await expect(page.getByRole('heading', { name: 'Response submitted' })).toBeVisible();
+  const responses = await (await request.get(`${base}/responses`, { headers })).json() as ResponsePage;
+  expect(responses.total).toBe(1);
+  expect(responses.items[0].attachments).toHaveLength(3);
+  expect((await request.post(endpoint, { data: submitted })).ok()).toBeTruthy();
+  expect((await request.post(endpoint, { data: { ...submitted, submissionKey: randomUUID() } })).status()).toBe(400);
+  const attachment = responses.items[0].attachments!.find(item => item.questionId === single.id)!;
+  const downloadUrl = `${base}/attachments/${attachment.id}`;
+  const download = await request.get(downloadUrl, { headers });
+  expect(download.ok(), await download.text()).toBeTruthy();
+  expect(await download.text()).toBe('My resume');
+  expect(download.headers()['content-disposition']).toContain('attachment;');
+  expect((await request.get(downloadUrl)).status()).toBe(401);
+  expect((await request.get(downloadUrl, { headers: headersFor(other.username) })).status()).toBe(404);
+  expect((await request.delete(`${base}?revision=${form.revision}`, { headers })).status()).toBe(204);
+  expect((await request.get(downloadUrl, { headers })).status()).toBe(404);
+});
+
 test('owner uploads, drops, and pastes a base64 image that respondents cannot edit', async ({ page, browser, request }) => {
   const user = await createUser(request, 'formimage');
   await login(page, user.username);

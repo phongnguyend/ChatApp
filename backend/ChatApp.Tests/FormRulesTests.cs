@@ -6,6 +6,54 @@ namespace ChatApp.Tests;
 
 public sealed class FormRulesTests
 {
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(1, true)]
+    [InlineData(5, true)]
+    [InlineData(20, true)]
+    [InlineData(21, false)]
+    public void AttachmentFileSizeConfigurationIsBounded(int size, bool valid)
+    {
+        var node = new FormNode { Id = "file", Kind = "attachment", Label = "File", MaxFileSizeMb = size };
+        Assert.Equal(valid, FormRules.ValidateDefinition(Definition(node)).Count == 0);
+        Assert.Equal(5, new FormNode().MaxFileSizeMb);
+    }
+
+    [Theory]
+    [InlineData("report.PDF", true)]
+    [InlineData("report.docx", true)]
+    [InlineData("photo.jpeg", true)]
+    [InlineData("report.pdf.exe", false)]
+    [InlineData("no-extension", false)]
+    public void AttachmentDefaultsCheckExtensions(string name, bool allowed)
+    {
+        var node = new FormNode { Id = "file", Kind = "attachment", Label = "File" };
+        Assert.Equal(allowed, FormRules.IsAllowedAttachment(node, name));
+        Assert.Equal(allowed, FormRules.ValidateAnswers(Definition(node), new() { [node.Id] = [name] }).Errors.Count == 0);
+        var custom = node with { AllowedExtensions = [".zip"] };
+        Assert.True(FormRules.IsAllowedAttachment(custom, "archive.ZIP"));
+        Assert.False(FormRules.IsAllowedAttachment(custom, "report.pdf"));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(node with { AllowedExtensions = [] })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(node with { AllowedExtensions = ["pdf"] })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(node with { AllowedExtensions = [".pdf", ".PDF"] })));
+    }
+
+    [Theory]
+    [InlineData(false, 1, true)]
+    [InlineData(false, 2, false)]
+    [InlineData(true, 2, true)]
+    [InlineData(true, 3, false)]
+    [InlineData(true, 0, false)]
+    public void AttachmentQuestionsValidateRequiredAndFileCount(bool multiple, int count, bool valid)
+    {
+        var node = new FormNode { Id = "files", Kind = "attachment", Label = "Files", Required = true, AllowMultipleFiles = multiple, MaxFiles = 2 };
+        var definition = Definition(node);
+        Assert.Empty(FormRules.ValidateDefinition(definition, true));
+        var answers = new Dictionary<string, string[]> { [node.Id] = Enumerable.Repeat("same-name.txt", count).ToArray() };
+        Assert.Equal(valid, FormRules.ValidateAnswers(definition, answers).Errors.Count == 0);
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(node with { MaxFiles = 11 })));
+    }
+
     private const string PngImage = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
     [Theory]
