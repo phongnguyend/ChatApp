@@ -24,6 +24,8 @@ public sealed record FormNode
 
     public string Description { get; init; } = "";
 
+    public string ParagraphAlignment { get; init; } = "left";
+
     public bool Required { get; init; }
 
     public bool AllowMultipleFiles { get; init; }

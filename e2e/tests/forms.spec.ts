@@ -97,6 +97,10 @@ test('owner links and respondent URL questions publish and collect only URL answ
   await page.getByRole('navigation', { name: 'Main sections' }).getByRole('button', { name: 'Forms', exact: true }).click();
   await page.getByRole('button', { name: 'New form', exact: true }).click();
   await page.getByLabel('Title', { exact: true }).fill('Links survey');
+  await page.locator('.forms-palette').getByRole('button', { name: 'Paragraph', exact: true }).click();
+  await page.getByLabel('Heading (optional)', { exact: true }).fill('Before you start');
+  await page.getByLabel('Paragraph text', { exact: true }).fill('Please read these instructions.\n\nYour answers help us improve.');
+  await page.getByLabel('Text alignment', { exact: true }).selectOption('center');
   await page.locator('.forms-palette').getByRole('button', { name: 'Link', exact: true }).click();
   await page.getByLabel('Link label', { exact: true }).fill('Read guidelines');
   await page.getByLabel('Link URL', { exact: true }).fill('https://example.com/guidelines');
@@ -109,6 +113,11 @@ test('owner links and respondent URL questions publish and collect only URL answ
   const anonymous = await browser.newPage();
   try {
     await anonymous.goto(shareUrl);
+    await expect(anonymous.getByRole('heading', { name: 'Before you start' })).toBeVisible();
+    await expect(anonymous.locator('.form-paragraph-block p')).toHaveText('Please read these instructions.\n\nYour answers help us improve.');
+    await expect(anonymous.locator('.form-paragraph-block p')).toHaveCSS('white-space', 'pre-wrap');
+    await expect(anonymous.locator('.form-paragraph-block p')).toHaveCSS('text-align', 'center');
+    await expect(anonymous.locator('.form-paragraph-block input, .form-paragraph-block textarea')).toHaveCount(0);
     const link = anonymous.getByRole('link', { name: /Read guidelines/ });
     await expect(link).toHaveAttribute('href', 'https://example.com/guidelines');
     await expect(link).toHaveAttribute('target', '_blank');
@@ -270,7 +279,7 @@ test('owner uploads, drops, and pastes a base64 image that respondents cannot ed
   await page.getByRole('navigation', { name: 'Main sections' }).getByRole('button', { name: 'Forms', exact: true }).click();
   await page.getByRole('button', { name: 'New form', exact: true }).click();
   await page.getByLabel('Title', { exact: true }).fill('Image survey');
-  await page.locator('.forms-palette').getByRole('button', { name: 'Logo / banner', exact: true }).click();
+  await page.locator('.forms-palette').getByRole('button', { name: 'Image', exact: true }).click();
   await page.getByLabel('Alternative text', { exact: true }).fill('Acme logo');
   const images = await page.evaluate(() => ['red', 'green', 'blue'].map(color => {
     const canvas = document.createElement('canvas');

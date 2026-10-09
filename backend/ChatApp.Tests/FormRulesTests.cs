@@ -7,6 +7,32 @@ namespace ChatApp.Tests;
 public sealed class FormRulesTests
 {
     [Theory]
+    [InlineData("left", true)]
+    [InlineData("center", true)]
+    [InlineData("right", true)]
+    [InlineData("justify", true)]
+    [InlineData("invalid", false)]
+    [InlineData(null, false)]
+    public void ParagraphAlignmentIsValidated(string? alignment, bool valid)
+    {
+        var paragraph = new FormNode { Id = "paragraph", Kind = "paragraph", Description = "Instructions", ParagraphAlignment = alignment! };
+        Assert.Equal(valid, FormRules.ValidateDefinition(Definition(paragraph, Question("q")), true).Count == 0);
+    }
+
+    [Fact]
+    public void ParagraphIsDisplayOnlyAndRequiresTextToPublish()
+    {
+        var paragraph = new FormNode { Id = "paragraph", Kind = "paragraph", Description = "First line\n\nSecond paragraph" };
+        Assert.Empty(FormRules.ValidateDefinition(Definition(paragraph, Question("q")), true));
+        Assert.False(FormRules.ValidateAnswers(Definition(paragraph), new() { [paragraph.Id] = ["forged"] }).Answers.ContainsKey(paragraph.Id));
+        Assert.Empty(FormRules.ValidateDefinition(Definition(paragraph with { Description = "" })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(paragraph with { Description = " " }), true));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(paragraph with { Description = new string('x', 2001) })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(paragraph with { Required = true })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(paragraph with { Children = [Question("child")] })));
+    }
+
+    [Theory]
     [InlineData("https://example.com/path?q=1#details", true)]
     [InlineData("http://example.com", true)]
     [InlineData("javascript:alert(1)", false)]

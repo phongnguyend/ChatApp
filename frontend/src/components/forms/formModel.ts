@@ -14,6 +14,7 @@ export type FormNode = {
   allowedExtensions?: string[];
   linkUrl?: string;
   linkOpenNewTab?: boolean;
+  paragraphAlignment?: 'left' | 'center' | 'right' | 'justify';
 };
 export type FormDefinition = { title: string; description: string; confirmationMessage: string; nodes: FormNode[] };
 export type Answers = Record<string, string[]>;
@@ -32,10 +33,15 @@ export const questionTypes = [
 export const isQuestion = (node: FormNode) => questionTypes.some(([kind]) => kind === node.kind);
 export function createNode(kind: string): FormNode {
   const node: FormNode = {
-    id: crypto.randomUUID(), kind, label: questionTypes.find(([value]) => value === kind)?.[1] ?? (kind === 'image' ? 'Logo / banner' : kind === 'section' ? 'Section' : 'Columns'),
+    id: crypto.randomUUID(), kind, label: questionTypes.find(([value]) => value === kind)?.[1] ?? (kind === 'image' ? 'Image' : kind === 'section' ? 'Section' : 'Columns'),
     description: '', required: false, options: ['Option 1', 'Option 2'], min: null, max: null,
     children: [], conditionMode: 'all', conditions: [],
   };
+  if (kind === 'paragraph') {
+    node.label = '';
+    node.description = 'Add your paragraph text here.';
+    node.paragraphAlignment = 'left';
+  }
   if (kind === 'image') {
     node.imageDataUrl = '';
     node.imageDisplay = 'banner';

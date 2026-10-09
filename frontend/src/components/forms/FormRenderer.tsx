@@ -24,6 +24,9 @@ export function FormRenderer({ definition, onSubmit, onUploadFile, busy = false,
   };
   function render(nodes: FormNode[], structuralColumns = false) {
     return nodes.filter(node => visible.ids.has(node.id)).map(node => {
+      if (node.kind === 'paragraph') {
+        return <div key={node.id} className="form-paragraph-block" style={{ textAlign: node.paragraphAlignment ?? 'left' }}>{node.label && <h3>{node.label}</h3>}<p>{node.description}</p></div>;
+      }
       if (node.kind === 'link') {
         return <div key={node.id} className="form-link-block">
           {isValidLinkUrl(node.linkUrl ?? '') ? <a href={node.linkUrl} target={node.linkOpenNewTab !== false ? '_blank' : undefined} rel="noopener noreferrer"><LinkIcon size={18} aria-hidden="true" /><span>{node.label}</span>{node.linkOpenNewTab !== false && <ExternalLink size={14} aria-label="Opens in a new tab" />}</a> : <span>{node.label}</span>}

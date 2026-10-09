@@ -50,7 +50,7 @@ public static class FormRules
                 {
                     errors[key] = "Block identifiers must be unique and nonempty.";
                 }
-                if (!QuestionKinds.Contains(node.Kind) && node.Kind is not ("section" or "columns" or "image" or "link"))
+                if (!QuestionKinds.Contains(node.Kind) && node.Kind is not ("section" or "columns" or "image" or "link" or "paragraph"))
                 {
                     errors[key] = "Unknown block type.";
                 }
@@ -98,7 +98,22 @@ public static class FormRules
                 {
                     errors[key] = "Check the minimum and maximum; ratings use 1 to 2–10.";
                 }
-                if (node.Kind == "link")
+                if (node.Kind == "paragraph")
+                {
+                    if (node.ParagraphAlignment is not ("left" or "center" or "right" or "justify"))
+                    {
+                        errors[key] = "Choose left, center, right, or justified paragraph alignment.";
+                    }
+                    if (node.Required || node.Children is null || node.Children.Length != 0)
+                    {
+                        errors[key] = "Paragraphs are display-only blocks and cannot be required or contain child blocks.";
+                    }
+                    if (publishing && string.IsNullOrWhiteSpace(node.Description))
+                    {
+                        errors[key] = "Enter paragraph text before publishing.";
+                    }
+                }
+                else if (node.Kind == "link")
                 {
                     if (node.Required || node.Children is null || node.Children.Length != 0 || string.IsNullOrWhiteSpace(node.Label))
                     {

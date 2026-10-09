@@ -219,3 +219,6 @@
   .form-attachment-dropzone { padding: 18px 14px; gap: 12px; }
   .form-attachment-dropzone > button { width: 100%; justify-content: center; }
 }
+.form-paragraph-block { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; line-height: 1.6; }
+.form-paragraph-block p { margin: 0; }
+.form-paragraph-block h3 { margin: 0 0 .5rem; }
