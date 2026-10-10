@@ -1,3 +1,4 @@
+import { FormCodeBlock } from './FormCodeBlock';
 import { useId, useState } from 'react';
 import { ExternalLink, FlaskConical, Link as LinkIcon, LoaderCircle, Send } from 'lucide-react';
 import type { FormEvent } from 'react';
@@ -24,6 +25,9 @@ export function FormRenderer({ definition, onSubmit, onUploadFile, busy = false,
   };
   function render(nodes: FormNode[], structuralColumns = false) {
     return nodes.filter(node => visible.ids.has(node.id)).map(node => {
+      if (node.kind === 'code') {
+        return <FormCodeBlock key={node.id} node={node} />;
+      }
       if (node.kind === 'paragraph') {
         return <div key={node.id} className="form-paragraph-block" style={{ textAlign: node.paragraphAlignment ?? 'left' }}>{node.label && <h3>{node.label}</h3>}<p>{node.description}</p></div>;
       }

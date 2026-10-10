@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { Code2 } from 'lucide-react';
+import { FormCodeBlock } from './FormCodeBlock';
+import { codeLanguages } from './formModel';
 import type { DragEvent } from 'react';
 import { ImagePlus, Link as LinkIcon, Paperclip, RotateCcw } from 'lucide-react';
 import { defaultAttachmentExtensions } from './formModel';
@@ -62,7 +65,7 @@ export function FormBuilder({ definition, onChange }: { definition: FormDefiniti
     setDragging(false);
     if (value.startsWith('new:')) {
       const kind = value.slice(4);
-      if ([...questionTypes.map(([type]) => type), 'section', 'columns', 'image', 'link', 'paragraph'].includes(kind)) {
+      if ([...questionTypes.map(([type]) => type), 'section', 'columns', 'image', 'link', 'paragraph', 'code'].includes(kind)) {
         add(kind, parentId, index);
       }
     } else if (value.startsWith('move:')) {
@@ -85,11 +88,11 @@ export function FormBuilder({ definition, onChange }: { definition: FormDefiniti
       <article className={`forms-block ${selectedId === node.id ? 'selected' : ''}`}>
         <div className="forms-block-toolbar">
           <button type="button" className="forms-drag-handle" draggable onDragStart={event => drag(event, `move:${node.id}`)} onDragEnd={() => setDragging(false)} aria-label={`Drag ${node.label}`} title="Drag to move; or use the arrow buttons"><GripVertical size={16} /></button>
-          <button className="forms-block-select" type="button" onClick={() => setSelectedId(node.id)}><span>{node.kind === 'image' ? 'Image' : node.kind === 'paragraph' ? 'Paragraph' : node.kind === 'link' ? 'Link' : isQuestion(node) ? questionTypes.find(([kind]) => kind === node.kind)?.[1] : node.kind === 'columns' ? `${node.children.length} columns` : 'Section'}</span><strong>{node.label || (node.kind === 'paragraph' ? 'Paragraph' : 'Untitled question')}{node.required && ' *'}</strong>{node.conditions.length > 0 && <small>Conditional · {node.conditions.length} rule{node.conditions.length > 1 ? 's' : ''}</small>}</button>
+          <button className="forms-block-select" type="button" onClick={() => setSelectedId(node.id)}><span>{node.kind === 'code' ? 'Code' : node.kind === 'image' ? 'Image' : node.kind === 'paragraph' ? 'Paragraph' : node.kind === 'link' ? 'Link' : isQuestion(node) ? questionTypes.find(([kind]) => kind === node.kind)?.[1] : node.kind === 'columns' ? `${node.children.length} columns` : 'Section'}</span><strong>{node.label || (node.kind === 'code' ? 'Code' : node.kind === 'paragraph' ? 'Paragraph' : 'Untitled question')}{node.required && ' *'}</strong>{node.conditions.length > 0 && <small>Conditional · {node.conditions.length} rule{node.conditions.length > 1 ? 's' : ''}</small>}</button>
           <button type="button" disabled={index === 0} aria-label={`Move ${node.label} up`} onClick={() => changeNodes(moveNode(definition.nodes, node.id, parentId, index - 1))}><ArrowUp size={15} /></button>
           <button type="button" disabled={index === nodes.length - 1} aria-label={`Move ${node.label} down`} onClick={() => changeNodes(moveNode(definition.nodes, node.id, parentId, index + 2))}><ArrowDown size={15} /></button>
         </div>
-        {node.kind === 'paragraph' ? <button className="forms-block-placeholder form-paragraph-block" style={{ textAlign: node.paragraphAlignment ?? 'left' }} type="button" onClick={() => setSelectedId(node.id)}>{node.description || 'Enter paragraph text'}</button> : node.kind === 'link' ? <button className="forms-block-placeholder" type="button" onClick={() => setSelectedId(node.id)}><LinkIcon size={16} aria-hidden="true" />{node.linkUrl || 'Set the destination URL'}</button> : node.kind === 'image' ? <button className="forms-image-preview" type="button" onClick={() => setSelectedId(node.id)} aria-label={`Edit image ${node.label}`}>
+        {node.kind === 'code' ? <FormCodeBlock node={node} /> : node.kind === 'paragraph' ? <button className="forms-block-placeholder form-paragraph-block" style={{ textAlign: node.paragraphAlignment ?? 'left' }} type="button" onClick={() => setSelectedId(node.id)}>{node.description || 'Enter paragraph text'}</button> : node.kind === 'link' ? <button className="forms-block-placeholder" type="button" onClick={() => setSelectedId(node.id)}><LinkIcon size={16} aria-hidden="true" />{node.linkUrl || 'Set the destination URL'}</button> : node.kind === 'image' ? <button className="forms-image-preview" type="button" onClick={() => setSelectedId(node.id)} aria-label={`Edit image ${node.label}`}>
           {node.imageDataUrl ? <img className={`form-image form-image-${node.imageDisplay ?? 'banner'}`} style={{ width: node.imageWidth ?? undefined, height: node.imageHeight ?? undefined, maxWidth: node.imageWidth != null ? '100%' : undefined, maxHeight: node.imageHeight != null || node.imageWidth != null ? 'none' : undefined }} src={node.imageDataUrl} alt={node.label} draggable={false} /> : <span><ImagePlus size={24} aria-hidden="true" />Select this block to upload, drop, or paste an image</span>}
         </button> : isQuestion(node) ? <button className="forms-block-placeholder" type="button" onClick={() => setSelectedId(node.id)}>{['radio', 'checkbox', 'select'].includes(node.kind) ? node.options.join('  ·  ') : node.description || 'Click to edit question settings'}</button>
           : node.kind === 'columns' ? <div className="forms-columns-builder" style={{ gridTemplateColumns: `repeat(${node.children.length}, minmax(0, 1fr))` }}>{node.children.map(column => <div key={column.id} className="forms-column"><button type="button" className="forms-column-title" onClick={() => setSelectedId(column.id)}>{column.label}</button>{renderList(column.children, column.id)}</div>)}</div>
@@ -105,6 +108,7 @@ export function FormBuilder({ definition, onChange }: { definition: FormDefiniti
         return <button type="button" key={kind} draggable onDragStart={event => drag(event, `new:${kind}`)} onDragEnd={() => setDragging(false)} onClick={() => addFromPalette(kind)}><Icon size={15} aria-hidden="true" />{label}</button>;
       })}
       <h3>Content</h3><button type="button" draggable onDragStart={event => drag(event, 'new:image')} onDragEnd={() => setDragging(false)} onClick={() => addFromPalette('image')}><ImagePlus size={15} aria-hidden="true" />Image</button>
+      <button type="button" draggable onDragStart={event => drag(event, 'new:code')} onDragEnd={() => setDragging(false)} onClick={() => addFromPalette('code')}><Code2 size={15} aria-hidden="true" />Code</button>
       <button type="button" draggable onDragStart={event => drag(event, 'new:link')} onDragEnd={() => setDragging(false)} onClick={() => addFromPalette('link')}><LinkIcon size={15} aria-hidden="true" />Link</button>
       <button type="button" draggable onDragStart={event => drag(event, 'new:paragraph')} onDragEnd={() => setDragging(false)} onClick={() => addFromPalette('paragraph')}><AlignLeft size={15} aria-hidden="true" />Paragraph</button>
       <h3>Layout</h3>{[['section', 'Section'], ['columns', 'Columns']].map(([kind, label]) => <button type="button" key={kind} draggable onDragStart={event => drag(event, `new:${kind}`)} onDragEnd={() => setDragging(false)} onClick={() => addFromPalette(kind)}>{kind === 'section' ? <PanelTop size={15} aria-hidden="true" /> : <Columns3 size={15} aria-hidden="true" />}{label}</button>)}
@@ -118,8 +122,13 @@ export function FormBuilder({ definition, onChange }: { definition: FormDefiniti
       <label className="forms-confirmation">Confirmation message<textarea rows={2} maxLength={2000} value={definition.confirmationMessage} onChange={event => onChange({ ...definition, confirmationMessage: event.target.value })} /></label>
     </div>
     <aside className="forms-inspector"><h3>Block settings</h3>{!selected ? <p>Select a question or layout to edit its settings and conditional logic.</p> : <>
-      <label>{selected.kind === 'paragraph' ? 'Heading (optional)' : selected.kind === 'image' ? 'Alternative text' : selected.kind === 'link' ? 'Link label' : isQuestion(selected) ? 'Question' : 'Layout label'}<input maxLength={500} value={selected.label} onChange={event => patch({ label: event.target.value })} /></label>
+      <label>{['paragraph', 'code'].includes(selected.kind) ? 'Heading (optional)' : selected.kind === 'image' ? 'Alternative text' : selected.kind === 'link' ? 'Link label' : isQuestion(selected) ? 'Question' : 'Layout label'}<input maxLength={500} value={selected.label} onChange={event => patch({ label: event.target.value })} /></label>
       {selected.kind === 'image' && <FormImageEditor key={selected.id} node={selected} onChange={patch} />}
+      {selected.kind === 'code' && <>
+        <label>Language<select aria-label="Code language" value={selected.codeLanguage ?? 'text'} onChange={event => patch({ codeLanguage: event.target.value })}>{codeLanguages.map(language => <option key={language} value={language}>{language === 'text' ? 'Plain text' : language}</option>)}</select></label>
+        <label>Code<textarea aria-label="Code content" className="forms-code-editor" rows={12} maxLength={20000} spellCheck={false} value={selected.code ?? ''} onChange={event => patch({ code: event.target.value })} /></label>
+        <label className="forms-inline"><input type="checkbox" checked={selected.codeWrap ?? false} onChange={event => patch({ codeWrap: event.target.checked })} />Wrap long lines</label>
+      </>}
       {selected.kind === 'link' && <>
         <label>Link URL<input type="url" maxLength={2048} placeholder="https://example.com" value={selected.linkUrl ?? ''} onChange={event => patch({ linkUrl: event.target.value })} /></label>
         <label className="forms-inline"><input type="checkbox" checked={selected.linkOpenNewTab ?? true} onChange={event => patch({ linkOpenNewTab: event.target.checked })} />Open in a new tab</label>

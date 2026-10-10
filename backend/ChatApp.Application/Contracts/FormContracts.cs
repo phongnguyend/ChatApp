@@ -26,6 +26,12 @@ public sealed record FormNode
 
     public string ParagraphAlignment { get; init; } = "left";
 
+    public string Code { get; init; } = "";
+
+    public string CodeLanguage { get; init; } = "text";
+
+    public bool CodeWrap { get; init; }
+
     public bool Required { get; init; }
 
     public bool AllowMultipleFiles { get; init; }

@@ -6,6 +6,20 @@ namespace ChatApp.Tests;
 
 public sealed class FormRulesTests
 {
+    [Fact]
+    public void CodeBlocksAreDisplayOnlyAndValidateContent()
+    {
+        var code = new FormNode { Id = "code", Kind = "code", Code = "<script>alert('example')</script>", CodeLanguage = "html", CodeWrap = true };
+        Assert.Empty(FormRules.ValidateDefinition(Definition(code, Question("q")), true));
+        Assert.False(FormRules.ValidateAnswers(Definition(code), new() { [code.Id] = ["forged"] }).Answers.ContainsKey(code.Id));
+        Assert.Empty(FormRules.ValidateDefinition(Definition(code with { Code = "" })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(code with { Code = "" }), true));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(code with { Code = new string('x', 20001) })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(code with { CodeLanguage = "invalid" })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(code with { Required = true })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(code with { Children = [Question("child")] })));
+    }
+
     [Theory]
     [InlineData("left", true)]
     [InlineData("center", true)]

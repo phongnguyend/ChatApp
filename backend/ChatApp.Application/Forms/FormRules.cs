@@ -50,7 +50,7 @@ public static class FormRules
                 {
                     errors[key] = "Block identifiers must be unique and nonempty.";
                 }
-                if (!QuestionKinds.Contains(node.Kind) && node.Kind is not ("section" or "columns" or "image" or "link" or "paragraph"))
+                if (!QuestionKinds.Contains(node.Kind) && node.Kind is not ("section" or "columns" or "image" or "link" or "paragraph" or "code"))
                 {
                     errors[key] = "Unknown block type.";
                 }
@@ -98,7 +98,22 @@ public static class FormRules
                 {
                     errors[key] = "Check the minimum and maximum; ratings use 1 to 2–10.";
                 }
-                if (node.Kind == "paragraph")
+                if (node.Kind == "code")
+                {
+                    if (node.Required || node.Children is null || node.Children.Length != 0)
+                    {
+                        errors[key] = "Code blocks are display-only and cannot be required or contain child blocks.";
+                    }
+                    if (node.Code is null || node.Code.Length > 20000 || publishing && string.IsNullOrWhiteSpace(node.Code))
+                    {
+                        errors[key] = "Provide code up to 20,000 characters; code cannot be empty when publishing.";
+                    }
+                    if (node.CodeLanguage is not ("text" or "javascript" or "typescript" or "json" or "html" or "css" or "csharp" or "python" or "sql" or "shell" or "yaml" or "xml"))
+                    {
+                        errors[key] = "Choose a supported code language.";
+                    }
+                }
+                else if (node.Kind == "paragraph")
                 {
                     if (node.ParagraphAlignment is not ("left" or "center" or "right" or "justify"))
                     {

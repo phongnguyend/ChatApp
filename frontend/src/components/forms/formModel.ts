@@ -1,4 +1,5 @@
 export type Condition = { questionId: string; operator: string; value: string };
+export const codeLanguages = ['text', 'javascript', 'typescript', 'json', 'html', 'css', 'csharp', 'python', 'sql', 'shell', 'yaml', 'xml'];
 export const defaultAttachmentExtensions = ['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp', '.rtf', '.txt', '.csv', '.pdf', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tif', '.tiff', '.heic', '.heif'];
 export type FormNode = {
   id: string; kind: string; label: string; description: string; required: boolean;
@@ -15,6 +16,9 @@ export type FormNode = {
   linkUrl?: string;
   linkOpenNewTab?: boolean;
   paragraphAlignment?: 'left' | 'center' | 'right' | 'justify';
+  code?: string;
+  codeLanguage?: string;
+  codeWrap?: boolean;
 };
 export type FormDefinition = { title: string; description: string; confirmationMessage: string; nodes: FormNode[] };
 export type Answers = Record<string, string[]>;
@@ -37,6 +41,12 @@ export function createNode(kind: string): FormNode {
     description: '', required: false, options: ['Option 1', 'Option 2'], min: null, max: null,
     children: [], conditionMode: 'all', conditions: [],
   };
+  if (kind === 'code') {
+    node.label = '';
+    node.code = '';
+    node.codeLanguage = 'text';
+    node.codeWrap = false;
+  }
   if (kind === 'paragraph') {
     node.label = '';
     node.description = 'Add your paragraph text here.';

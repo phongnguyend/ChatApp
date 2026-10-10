@@ -222,3 +222,10 @@
 .form-paragraph-block { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; line-height: 1.6; }
 .form-paragraph-block p { margin: 0; }
 .form-paragraph-block h3 { margin: 0 0 .5rem; }
+.form-code-block { min-width: 0; max-width: 100%; overflow: hidden; }
+.form-code-block h3 { margin: 0 0 .5rem; }
+.form-code-block p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.form-code-language { font-size: .75rem; opacity: .7; }
+.form-code-block pre { margin: .3rem 0 0; padding: 1rem; overflow: auto; background: rgba(127, 127, 127, .1); border: 1px solid rgba(127, 127, 127, .3); border-radius: .5rem; tab-size: 4; white-space: pre; }
+.form-code-block pre.wrap-code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.form-code-block code, .forms-code-editor { font-family: ui-monospace, Consolas, monospace; font-size: .875rem; line-height: 1.5; }

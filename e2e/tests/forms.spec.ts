@@ -97,6 +97,10 @@ test('owner links and respondent URL questions publish and collect only URL answ
   await page.getByRole('navigation', { name: 'Main sections' }).getByRole('button', { name: 'Forms', exact: true }).click();
   await page.getByRole('button', { name: 'New form', exact: true }).click();
   await page.getByLabel('Title', { exact: true }).fill('Links survey');
+  await page.locator('.forms-palette').getByRole('button', { name: 'Code', exact: true }).click();
+  await page.getByLabel('Code language', { exact: true }).selectOption('html');
+  await page.getByLabel('Code content', { exact: true }).fill('<script>window.formCodeExecuted = true;</script>\n  <b>Example</b>');
+  await page.getByLabel('Wrap long lines', { exact: true }).check();
   await page.locator('.forms-palette').getByRole('button', { name: 'Paragraph', exact: true }).click();
   await page.getByLabel('Heading (optional)', { exact: true }).fill('Before you start');
   await page.getByLabel('Paragraph text', { exact: true }).fill('Please read these instructions.\n\nYour answers help us improve.');
@@ -113,6 +117,10 @@ test('owner links and respondent URL questions publish and collect only URL answ
   const anonymous = await browser.newPage();
   try {
     await anonymous.goto(shareUrl);
+    await expect(anonymous.locator('.form-code-block code')).toHaveText('<script>window.formCodeExecuted = true;</script>\n  <b>Example</b>');
+    await expect(anonymous.locator('.form-code-block pre')).toHaveCSS('white-space', 'pre-wrap');
+    await expect(anonymous.locator('.form-code-block script, .form-code-block b, .form-code-block textarea')).toHaveCount(0);
+    expect(await anonymous.evaluate(() => 'formCodeExecuted' in window)).toBe(false);
     await expect(anonymous.getByRole('heading', { name: 'Before you start' })).toBeVisible();
     await expect(anonymous.locator('.form-paragraph-block p')).toHaveText('Please read these instructions.\n\nYour answers help us improve.');
     await expect(anonymous.locator('.form-paragraph-block p')).toHaveCSS('white-space', 'pre-wrap');
