@@ -7,6 +7,19 @@ namespace ChatApp.Tests;
 public sealed class FormRulesTests
 {
     [Fact]
+    public void MarkdownBlocksValidateContentAndExcludeAnswers()
+    {
+        var markdown = new FormNode { Id = "markdown", Kind = "markdown", Markdown = "## Instructions\n**Read carefully**" };
+        Assert.Empty(FormRules.ValidateDefinition(Definition(markdown, Question("q")), true));
+        Assert.False(FormRules.ValidateAnswers(Definition(markdown), new() { [markdown.Id] = ["forged"] }).Answers.ContainsKey(markdown.Id));
+        Assert.Empty(FormRules.ValidateDefinition(Definition(markdown with { Markdown = "" })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(markdown with { Markdown = " " }), true));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(markdown with { Markdown = new string('x', 20001) })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(markdown with { Required = true })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(markdown with { Children = [Question("child")] })));
+    }
+
+    [Fact]
     public void CodeBlocksAreDisplayOnlyAndValidateContent()
     {
         var code = new FormNode { Id = "code", Kind = "code", Code = "<script>alert('example')</script>", CodeLanguage = "html", CodeWrap = true };

@@ -28,6 +28,8 @@ public sealed record FormNode
 
     public string Code { get; init; } = "";
 
+    public string Markdown { get; init; } = "";
+
     public string CodeLanguage { get; init; } = "text";
 
     public bool CodeWrap { get; init; }

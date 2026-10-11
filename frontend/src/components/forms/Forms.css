@@ -229,3 +229,13 @@
 .form-code-block pre { margin: .3rem 0 0; padding: 1rem; overflow: auto; background: rgba(127, 127, 127, .1); border: 1px solid rgba(127, 127, 127, .3); border-radius: .5rem; tab-size: 4; white-space: pre; }
 .form-code-block pre.wrap-code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .form-code-block code, .forms-code-editor { font-family: ui-monospace, Consolas, monospace; font-size: .875rem; line-height: 1.5; }
+.form-markdown-block { min-width: 0; max-width: 100%; overflow-wrap: anywhere; line-height: 1.6; }
+.form-markdown-block > :first-child { margin-top: 0; }
+.form-markdown-block > :last-child { margin-bottom: 0; }
+.form-markdown-block pre { overflow: auto; padding: 1rem; background: rgba(127, 127, 127, .1); border-radius: .5rem; white-space: pre; }
+.form-markdown-block code { font-family: ui-monospace, Consolas, monospace; font-size: .875em; }
+.form-markdown-block blockquote { margin-inline: 0; padding-left: 1rem; border-left: 3px solid currentColor; }
+.form-markdown-block table { display: block; overflow-x: auto; border-collapse: collapse; }
+.form-markdown-block th, .form-markdown-block td { border: 1px solid rgba(127, 127, 127, .3); padding: .5rem; }
+.form-markdown-block img { max-width: 100%; height: auto; }
+.form-markdown-block input[type=checkbox] { width: auto; }

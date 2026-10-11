@@ -17,6 +17,7 @@ export type FormNode = {
   linkOpenNewTab?: boolean;
   paragraphAlignment?: 'left' | 'center' | 'right' | 'justify';
   code?: string;
+  markdown?: string;
   codeLanguage?: string;
   codeWrap?: boolean;
 };
@@ -41,6 +42,10 @@ export function createNode(kind: string): FormNode {
     description: '', required: false, options: ['Option 1', 'Option 2'], min: null, max: null,
     children: [], conditionMode: 'all', conditions: [],
   };
+  if (kind === 'markdown') {
+    node.label = '';
+    node.markdown = '';
+  }
   if (kind === 'code') {
     node.label = '';
     node.code = '';

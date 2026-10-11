@@ -97,6 +97,9 @@ test('owner links and respondent URL questions publish and collect only URL answ
   await page.getByRole('navigation', { name: 'Main sections' }).getByRole('button', { name: 'Forms', exact: true }).click();
   await page.getByRole('button', { name: 'New form', exact: true }).click();
   await page.getByLabel('Title', { exact: true }).fill('Links survey');
+  await page.locator('.forms-palette').getByRole('button', { name: 'Markdown', exact: true }).click();
+  await page.getByLabel('Markdown content', { exact: true }).fill('## Markdown instructions\n\n**Important**\n\n- First item\n\n| Name | Value |\n| --- | --- |\n| Example | 42 |\n\n```js\nconst answer = 42;\n```\n\n[Reference](https://example.com/reference)\n\n[Unsafe](javascript:alert%281%29)\n\n<script>window.markdownExecuted = true;</script>');
+  await expect(page.locator('.form-markdown-block strong')).toHaveText('Important');
   await page.locator('.forms-palette').getByRole('button', { name: 'Code', exact: true }).click();
   await page.getByLabel('Code language', { exact: true }).selectOption('html');
   await page.getByLabel('Code content', { exact: true }).fill('<script>window.formCodeExecuted = true;</script>\n  <b>Example</b>');
@@ -117,6 +120,14 @@ test('owner links and respondent URL questions publish and collect only URL answ
   const anonymous = await browser.newPage();
   try {
     await anonymous.goto(shareUrl);
+    const markdown = anonymous.locator('.form-markdown-block');
+    await expect(markdown.getByRole('heading', { name: 'Markdown instructions' })).toBeVisible();
+    await expect(markdown.getByRole('cell', { name: '42', exact: true })).toBeVisible();
+    await expect(markdown.locator('pre code')).toContainText('const answer = 42;');
+    await expect(markdown.getByRole('link', { name: 'Reference' })).toHaveAttribute('href', 'https://example.com/reference');
+    await expect(markdown.getByRole('link', { name: 'Unsafe' })).toHaveCount(0);
+    await expect(markdown.locator('script, textarea')).toHaveCount(0);
+    expect(await anonymous.evaluate(() => 'markdownExecuted' in window)).toBe(false);
     await expect(anonymous.locator('.form-code-block code')).toHaveText('<script>window.formCodeExecuted = true;</script>\n  <b>Example</b>');
     await expect(anonymous.locator('.form-code-block pre')).toHaveCSS('white-space', 'pre-wrap');
     await expect(anonymous.locator('.form-code-block script, .form-code-block b, .form-code-block textarea')).toHaveCount(0);
