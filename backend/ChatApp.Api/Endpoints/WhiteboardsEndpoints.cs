@@ -142,7 +142,7 @@ public static partial class WhiteboardsEndpoints
                 return Results.NotFound();
             }
             board.Revision++;
-            var old = System.Text.Json.JsonSerializer.Deserialize<BoardObject[]>(version.DocumentJson, WhiteboardRules.Json)!;
+            var old = WhiteboardRules.ReadDocument(version.DocumentJson);
             var restored = old.Select(x => x with { Version = board.Revision }).Concat(WhiteboardService.Objects(board).Where(x => old.All(y => y.Id != x.Id)).Select(x => x with { Deleted = true, Version = board.Revision })).ToArray();
             board.DocumentJson = System.Text.Json.JsonSerializer.Serialize(restored, WhiteboardRules.Json);
             if (System.Text.Encoding.UTF8.GetByteCount(board.DocumentJson) > 2000000)

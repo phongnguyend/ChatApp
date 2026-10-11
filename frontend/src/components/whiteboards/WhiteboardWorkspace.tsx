@@ -3,7 +3,8 @@ import { HubConnectionBuilder, HubConnectionState } from '@microsoft/signalr';
 import { ArrowLeft, MousePointer2, Hand, Pencil, Square, Circle, Minus, Type, StickyNote, Eraser, ImagePlus, Undo2, Redo2, Copy, ClipboardPaste, Trash2, Share2, History, Download } from 'lucide-react';
 import { API_URL, getAccessToken } from '../../services/auth';
 import { BoardError, boardsApi } from '../../services/whiteboardsApi';
-import { mergeUpdate, newObject, type Board, type BoardEdit, type BoardObject, type BoardUpdate, type Cursor, type Point } from './boardModel';
+import { mergeUpdate, newObject, orderedObjects, type Board, type BoardEdit, type BoardObject, type BoardUpdate, type Cursor, type Point } from './boardModel';
+import { BringToFront, SendToBack, ArrowUp, ArrowDown } from 'lucide-react';
 import { WhiteboardCanvas, type BoardTool } from './WhiteboardCanvas';
 
 const tools = [['select', 'Select', MousePointer2], ['pan', 'Pan', Hand], ['path', 'Pen', Pencil], ['rectangle', 'Rectangle', Square], ['ellipse', 'Ellipse', Circle], ['line', 'Line', Minus], ['text', 'Text', Type], ['sticky', 'Sticky note', StickyNote], ['eraser', 'Eraser', Eraser]] as const;
@@ -15,7 +16,7 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
   const [board, setBoard] = useState(initial);
   const current = useRef(board);
   const [tool, setTool] = useState<BoardTool>('select');
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
   const [color, setColor] = useState('#1f2937');
   const [fill, setFill] = useState('transparent');
   const [strokeWidth, setStrokeWidth] = useState(3);
@@ -32,9 +33,10 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
   const [versions, setVersions] = useState<Version[]>([]);
   const undo = useRef<BoardEdit[][]>([]);
   const redo = useRef<BoardEdit[][]>([]);
-  const clipboard = useRef<BoardObject | null>(null);
+  const clipboard = useRef<BoardObject[]>([]);
   const [copied, setCopied] = useState(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const textEditor = useRef<HTMLTextAreaElement | null>(null);
   const upload = useRef<HTMLInputElement | null>(null);
   const cursorSender = useRef<(point: Point) => void>(() => {});
   function update(value: Board) {
@@ -178,6 +180,8 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
     if (!current.current.canEdit || busyRef.current || pending) {
       return;
     }
+    const top = Math.max(0, ...orderedObjects(current.current.objects).map(object => object.z!));
+    objects = objects.map((object, index) => current.current.objects.some(existing => existing.id === object.id) ? object : { ...object, z: top + index + 1 });
     const before = objects.map(object => current.current.objects.find(x => x.id === object.id) ?? { ...object, deleted: true });
     void send({ operationId: crypto.randomUUID(), edits: edits ?? objects.map(object => ({ expectedVersion: object.version, object })), before, mode });
   }
@@ -187,7 +191,25 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
       commit(edits.map(x => x.object), mode, edits);
     }
   }
-  const item = board.objects.find(x => x.id === selected && !x.deleted);
+  const selectedItems = orderedObjects(board.objects).filter(object => selected.includes(object.id));
+  const item = selectedItems.length === 1 ? selectedItems[0] : undefined;
+  const layers = orderedObjects(board.objects);
+  const layerIndex = layers.findIndex(object => object.id === item?.id);
+  function changeLayer(action: 'front' | 'back' | 'forward' | 'backward') {
+    if (!item || layerIndex < 0) {
+      return;
+    }
+    const remaining = layers.filter(object => object.id !== item.id);
+    const position = action === 'front' ? remaining.length : action === 'back' ? 0 : action === 'forward' ? Math.min(layerIndex + 1, remaining.length) : Math.max(0, layerIndex - 1);
+    const below = remaining[position - 1]?.z;
+    const above = remaining[position]?.z;
+    const z = below == null ? (above ?? 0) - 1 : above == null ? below + 1 : below + (above - below) / 2;
+    if ((below != null && z <= below) || (above != null && z >= above) || Math.abs(z) > 1e12) {
+      setError('These layers are too close together. Use Bring to front or Send to back instead.');
+      return;
+    }
+    commit([{ ...item, z }]);
+  }
   const disabled = !board.canEdit || busy || uploading || !!pending;
   const displayedBoard = pending ? { ...board, objects: [...board.objects.filter(object => !pending.edits.some(edit => edit.object.id === object.id)), ...pending.edits.map(edit => edit.object)] } : board;
   async function addImage(file: File) {
@@ -208,7 +230,7 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
       const result = await boardsApi<{ imageId: string }>(`/${board.id}/images`, 'POST', data);
       const object = { ...newObject('image', { x: 60, y: 60 }, color, fill, strokeWidth), width, height: Math.min(10000, height), imageId: result.imageId };
       commit([object]);
-      setSelected(object.id);
+      setSelected([object.id]);
       setTool('select');
       window.dispatchEvent(new Event('documents-storage-changed'));
     } catch (reason) {
@@ -232,7 +254,7 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
   async function exportSvg() {
     try {
       const clone = svgRef.current!.cloneNode(true) as SVGSVGElement;
-      clone.querySelectorAll('[data-selection], [data-cursor]').forEach(node => node.remove());
+      clone.querySelectorAll('[data-selection], [data-cursor], [data-hit-target]').forEach(node => node.remove());
       clone.querySelector('g')?.removeAttribute('transform');
       const objects = board.objects.filter(x => !x.deleted);
       const x = Math.min(0, ...objects.map(o => o.x)) - 20;
@@ -287,14 +309,30 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
       <label>Stroke <input type="number" aria-label="Stroke width" min="1" max="40" value={strokeWidth} onChange={e => setStrokeWidth(Math.max(1, Math.min(40, Number(e.target.value))))} /></label>
       <button aria-label="Undo" title="Undo" disabled={disabled || !undo.current.length} onClick={() => travel('undo')}><Undo2 size={18} /></button>
       <button aria-label="Redo" title="Redo" disabled={disabled || !redo.current.length} onClick={() => travel('redo')}><Redo2 size={18} /></button>
-      <button aria-label="Copy object" title="Copy object" disabled={!item} onClick={() => { clipboard.current = item!; setCopied(true); }}><Copy size={18} /></button>
-      <button aria-label="Paste object" title="Paste object" disabled={disabled || !copied} onClick={() => { const source = clipboard.current!; const object = { ...source, id: crypto.randomUUID(), version: 0, x: source.x + 24, y: source.y + 24 }; commit([object]); setSelected(object.id); }}><ClipboardPaste size={18} /></button>
-      <button aria-label="Delete object" title="Delete object" disabled={disabled || !item} onClick={() => commit([{ ...item!, deleted: true }])}><Trash2 size={18} /></button>
+      <button aria-label="Copy object" title="Copy selected objects" disabled={!selectedItems.length} onClick={() => { clipboard.current = selectedItems; setCopied(true); }}><Copy size={18} /></button>
+      <button aria-label="Paste object" title="Paste copied objects" disabled={disabled || !copied} onClick={() => {
+        const objects = clipboard.current.map(source => ({ ...source, id: crypto.randomUUID(), version: 0, x: source.x + 24, y: source.y + 24 }));
+        commit(objects);
+        setSelected(objects.map(object => object.id));
+      }}><ClipboardPaste size={18} /></button>
+      <button aria-label="Delete object" title="Delete selected objects" disabled={disabled || !selectedItems.length} onClick={() => commit(selectedItems.map(object => ({ ...object, deleted: true })))}><Trash2 size={18} /></button>
       <button aria-label="Zoom out" onClick={() => setZoom(Math.max(.2, zoom / 1.2))}>−</button><button title="Reset zoom" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button><button aria-label="Zoom in" onClick={() => setZoom(Math.min(4, zoom * 1.2))}>+</button>
     </div>
     <div className="whiteboard-body">
-      <WhiteboardCanvas board={displayedBoard} tool={tool} color={color} fill={fill} strokeWidth={strokeWidth} selected={selected} onSelect={setSelected} onCommit={commit} disabled={disabled} onCursor={point => cursorSender.current(point)} cursors={cursors} onImage={file => void addImage(file)} zoom={zoom} setZoom={setZoom} svgRef={svgRef} />
-      {(panel || item) && <aside className="whiteboard-inspector">
+      <WhiteboardCanvas board={displayedBoard} tool={tool} onToolChange={setTool} onEditText={id => {
+        setSelected([id]);
+        setPanel(null);
+        requestAnimationFrame(() => textEditor.current?.focus());
+      }} color={color} fill={fill} strokeWidth={strokeWidth} selected={selected.filter(id => displayedBoard.objects.some(object => object.id === id && !object.deleted))} onSelect={ids => {
+        if (ids.length > 100) {
+          setError('Select up to 100 objects at a time.');
+          return;
+        }
+        setSelected(ids);
+        setPanel(null);
+      }} onCommit={commit} disabled={disabled} onCursor={point => cursorSender.current(point)} cursors={cursors} onImage={file => void addImage(file)} zoom={zoom} setZoom={setZoom} svgRef={svgRef} />
+      {(panel || selectedItems.length > 0) && <aside className="whiteboard-inspector">
+        {!panel && selectedItems.length > 1 && <><h3>{selectedItems.length} objects selected</h3><p>Drag any selected object to move them together. Copy and delete apply to the entire selection.</p><p>Ctrl-click (Command-click on Mac) toggles individual objects. Click empty space to clear the selection.</p></>}
         {panel && <button onClick={() => setPanel(null)}>Close panel</button>}
         {panel === 'share' && <><h3>Share board</h3><p>Only invited accounts can open this board.</p><button onClick={() => void navigator.clipboard.writeText(`${location.origin}${location.pathname}?whiteboard=${board.id}`).catch(report)}>Copy board link</button>
           <form onSubmit={event => {
@@ -315,12 +353,19 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
           const height = Number(data.get('height'));
           commit([{ ...item, x: Number(data.get('x')), y: Number(data.get('y')), width, height, color: String(data.get('color')), fill: data.get('transparent') ? 'transparent' : String(data.get('fill')), text: String(data.get('text') ?? item.text), fontSize: Number(data.get('fontSize') ?? item.fontSize), points: item.points.map(p => ({ x: p.x * width / item.width, y: p.y * height / item.height })) }]);
         }}><h3>Object settings</h3><fieldset disabled={disabled}>
-          {(['x', 'y', 'width', 'height'] as const).map(key => <label key={key}>{key}<input aria-label={`Object ${key}`} name={key} type="number" step="any" min={key === 'x' || key === 'y' ? -100000 : 1} max={key === 'x' || key === 'y' ? 100000 : 10000} defaultValue={item[key]} required /></label>)}
+          <div role="group" aria-label="Object layer">
+            <p>Layer order</p>
+            <button type="button" disabled={layerIndex === layers.length - 1} onClick={() => changeLayer('front')}><BringToFront size={16} /> Bring to front</button>
+            <button type="button" disabled={layerIndex === layers.length - 1} onClick={() => changeLayer('forward')}><ArrowUp size={16} /> Bring forward</button>
+            <button type="button" disabled={layerIndex <= 0} onClick={() => changeLayer('backward')}><ArrowDown size={16} /> Send backward</button>
+            <button type="button" disabled={layerIndex <= 0} onClick={() => changeLayer('back')}><SendToBack size={16} /> Send to back</button>
+          </div>
+          {([['x', 'Left'], ['y', 'Top'], ['width', 'Width'], ['height', 'Height']] as const).map(([key, label]) => <label key={key}>{label}<input aria-label={`Object ${label.toLowerCase()}`} name={key} type="number" step="any" min={key === 'x' || key === 'y' ? -100000 : 1} max={key === 'x' || key === 'y' ? 100000 : 10000} defaultValue={item[key]} required /></label>)}
           <label>Color<input name="color" type="color" defaultValue={item.color} /></label><label>Fill<input name="fill" type="color" defaultValue={item.fill === 'transparent' ? '#ffffff' : item.fill} /></label><label><input name="transparent" type="checkbox" defaultChecked={item.fill === 'transparent'} /> No fill</label>
-          {['text', 'sticky'].includes(item.kind) && <><label>Text<textarea name="text" defaultValue={item.text} maxLength={4000} /></label><label>Font size<input name="fontSize" type="number" min={8} max={200} defaultValue={item.fontSize} /></label></>}
+          {['text', 'sticky'].includes(item.kind) && <><label>Text<textarea ref={textEditor} name="text" defaultValue={item.text} maxLength={4000} /></label><label>Font size<input name="fontSize" type="number" min={8} max={200} defaultValue={item.fontSize} /></label></>}
           <button type="submit">Apply settings</button></fieldset></form>}
       </aside>}
     </div>
-    <footer>Drag to draw or move · Select an object to resize · Double-click text to edit · Scroll to pan · Drop or paste an image</footer>
+    <footer>Drag empty space to box-select · Ctrl/Command adds to selection · Drag objects to move · Double-click text to edit · Scroll to pan</footer>
   </section>;
 }

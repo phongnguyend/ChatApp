@@ -2,6 +2,12 @@
 
 ## Whiteboards
 
+Drag from empty canvas space in Select mode to draw a selection box. Objects intersecting the box are selected when you release the mouse. Hold Ctrl/Command while dragging to add them to the existing selection; dragging an already selected object moves the selected group instead.
+
+In Select mode, Ctrl-click (Command-click on Mac) adds or removes objects from a selection. Select up to 100 objects and drag, copy, or delete them together; undo/redo applies to the complete action. Click empty canvas space to clear the selection, or click an unselected object without Ctrl to select only that object. Position, size, and layer settings apply when a single object is selected.
+
+Select an object and use **Object settings → Layer order** to bring it forward, send it backward, bring it to the front, or send it to the back. Layer order is saved and shared with collaborators, included in SVG exports, and supports undo/redo.
+
 Open **Whiteboards** in the sidebar to create a persistent, editable canvas. Tools include freehand pen, rectangle, ellipse, line, text, sticky notes, and images. Select objects to move or resize them, or use Object settings for exact position, dimensions, colors, and text. Scroll to pan; use the zoom controls or Ctrl/Command-scroll to zoom. Copy/paste buttons duplicate the selected object, and undo/redo applies to your own edits in the current session. Export SVG includes the board's loaded images.
 
 Owners can rename/delete boards, invite existing accounts by username as viewers or editors, copy a board link, and restore any of the latest 50 saved revisions. Links require sign-in and an invitation. SignalR supplies live changes and collaborator cursors; reconnecting reloads the document. Each completed drawing or edit saves an object-level command. Simultaneous changes to different objects merge; stale changes to the same object are rejected rather than overwriting another person's work. Failed saves remain visible with retry/discard controls. This is online collaboration, without offline editing or CRDT merging; multiple API instances require a SignalR backplane.

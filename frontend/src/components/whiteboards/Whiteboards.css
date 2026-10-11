@@ -32,6 +32,10 @@
 .whiteboard-inspector input[type=checkbox], .whiteboard-inspector input[type=color] { width: auto; }
 .whiteboard-inspector fieldset { border: 0; padding: 0; margin: 0; }
 .whiteboard-inspector textarea { min-height: 100px; }
+.whiteboard-inspector [aria-label="Object layer"] { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-bottom: 14px; }
+.whiteboard-inspector [aria-label="Object layer"] p { grid-column: 1 / -1; }
+.whiteboard-inspector [aria-label="Object layer"] button { font-size: 12px; }
+.whiteboard-inspector [aria-label="Object layer"] svg { flex-shrink: 0; }
 .whiteboard-inspector p { margin: 12px 0 8px; }
 .whiteboard-error { padding: 10px 16px; background: #fff1f2; color: #9f1239; }
 .whiteboard-error button { margin-left: 10px; }

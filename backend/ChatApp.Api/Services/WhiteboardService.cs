@@ -40,7 +40,7 @@ public sealed class WhiteboardService(ChatAppDbContext db, IHubContext<Whiteboar
         }
     }
 
-    public static BoardObject[] Objects(Whiteboard board) => JsonSerializer.Deserialize<BoardObject[]>(board.DocumentJson, WhiteboardRules.Json)!;
+    public static BoardObject[] Objects(Whiteboard board) => WhiteboardRules.ReadDocument(board.DocumentJson);
 
     public async Task<object> Detail(Guid id, Guid userId, CancellationToken ct)
     {

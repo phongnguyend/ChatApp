@@ -5,6 +5,32 @@ namespace ChatApp.Tests;
 
 public sealed class WhiteboardRulesTests
 {
+    [Fact]
+    public void ReadsLegacyLayerOrderAndWritesOnlyZ()
+    {
+        var objects = WhiteboardRules.ReadDocument("""[{"zIndex":7},{"z":2,"zIndex":9},{}]""");
+        Assert.Equal(7, objects[0].Z);
+        Assert.Equal(2, objects[1].Z);
+        Assert.Equal(2, objects[2].Z);
+        var json = System.Text.Json.JsonSerializer.Serialize(objects, WhiteboardRules.Json);
+        Assert.Contains("\"z\":7", json);
+        Assert.DoesNotContain("zIndex", json);
+    }
+
+    [Fact]
+    public void LayerOrderIsPreservedForLegacyObjectsAndCanBeChangedIndependently()
+    {
+        var first = Shape() with { Version = 1 };
+        var second = Shape() with { Version = 1 };
+        var state = WhiteboardRules.Apply([first, second], Change(first with { Z = 2 }, 1), 2);
+        Assert.Equal(2, state.Single(x => x.Id == first.Id).Z);
+        Assert.Equal(1, state.Single(x => x.Id == second.Id).Z);
+        state = WhiteboardRules.Apply(state, Change(Shape(), 0), 3);
+        Assert.Equal(3, state.Last().Z);
+        Assert.Throws<ArgumentException>(() => WhiteboardRules.Apply(state, Change(first with { Z = double.NaN }, 2), 4));
+        Assert.Throws<ArgumentException>(() => WhiteboardRules.Apply(state, Change(first with { Z = 1e13 }, 2), 4));
+    }
+
     private static BoardObject Shape() => new() { Id = Guid.NewGuid() };
 
     private static BoardCommand Change(BoardObject item, int version) => new(Guid.NewGuid(), [new(version, item)]);

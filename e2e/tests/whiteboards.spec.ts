@@ -4,6 +4,254 @@ import { readFile } from 'node:fs/promises';
 import { apiUrl, createUser, headersFor, login } from './helpers.js';
 import { newObject, type Board, type BoardUpdate } from '../../frontend/src/components/whiteboards/boardModel.js';
 
+test('Dragging empty space box-selects objects with additive selection, pan, and zoom', async ({ page, request }) => {
+  const owner = await createUser(request, 'boardbox');
+  const headers = headersFor(owner.username);
+  const board = await (await request.post(`${apiUrl}/api/whiteboards/`, { headers })).json() as Board;
+  const base = `${apiUrl}/api/whiteboards/${board.id}`;
+  const objects = [50, 300, 550].map(x => newObject('rectangle', { x, y: 50 }, '#112233', '#ffffff', 3));
+  expect((await request.post(`${base}/commands`, { headers, data: { operationId: randomUUID(), edits: objects.map(object => ({ expectedVersion: 0, object })) } })).ok()).toBeTruthy();
+  await login(page, owner.username);
+  await page.goto(`/?whiteboard=${board.id}`);
+  const canvas = page.getByRole('application', { name: 'Whiteboard canvas' });
+  const selection = canvas.locator('[data-object-id] [data-selection]');
+  try {
+    await expect(canvas).toBeVisible();
+    const bounds = (await canvas.boundingBox())!;
+    async function drag(fromX: number, fromY: number, toX: number, toY: number) {
+      await page.mouse.move(bounds.x + fromX, bounds.y + fromY);
+      await page.mouse.down();
+      await page.mouse.move(bounds.x + toX, bounds.y + toY, { steps: 5 });
+    }
+    await drag(20, 20, 500, 200);
+    await expect(canvas.locator('[data-marquee]')).toBeVisible();
+    await expect(selection).toHaveCount(2);
+    await page.mouse.up();
+    await expect(canvas.locator('[data-marquee]')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: '2 objects selected' })).toBeVisible();
+    await page.keyboard.down('Control');
+    await drag(530, 20, 740, 180);
+    await page.mouse.up();
+    await page.keyboard.up('Control');
+    await expect(selection).toHaveCount(3);
+    await page.getByRole('button', { name: 'Zoom out', exact: true }).click();
+    await page.getByRole('button', { name: 'Pan', exact: true }).click();
+    await drag(20, 250, 60, 280);
+    await page.mouse.up();
+    await expect(selection).toHaveCount(3);
+    await page.getByRole('button', { name: 'Select', exact: true }).click();
+    const zoom = 1 / 1.2;
+    // Reverse-direction box selection uses board coordinates after zooming and panning.
+    await drag(500 * zoom + 40, 200 * zoom + 30, 20 * zoom + 40, 20 * zoom + 30);
+    await page.mouse.up();
+    await expect(selection).toHaveCount(2);
+    await expect(canvas.locator(`[data-object-id="${objects[2].id}"] [data-selection]`)).toHaveCount(0);
+    // A cancelled drag retains the previous selection.
+    await drag(20, 280, 100, 350);
+    await canvas.dispatchEvent('pointercancel', { pointerId: 1 });
+    await page.mouse.up();
+    await expect(canvas.locator('[data-marquee]')).toHaveCount(0);
+    await expect(selection).toHaveCount(2);
+    await drag(20, 280, 100, 350);
+    await page.mouse.up();
+    await expect(selection).toHaveCount(0);
+    const stored = await (await request.get(base, { headers })).json() as Board;
+    expect(stored.revision).toBe(1);
+    expect(stored.objects.map(object => object.x)).toEqual([50, 300, 550]);
+  } finally {
+    await request.delete(base, { headers });
+  }
+});
+
+test('Ctrl-click toggles multiple objects for moving, copying, deletion, and undo', async ({ page, request }) => {
+  const owner = await createUser(request, 'boardmultiple');
+  const headers = headersFor(owner.username);
+  const board = await (await request.post(`${apiUrl}/api/whiteboards/`, { headers })).json() as Board;
+  const base = `${apiUrl}/api/whiteboards/${board.id}`;
+  const objects = [50, 300, 550].map(x => newObject('rectangle', { x, y: 50 }, '#112233', '#ffffff', 3));
+  expect((await request.post(`${base}/commands`, { headers, data: { operationId: randomUUID(), edits: objects.map(object => ({ expectedVersion: 0, object })) } })).ok()).toBeTruthy();
+  await login(page, owner.username);
+  await page.goto(`/?whiteboard=${board.id}`);
+  const canvas = page.getByRole('application', { name: 'Whiteboard canvas' });
+  const first = canvas.locator(`[data-object-id="${objects[0].id}"]`);
+  const second = canvas.locator(`[data-object-id="${objects[1].id}"]`);
+  try {
+    await expect(canvas).toBeVisible();
+    await canvas.click({ position: { x: 80, y: 80 } });
+    await canvas.click({ position: { x: 330, y: 80 }, modifiers: ['Control'] });
+    await expect(canvas.locator('[data-selection]')).toHaveCount(2);
+    await canvas.click({ position: { x: 80, y: 80 }, modifiers: ['Control'] });
+    await expect(canvas.locator('[data-selection]')).toHaveCount(1);
+    await expect(second.locator('[data-selection]')).toHaveCount(1);
+    await canvas.click({ position: { x: 80, y: 80 }, modifiers: ['Control'] });
+    const bounds = (await canvas.boundingBox())!;
+    await page.mouse.move(bounds.x + 80, bounds.y + 80);
+    await page.mouse.down();
+    await page.mouse.move(bounds.x + 110, bounds.y + 100, { steps: 5 });
+    await expect(first).toHaveAttribute('transform', 'translate(80 70)');
+    await expect(second).toHaveAttribute('transform', 'translate(330 70)');
+    await page.mouse.up();
+    await expect(page.getByRole('heading', { name: '2 objects selected' })).toBeVisible();
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect(first).toHaveAttribute('transform', 'translate(50 50)');
+    await expect(second).toHaveAttribute('transform', 'translate(300 50)');
+    await page.getByRole('button', { name: 'Redo', exact: true }).click();
+    await expect(second).toHaveAttribute('transform', 'translate(330 70)');
+    await page.getByRole('button', { name: 'Copy object', exact: true }).click();
+    await page.getByRole('button', { name: 'Paste object', exact: true }).click();
+    await expect(canvas.locator('[data-object-id]')).toHaveCount(5);
+    await expect(canvas.locator('[data-selection]')).toHaveCount(2);
+    await page.getByRole('button', { name: 'Delete object', exact: true }).click();
+    await expect(canvas.locator('[data-object-id]')).toHaveCount(3);
+    await canvas.click({ position: { x: 580, y: 80 }, modifiers: ['Control'] });
+    await expect(canvas.locator('[data-selection]')).toHaveCount(1);
+    await expect(canvas.locator('[data-resize]')).toHaveCount(1);
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect(canvas.locator('[data-object-id]')).toHaveCount(5);
+    await canvas.click({ position: { x: 30, y: 300 } });
+    await expect(canvas.locator('[data-selection]')).toHaveCount(0);
+    await canvas.click({ position: { x: 580, y: 80 } });
+    await expect(canvas.locator('[data-selection]')).toHaveCount(1);
+  } finally {
+    await request.delete(base, { headers });
+  }
+});
+
+test('Handwriting can be selected and dragged anywhere inside its bounds at different zoom levels', async ({ page, request }) => {
+  const owner = await createUser(request, 'boardhandwriting');
+  const headers = headersFor(owner.username);
+  const board = await (await request.post(`${apiUrl}/api/whiteboards/`, { headers })).json() as Board;
+  const base = `${apiUrl}/api/whiteboards/${board.id}`;
+  const stroke = { ...newObject('path', { x: 50, y: 50 }, '#112233', 'transparent', 1), width: 200, height: 80, points: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 80 }, { x: 200, y: 80 }] };
+  const dot = { ...newObject('path', { x: 400, y: 90 }, '#112233', 'transparent', 1), width: 1, height: 1, points: [{ x: 0, y: 0 }] };
+  const saved = await request.post(`${base}/commands`, { headers, data: { operationId: randomUUID(), edits: [stroke, dot].map(object => ({ expectedVersion: 0, object })) } });
+  expect(saved.ok(), await saved.text()).toBeTruthy();
+  await login(page, owner.username);
+  await page.goto(`/?whiteboard=${board.id}`);
+  const canvas = page.getByRole('application', { name: 'Whiteboard canvas' });
+  const path = canvas.locator(`[data-object-id="${stroke.id}"]`);
+  try {
+    await expect(canvas).toBeVisible();
+    // Select and drag empty space well away from any painted stroke.
+    await canvas.click({ position: { x: 90, y: 90 } });
+    await expect(path.locator('[data-selection]')).toHaveCount(1);
+    const bounds = (await canvas.boundingBox())!;
+    await page.mouse.move(bounds.x + 90, bounds.y + 90);
+    await page.mouse.down();
+    await page.mouse.move(bounds.x + 120, bounds.y + 110, { steps: 5 });
+    await page.mouse.up();
+    await expect(path).toHaveAttribute('transform', 'translate(80 70)');
+    await expect(page.getByRole('button', { name: 'Apply settings' })).toBeEnabled();
+    // Empty space inside the bounds selects it; outside the bounds deselects it.
+    await canvas.click({ position: { x: 100, y: 110 } });
+    await expect(path.locator('[data-selection]')).toHaveCount(1);
+    await canvas.click({ position: { x: 300, y: 200 } });
+    await expect(canvas.locator('[data-selection]')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Zoom out', exact: true }).click();
+    await page.getByRole('button', { name: 'Zoom out', exact: true }).click();
+    const zoom = 1 / 1.2 / 1.2;
+    await canvas.click({ position: { x: 110 * zoom, y: 110 * zoom } });
+    await expect(path.locator('[data-selection]')).toHaveCount(1);
+    await canvas.click({ position: { x: 400 * zoom + 8, y: 90 * zoom } });
+    await expect(canvas.locator(`[data-object-id="${dot.id}"] [data-selection]`)).toHaveCount(1);
+    await expect(path.locator('polyline:not([data-hit-target])')).toHaveAttribute('stroke-width', '1');
+  } finally {
+    await request.delete(base, { headers });
+  }
+});
+
+test('Object layer controls reorder overlapping objects and support undo, redo, and persistence', async ({ page, request }) => {
+  const owner = await createUser(request, 'boardlayers');
+  const headers = headersFor(owner.username);
+  const board = await (await request.post(`${apiUrl}/api/whiteboards/`, { headers })).json() as Board;
+  const base = `${apiUrl}/api/whiteboards/${board.id}`;
+  const shapes = ['#ff0000', '#00ff00', '#0000ff'].map(fill => newObject('rectangle', { x: 50, y: 50 }, '#112233', fill, 3));
+  const saved = await request.post(`${base}/commands`, { headers, data: { operationId: randomUUID(), edits: shapes.map(object => ({ expectedVersion: 0, object })) } });
+  expect(saved.ok(), await saved.text()).toBeTruthy();
+  await login(page, owner.username);
+  await page.goto(`/?whiteboard=${board.id}`);
+  const canvas = page.getByRole('application', { name: 'Whiteboard canvas' });
+  const ids = shapes.map(object => object.id);
+  const order = () => canvas.locator('[data-object-id]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-object-id')));
+  try {
+    await expect(canvas).toBeVisible();
+    await canvas.click({ position: { x: 100, y: 80 } });
+    await page.getByRole('button', { name: 'Send backward', exact: true }).click();
+    await expect.poll(order).toEqual([ids[0], ids[2], ids[1]]);
+    await page.getByRole('button', { name: 'Bring forward', exact: true }).click();
+    await expect.poll(order).toEqual(ids);
+    await page.getByRole('button', { name: 'Send to back', exact: true }).click();
+    await expect.poll(order).toEqual([ids[2], ids[0], ids[1]]);
+    await page.getByRole('button', { name: 'Bring to front', exact: true }).click();
+    await expect.poll(order).toEqual(ids);
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect.poll(order).toEqual([ids[2], ids[0], ids[1]]);
+    await page.getByRole('button', { name: 'Redo', exact: true }).click();
+    await expect.poll(order).toEqual(ids);
+    await expect(page.locator('.whiteboard-workspace [role=status]')).toContainText('Saved');
+    await page.goto(`/?whiteboard=${board.id}`);
+    await expect.poll(order).toEqual(ids);
+    const stored = await (await request.get(base, { headers })).json() as Board;
+    expect(stored.objects.find(object => object.id === ids[2])!.z).toBeGreaterThan(stored.objects.find(object => object.id === ids[1])!.z!);
+  } finally {
+    await request.delete(base, { headers });
+  }
+});
+
+for (const tool of ['Sticky note', 'Text']) {
+  test(`${tool} is placed without a prompt and its text can be configured later`, async ({ page, request }) => {
+    const owner = await createUser(request, 'boardplacement');
+    const headers = headersFor(owner.username);
+    const board = await (await request.post(`${apiUrl}/api/whiteboards/`, { headers })).json() as Board;
+    await login(page, owner.username);
+    await page.goto(`/?whiteboard=${board.id}`);
+    const canvas = page.getByRole('application', { name: 'Whiteboard canvas' });
+    await expect(page.locator('.whiteboard-workspace [role=status]')).toContainText('Live');
+    let dialogs = 0;
+    page.on('dialog', async dialog => {
+      dialogs++;
+      await dialog.dismiss();
+    });
+    try {
+      await page.getByRole('button', { name: tool, exact: true }).click();
+      const bounds = (await canvas.boundingBox())!;
+      await page.mouse.move(bounds.x + 40, bounds.y + 40);
+      await page.mouse.down();
+      expect(dialogs).toBe(0);
+      await page.mouse.up();
+      await expect(canvas.locator('[data-object-id]')).toHaveCount(1);
+      await expect(page.getByRole('button', { name: 'Select', exact: true })).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.getByRole('button', { name: 'Undo', exact: true })).toBeEnabled();
+      await canvas.click({ position: { x: 400, y: 300 } });
+      await page.mouse.move(bounds.x + 60, bounds.y + 60);
+      await page.mouse.down();
+      await page.mouse.move(bounds.x + 100, bounds.y + 100, { steps: 5 });
+      await page.mouse.up();
+      await expect(canvas.locator('[data-object-id]')).toHaveAttribute('transform', 'translate(80 80)');
+      expect(dialogs).toBe(0);
+      await expect(page.getByRole('textbox', { name: 'Text', exact: true })).toHaveValue(tool);
+      await expect(page.getByRole('button', { name: 'Apply settings' })).toBeEnabled();
+      await canvas.locator('[data-object-id]').dblclick({ position: { x: 20, y: 20 } });
+      await expect(page.getByRole('textbox', { name: 'Text', exact: true })).toBeFocused();
+      await page.getByRole('textbox', { name: 'Text', exact: true }).fill('Configured later');
+      await page.getByRole('button', { name: 'Apply settings' }).click();
+      await expect(canvas.locator('text').first()).toHaveText('Configured later');
+      await expect(page.getByRole('button', { name: tool, exact: true })).toBeEnabled();
+      await page.getByRole('button', { name: tool, exact: true }).click();
+      await canvas.click({ position: { x: 400, y: 300 } });
+      await expect(page.getByRole('button', { name: 'Select', exact: true })).toHaveAttribute('aria-pressed', 'true');
+      await canvas.click({ position: { x: 450, y: 350 } });
+      expect(dialogs).toBe(0);
+      await expect(canvas.locator('[data-object-id]')).toHaveCount(2);
+      await expect(page.locator('.whiteboard-workspace [role=status]')).toContainText('Saved');
+      const stored = await (await request.get(`${apiUrl}/api/whiteboards/${board.id}`, { headers })).json() as Board;
+      expect(stored.objects.filter(object => !object.deleted).map(object => object.text)).toEqual(['Configured later', tool]);
+    } finally {
+      await request.delete(`${apiUrl}/api/whiteboards/${board.id}`, { headers });
+    }
+  });
+}
+
 test('Whiteboards enforce permissions, merge independent edits, reject stale edits, and restore history', async ({ request }) => {
   const owner = await createUser(request, 'boardowner');
   const editor = await createUser(request, 'boardeditor');
