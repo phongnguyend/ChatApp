@@ -6,6 +6,61 @@ namespace ChatApp.Tests;
 
 public sealed class FormRulesTests
 {
+    [Theory]
+    [InlineData("<script>alert(1)</script><p onclick='alert(1)'>Safe</p>")]
+    [InlineData("<svg onload='alert(1)'></svg><iframe srcdoc='<script>alert(1)</script>'></iframe><p>Safe</p>")]
+    [InlineData("<form><input autofocus onfocus='alert(1)'></form><p>Safe</p>")]
+    public void SanitizesNestedHtmlAndPreservesPlainCode(string source)
+    {
+        var definition = Definition(new FormNode { Id = "section", Kind = "section", Children = [new FormNode { Id = "html", Kind = "html", Html = source }] },
+            new FormNode { Id = "code", Kind = "code", Code = source });
+        var clean = FormHtmlSanitizer.Sanitize(definition);
+        Assert.Equal("<p>Safe</p>", clean.Nodes[0].Children[0].Html);
+        Assert.Equal(source, clean.Nodes[1].Code);
+        Assert.Equal(clean.Nodes[0].Children[0].Html, FormHtmlSanitizer.Sanitize(clean).Nodes[0].Children[0].Html);
+    }
+
+    [Theory]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("jav&#x61;script:alert(1)")]
+    [InlineData("data:text/html,test")]
+    [InlineData("//example.com/file")]
+    [InlineData("/api/documents")]
+    [InlineData("https://user:password@example.com")]
+    public void HtmlSanitizerRejectsUnsafeAndRelativeUrls(string url)
+    {
+        var clean = FormHtmlSanitizer.Sanitize(Definition(new FormNode { Id = "html", Kind = "html", Html = $"<a href='{url}'>Link</a><img src='{url}'>" })).Nodes[0].Html;
+        Assert.DoesNotContain("href=", clean);
+        Assert.DoesNotContain("src=", clean);
+    }
+
+    [Fact]
+    public void HtmlSanitizerKeepsAllowedFormattingAndRemovesDangerousStyles()
+    {
+        var clean = FormHtmlSanitizer.Sanitize(Definition(new FormNode { Id = "html", Kind = "html", Html = "<p style='color: red; text-align: center; position: fixed; background-image: url(https://example.com/track)'>Safe</p><a href='https://example.com'>Link</a><style>body{display:none}</style>" })).Nodes[0].Html;
+        Assert.Contains("color", clean);
+        Assert.Contains("text-align", clean);
+        Assert.Contains("https://example.com", clean);
+        Assert.DoesNotContain("position", clean);
+        Assert.DoesNotContain("background-image", clean);
+        Assert.DoesNotContain("<style", clean);
+    }
+
+    [Fact]
+    public void HtmlBlocksValidateContentAndExcludeAnswers()
+    {
+        var html = new FormNode { Id = "html", Kind = "html", Html = "<p>Instructions</p>" };
+        Assert.Empty(FormRules.ValidateDefinition(Definition(html, Question("q")), true));
+        Assert.False(FormRules.ValidateAnswers(Definition(html), new() { [html.Id] = ["forged"] }).Answers.ContainsKey(html.Id));
+        Assert.Empty(FormRules.ValidateDefinition(Definition(html with { Html = "" })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(html with { Html = " " }), true));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(html with { Html = new string('x', 20001) })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(html with { HtmlHeight = 99 })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(html with { HtmlHeight = 1201 })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(html with { Required = true })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(html with { Children = [Question("child")] })));
+    }
+
     [Fact]
     public void MarkdownBlocksValidateContentAndExcludeAnswers()
     {

@@ -50,7 +50,7 @@ public static class FormRules
                 {
                     errors[key] = "Block identifiers must be unique and nonempty.";
                 }
-                if (!QuestionKinds.Contains(node.Kind) && node.Kind is not ("section" or "columns" or "image" or "link" or "paragraph" or "code" or "markdown"))
+                if (!QuestionKinds.Contains(node.Kind) && node.Kind is not ("section" or "columns" or "image" or "link" or "paragraph" or "code" or "markdown" or "html"))
                 {
                     errors[key] = "Unknown block type.";
                 }
@@ -98,7 +98,22 @@ public static class FormRules
                 {
                     errors[key] = "Check the minimum and maximum; ratings use 1 to 2–10.";
                 }
-                if (node.Kind == "markdown")
+                if (node.Kind == "html")
+                {
+                    if (node.Required || node.Children is null || node.Children.Length != 0)
+                    {
+                        errors[key] = "HTML blocks are display-only and cannot be required or contain child blocks.";
+                    }
+                    if (node.Html is null || node.Html.Length > 20000 || publishing && string.IsNullOrWhiteSpace(node.Html))
+                    {
+                        errors[key] = "Provide HTML up to 20,000 characters; content cannot be empty when publishing.";
+                    }
+                    if (node.HtmlHeight is < 100 or > 1200)
+                    {
+                        errors[key] = "HTML display height must be between 100 and 1200 pixels.";
+                    }
+                }
+                else if (node.Kind == "markdown")
                 {
                     if (node.Required || node.Children is null || node.Children.Length != 0)
                     {

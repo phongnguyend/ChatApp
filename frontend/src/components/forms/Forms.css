@@ -239,3 +239,18 @@
 .form-markdown-block th, .form-markdown-block td { border: 1px solid rgba(127, 127, 127, .3); padding: .5rem; }
 .form-markdown-block img { max-width: 100%; height: auto; }
 .form-markdown-block input[type=checkbox] { width: auto; }
+.form-html-block { min-width: 0; max-width: 100%; }
+.form-html-block h3 { margin: 0 0 .5rem; }
+.form-html-block p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.form-html-block iframe { display: block; width: 100%; border: 1px solid rgba(127, 127, 127, .3); border-radius: .5rem; background: white; }
+.forms-html-modes, .forms-html-toolbar { display: flex; flex-wrap: wrap; gap: .25rem; margin-bottom: .5rem; }
+.forms-html-toolbar button, .forms-html-modes button { width: auto; padding: .4rem; }
+.forms-html-toolbar select { width: auto; max-width: 100%; }
+.forms-html-editor button[aria-pressed=true] { background: rgba(8,124,131,.15); border-color: #087c83; }
+.forms-html-editor .tiptap { min-height: 220px; max-height: 480px; overflow: auto; padding: .75rem; border: 1px solid rgba(127,127,127,.4); border-radius: .5rem; outline-offset: 2px; overflow-wrap: anywhere; }
+.forms-html-editor .tiptap p { margin: .4rem 0; }
+.forms-html-editor .tiptap img { max-width: 100%; height: auto; }
+.forms-html-editor .tiptap table { width: 100%; border-collapse: collapse; }
+.forms-html-editor .tiptap th, .forms-html-editor .tiptap td { border: 1px solid #999; min-width: 35px; padding: .3rem; }
+.forms-html-editor .tiptap pre { white-space: pre-wrap; background: rgba(127,127,127,.1); padding: .5rem; }
+.forms-html-editor .tiptap .selectedCell { background: rgba(8,124,131,.15); }

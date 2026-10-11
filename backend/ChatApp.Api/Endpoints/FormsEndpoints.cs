@@ -103,8 +103,9 @@ public static class FormsEndpoints
             {
                 return Results.BadRequest(new { error = "Check your form settings.", errors });
             }
-            form.Title = request.Definition.Title.Trim();
-            form.DraftJson = JsonSerializer.Serialize(request.Definition with { Title = form.Title }, Json);
+            var definition = FormHtmlSanitizer.Sanitize(request.Definition);
+            form.Title = definition.Title.Trim();
+            form.DraftJson = JsonSerializer.Serialize(definition with { Title = form.Title }, Json);
             Touch(form);
             await db.SaveChangesAsync(ct);
             return Results.Ok(Detail(form));
@@ -121,12 +122,14 @@ public static class FormsEndpoints
             {
                 return Conflict();
             }
-            var errors = FormRules.ValidateDefinition(ReadDefinition(form.DraftJson), true);
+            var definition = ReadDefinition(form.DraftJson);
+            var errors = FormRules.ValidateDefinition(definition, true);
             if (errors.Count > 0)
             {
                 return Results.BadRequest(new { error = "The form is not ready to publish.", errors });
             }
             form.PublishedVersion++;
+            form.DraftJson = JsonSerializer.Serialize(definition, Json);
             form.IsPublished = true;
             Touch(form);
             db.FormPublications.Add(new FormPublication { FormId = form.Id, Version = form.PublishedVersion, DefinitionJson = form.DraftJson });
@@ -491,7 +494,7 @@ public static class FormsEndpoints
         return db.Forms.SingleOrDefaultAsync(x => x.Id == id && x.OwnerId == ownerId, ct);
     }
 
-    private static FormDefinition ReadDefinition(string json) => JsonSerializer.Deserialize<FormDefinition>(json, Json)!;
+    private static FormDefinition ReadDefinition(string json) => FormHtmlSanitizer.Sanitize(JsonSerializer.Deserialize<FormDefinition>(json, Json)!);
 
     private static object Detail(UserForm form) => new { form.Id, form.Title, form.Revision, form.IsPublished, form.PublishedVersion, form.ShareToken, form.UpdatedAt, Definition = ReadDefinition(form.DraftJson) };
 

@@ -18,6 +18,8 @@ export type FormNode = {
   paragraphAlignment?: 'left' | 'center' | 'right' | 'justify';
   code?: string;
   markdown?: string;
+  html?: string;
+  htmlHeight?: number;
   codeLanguage?: string;
   codeWrap?: boolean;
 };
@@ -42,6 +44,11 @@ export function createNode(kind: string): FormNode {
     description: '', required: false, options: ['Option 1', 'Option 2'], min: null, max: null,
     children: [], conditionMode: 'all', conditions: [],
   };
+  if (kind === 'html') {
+    node.label = '';
+    node.html = '';
+    node.htmlHeight = 300;
+  }
   if (kind === 'markdown') {
     node.label = '';
     node.markdown = '';

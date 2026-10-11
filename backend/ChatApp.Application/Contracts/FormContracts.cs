@@ -30,6 +30,10 @@ public sealed record FormNode
 
     public string Markdown { get; init; } = "";
 
+    public string Html { get; init; } = "";
+
+    public int HtmlHeight { get; init; } = 300;
+
     public string CodeLanguage { get; init; } = "text";
 
     public bool CodeWrap { get; init; }

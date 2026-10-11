@@ -5,6 +5,92 @@ import { fileURLToPath } from 'node:url';
 import { adminEmail, adminPassword, apiUrl, createUser, headersFor, login, tokenFor } from './helpers.js';
 import { createNode, csvCell, definitionIssues, flatten, moveNode, visibleAnswers, type FormDefinition, type FormDetail, type ResponsePage } from '../../frontend/src/components/forms/formModel.js';
 
+test('Forms API sanitizes HTML submitted without the frontend', async ({ request }) => {
+  const user = await createUser(request, 'htmlapi');
+  const headers = headersFor(user.username);
+  let form = await (await request.post(`${apiUrl}/api/forms/`, { headers })).json() as FormDetail;
+  const base = `${apiUrl}/api/forms/${form.id}`;
+  const definition = { ...form.definition, nodes: [{ ...createNode('section'), children: [{ ...createNode('html'), html: '<p onclick="alert(1)" style="color: red; position: fixed">Safe</p><script>alert(1)</script><a href="javascript:alert(1)">Bad</a><iframe src="https://example.com"></iframe>' }] }, createNode('text')] };
+  const saved = await request.put(base, { headers, data: { revision: form.revision, definition } });
+  expect(saved.ok(), await saved.text()).toBeTruthy();
+  form = await saved.json();
+  const clean = form.definition.nodes[0].children[0].html!;
+  expect(clean).toContain('Safe');
+  expect(clean).toContain('color');
+  expect(clean).not.toMatch(/onclick|script|iframe|position|javascript/i);
+  const fetched = await (await request.get(base, { headers })).json() as FormDetail;
+  expect(fetched.definition.nodes[0].children[0].html).toBe(clean);
+  const duplicate = await (await request.post(`${base}/duplicate`, { headers })).json() as FormDetail;
+  expect(duplicate.definition.nodes[0].children[0].html).toBe(clean);
+  const published = await request.post(`${base}/publish`, { headers, data: { revision: form.revision } });
+  expect(published.ok(), await published.text()).toBeTruthy();
+  form = await published.json();
+  const publicForm = await (await request.get(`${apiUrl}/api/public/forms/${form.shareToken}`)).json();
+  expect(publicForm.definition.nodes[0].children[0].html).toBe(clean);
+  expect((await request.delete(`${base}?revision=${form.revision}`, { headers })).status()).toBe(204);
+  expect((await request.delete(`${apiUrl}/api/forms/${duplicate.id}?revision=${duplicate.revision}`, { headers })).status()).toBe(204);
+});
+
+test('HTML content is sanitized, isolated, and published as read-only content', async ({ page, browser, request }) => {
+  const user = await createUser(request, 'formhtml');
+  await login(page, user.username);
+  await page.getByRole('navigation', { name: 'Main sections' }).getByRole('button', { name: 'Forms', exact: true }).click();
+  await page.getByRole('button', { name: 'New form', exact: true }).click();
+  await page.getByLabel('Title', { exact: true }).fill('HTML survey');
+  await page.locator('.forms-palette').getByRole('button', { name: 'HTML', exact: true }).click();
+  await page.getByLabel('Heading (optional)', { exact: true }).fill('Instructions');
+  await page.getByLabel('Display height (px)', { exact: true }).fill('420');
+  const visual = page.getByRole('textbox', { name: 'HTML visual editor', exact: true });
+  await visual.fill('Visually formatted instructions');
+  await visual.press('ControlOrMeta+a');
+  await page.getByRole('button', { name: 'Bold', exact: true }).click();
+  await page.getByRole('button', { name: 'Align center', exact: true }).click();
+  await expect(page.frameLocator('.form-html-block iframe').locator('strong')).toHaveText('Visually formatted instructions');
+  await expect(page.frameLocator('.form-html-block iframe').locator('p')).toHaveCSS('text-align', 'center');
+  await page.getByRole('button', { name: 'HTML source', exact: true }).click();
+  const visualHtml = await page.getByLabel('HTML source', { exact: true }).inputValue();
+  await page.getByRole('button', { name: 'Visual editor', exact: true }).click();
+  await expect(visual).toContainText('Visually formatted instructions');
+  await page.getByRole('button', { name: 'HTML source', exact: true }).click();
+  await page.getByLabel('HTML source', { exact: true }).fill('<h2 style="color: rgb(10, 20, 30); position: fixed" onclick="parent.htmlExecuted=true">Welcome</h2><table><tr><td>Example</td></tr></table><a href="https://example.com" target="_top">Reference</a><a href="javascript:alert(1)">Unsafe</a><script>parent.htmlExecuted=true</script><style>body{display:none}</style><form><input name="secret"><button>Send</button></form><iframe src="https://example.com"></iframe><img src="javascript:alert(1)" onerror="parent.htmlExecuted=true">');
+  const htmlSource = page.getByLabel('HTML source', { exact: true });
+  await htmlSource.fill((await htmlSource.inputValue()) + visualHtml);
+  await expect(page.frameLocator('.form-html-block iframe').getByRole('heading', { name: 'Welcome' })).toBeVisible();
+  await page.locator('.forms-palette').getByRole('button', { name: 'Short answer', exact: true }).click();
+  await page.getByRole('button', { name: 'Publish form', exact: true }).click();
+  const shareUrl = await page.getByLabel('Response link').inputValue();
+  const respondent = await browser.newPage();
+  try {
+    await respondent.goto(shareUrl);
+    const frameElement = respondent.locator('.form-html-block iframe');
+    await expect(frameElement).toHaveCSS('height', '420px');
+    await expect(frameElement).toHaveAttribute('sandbox', 'allow-popups allow-popups-to-escape-sandbox');
+    const frame = respondent.frameLocator('.form-html-block iframe');
+    await expect(frame.locator('strong')).toHaveText('Visually formatted instructions');
+    await expect(frame.getByRole('heading', { name: 'Welcome' })).toHaveCSS('color', 'rgb(10, 20, 30)');
+    await expect(frame.getByRole('heading', { name: 'Welcome' })).toHaveCSS('position', 'static');
+    await expect(frame.getByRole('cell', { name: 'Example' })).toBeVisible();
+    await expect(frame.getByRole('link', { name: 'Reference' })).toHaveAttribute('target', '_blank');
+    await expect(frame.getByRole('link', { name: 'Reference' })).toHaveAttribute('rel', 'noopener noreferrer');
+    await expect(frame.getByRole('link', { name: 'Unsafe' })).toHaveCount(0);
+    await expect(frame.locator('script, form, input, button, iframe, [onclick], [onerror]')).toHaveCount(0);
+    await expect(frame.locator('body style')).toHaveCount(0);
+    await expect(frame.locator('img[src]')).toHaveCount(0);
+    expect(await respondent.evaluate(() => 'htmlExecuted' in window)).toBe(false);
+    await respondent.getByRole('textbox', { name: 'Short answer', exact: true }).fill('Answer');
+    await respondent.getByRole('button', { name: 'Submit response' }).click();
+    await expect(respondent.getByRole('heading', { name: 'Response submitted' })).toBeVisible();
+  } finally {
+    await respondent.close();
+  }
+  const headers = headersFor(user.username);
+  const forms = await (await request.get(`${apiUrl}/api/forms/`, { headers })).json() as FormDetail[];
+  const form = forms.find(item => item.title === 'HTML survey')!;
+  const responses = await (await request.get(`${apiUrl}/api/forms/${form.id}/responses`, { headers })).json() as ResponsePage;
+  expect(Object.values(responses.items[0].answers)).toEqual([['Answer']]);
+  expect((await request.delete(`${apiUrl}/api/forms/${form.id}?revision=${form.revision}`, { headers })).status()).toBe(204);
+});
+
 test('orphan attachments charge their creator and can be cleaned manually', async ({ page, request }) => {
   const owner = await createUser(request, 'orphanowner');
   const uploader = await createUser(request, 'orphanuploader');
