@@ -10,6 +10,14 @@ public sealed class ChatAppDbContext(DbContextOptions<ChatAppDbContext> options)
 {
     public DbSet<UserForm> Forms => Set<UserForm>();
 
+    public DbSet<Whiteboard> Whiteboards => Set<Whiteboard>();
+
+    public DbSet<WhiteboardMember> WhiteboardMembers => Set<WhiteboardMember>();
+
+    public DbSet<WhiteboardVersion> WhiteboardVersions => Set<WhiteboardVersion>();
+
+    public DbSet<WhiteboardImage> WhiteboardImages => Set<WhiteboardImage>();
+
     public DbSet<FormPublication> FormPublications => Set<FormPublication>();
 
     public DbSet<FormResponse> FormResponses => Set<FormResponse>();
@@ -62,6 +70,35 @@ public sealed class ChatAppDbContext(DbContextOptions<ChatAppDbContext> options)
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<Whiteboard>(entity =>
+        {
+            entity.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()").ValueGeneratedOnAdd();
+            entity.Property(x => x.Title).HasMaxLength(200);
+            entity.Property(x => x.Revision).IsConcurrencyToken();
+            entity.HasIndex(x => new { x.CreatedById, x.UpdatedAt });
+            entity.HasOne<ChatUser>().WithMany().HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<WhiteboardMember>(entity =>
+        {
+            entity.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()").ValueGeneratedOnAdd();
+            entity.HasIndex(x => new { x.WhiteboardId, x.UserId }).IsUnique();
+            entity.HasOne<Whiteboard>().WithMany().HasForeignKey(x => x.WhiteboardId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<ChatUser>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.NoAction);
+        });
+        modelBuilder.Entity<WhiteboardVersion>(entity =>
+        {
+            entity.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()").ValueGeneratedOnAdd();
+            entity.HasIndex(x => new { x.WhiteboardId, x.OperationId }).IsUnique();
+            entity.HasIndex(x => new { x.WhiteboardId, x.Revision }).IsUnique();
+            entity.HasOne<Whiteboard>().WithMany().HasForeignKey(x => x.WhiteboardId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<WhiteboardImage>(entity =>
+        {
+            entity.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()").ValueGeneratedOnAdd();
+            entity.HasOne<Whiteboard>().WithMany().HasForeignKey(x => x.WhiteboardId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<StoredDocument>().WithMany().HasForeignKey(x => x.DocumentId).OnDelete(DeleteBehavior.Cascade);
+        });
 
         // Staging records retain ownership after form deletion for manual storage cleanup.
         modelBuilder.Entity<FormAttachmentUpload>(entity =>

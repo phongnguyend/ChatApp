@@ -1,0 +1,326 @@
+import { useEffect, useRef, useState } from 'react';
+import { HubConnectionBuilder, HubConnectionState } from '@microsoft/signalr';
+import { ArrowLeft, MousePointer2, Hand, Pencil, Square, Circle, Minus, Type, StickyNote, Eraser, ImagePlus, Undo2, Redo2, Copy, ClipboardPaste, Trash2, Share2, History, Download } from 'lucide-react';
+import { API_URL, getAccessToken } from '../../services/auth';
+import { BoardError, boardsApi } from '../../services/whiteboardsApi';
+import { mergeUpdate, newObject, type Board, type BoardEdit, type BoardObject, type BoardUpdate, type Cursor, type Point } from './boardModel';
+import { WhiteboardCanvas, type BoardTool } from './WhiteboardCanvas';
+
+const tools = [['select', 'Select', MousePointer2], ['pan', 'Pan', Hand], ['path', 'Pen', Pencil], ['rectangle', 'Rectangle', Square], ['ellipse', 'Ellipse', Circle], ['line', 'Line', Minus], ['text', 'Text', Type], ['sticky', 'Sticky note', StickyNote], ['eraser', 'Eraser', Eraser]] as const;
+type Pending = { operationId: string; edits: BoardEdit[]; mode: 'edit' | 'undo' | 'redo'; before: BoardObject[] };
+type Member = { userId: string; username: string; canEdit: boolean };
+type Version = { revision: number; createdAt: string };
+
+export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBack: () => void }) {
+  const [board, setBoard] = useState(initial);
+  const current = useRef(board);
+  const [tool, setTool] = useState<BoardTool>('select');
+  const [selected, setSelected] = useState<string | null>(null);
+  const [color, setColor] = useState('#1f2937');
+  const [fill, setFill] = useState('transparent');
+  const [strokeWidth, setStrokeWidth] = useState(3);
+  const [zoom, setZoom] = useState(1);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const busyRef = useRef(false);
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [online, setOnline] = useState(false);
+  const [cursors, setCursors] = useState<Cursor[]>([]);
+  const [panel, setPanel] = useState<'share' | 'history' | null>(null);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [versions, setVersions] = useState<Version[]>([]);
+  const undo = useRef<BoardEdit[][]>([]);
+  const redo = useRef<BoardEdit[][]>([]);
+  const clipboard = useRef<BoardObject | null>(null);
+  const [copied, setCopied] = useState(false);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const upload = useRef<HTMLInputElement | null>(null);
+  const cursorSender = useRef<(point: Point) => void>(() => {});
+  function update(value: Board) {
+    if (value.revision < current.current.revision) {
+      return;
+    }
+    current.current = value;
+    setBoard(value);
+  }
+  async function reload() {
+    const fresh = await boardsApi<Board>(`/${initial.id}`);
+    update(fresh);
+    return fresh;
+  }
+  function report(reason: unknown) {
+    setError(reason instanceof Error ? reason.message : 'Unable to update the whiteboard.');
+  }
+  useEffect(() => {
+    if (!pending && !uploading) {
+      return;
+    }
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [pending, uploading]);
+  useEffect(() => {
+    let stopped = false;
+    const connection = new HubConnectionBuilder().withUrl(`${API_URL}/hubs/whiteboards`, { accessTokenFactory: () => getAccessToken() ?? '' }).withAutomaticReconnect().build();
+    async function sync() {
+      await connection.invoke('JoinBoard', initial.id);
+      const fresh = await boardsApi<Board>(`/${initial.id}`);
+      if (!stopped) {
+        update(fresh);
+        setOnline(true);
+      }
+    }
+    connection.on('WhiteboardChanged', (change: BoardUpdate) => {
+      if (change.boardId !== initial.id || stopped) {
+        return;
+      }
+      if (change.revision > current.current.revision + 1 && !change.full) {
+        void sync().catch(report);
+      } else {
+        update(mergeUpdate(current.current, change));
+      }
+    });
+    connection.on('WhiteboardAccessChanged', (id: string) => {
+      if (id === initial.id) {
+        void sync().catch(reason => {
+          report(reason);
+          update({ ...current.current, objects: [], canEdit: false, isOwner: false });
+          setOnline(false);
+        });
+      }
+    });
+    connection.on('WhiteboardCursor', (cursor: Cursor) => {
+      if (cursor.boardId === initial.id && cursor.connectionId !== connection.connectionId) {
+        setCursors(items => [...items.filter(x => x.connectionId !== cursor.connectionId), { ...cursor, seen: Date.now() }]);
+      }
+    });
+    connection.on('WhiteboardCursorLeft', (id: string) => setCursors(items => items.filter(x => x.connectionId !== id)));
+    connection.onreconnecting(() => setOnline(false));
+    connection.onreconnected(() => { void sync().catch(report); });
+    connection.onclose(() => setOnline(false));
+    let lastCursor = 0;
+    cursorSender.current = point => {
+      if (connection.state === HubConnectionState.Connected && Date.now() - lastCursor > 80) {
+        lastCursor = Date.now();
+        void connection.invoke('Cursor', initial.id, point.x, point.y).catch(() => {});
+      }
+    };
+    const timer = window.setInterval(() => {
+      setCursors(items => items.filter(x => Date.now() - x.seen < 10000));
+      if (connection.state === HubConnectionState.Disconnected) {
+        void connection.start().then(sync).catch(() => setOnline(false));
+      }
+    }, 5000);
+    void connection.start().then(sync).catch(reason => {
+      if (!stopped) {
+        report(reason);
+      }
+    });
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      cursorSender.current = () => {};
+      void connection.stop();
+    };
+  }, [initial.id]);
+
+  async function send(command: Pending) {
+    if (busyRef.current) {
+      return;
+    }
+    busyRef.current = true;
+    setBusy(true);
+    setError('');
+    setPending(command);
+    try {
+      const result = await boardsApi<BoardUpdate>(`/${board.id}/commands`, 'POST', { operationId: command.operationId, edits: command.edits });
+      update(mergeUpdate(current.current, result));
+      const inverse = command.before.map(object => ({ expectedVersion: result.objects.find(x => x.id === object.id)!.version, object }));
+      if (command.mode === 'undo') {
+        undo.current.pop();
+        redo.current.push(inverse);
+      } else if (command.mode === 'redo') {
+        redo.current.pop();
+        undo.current.push(inverse);
+      } else {
+        undo.current.push(inverse);
+        redo.current = [];
+      }
+      if (command.mode !== 'edit') {
+        const stack = command.mode === 'undo' ? undo.current : redo.current;
+        for (const changed of result.objects) {
+          const next = [...stack].reverse().flatMap(entry => entry.filter(edit => edit.object.id === changed.id))[0];
+          if (next) {
+            next.expectedVersion = changed.version;
+          }
+        }
+      }
+      if (result.full) {
+        // A retried operation may already have been followed by another user's changes.
+        undo.current = [];
+        redo.current = [];
+      }
+      undo.current = undo.current.slice(-100);
+      setPending(null);
+    } catch (reason) {
+      report(reason);
+      if (reason instanceof BoardError && reason.status < 500) {
+        setPending(null);
+        await reload().catch(report);
+      }
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }
+  function commit(objects: BoardObject[], mode: Pending['mode'] = 'edit', edits?: BoardEdit[]) {
+    if (!current.current.canEdit || busyRef.current || pending) {
+      return;
+    }
+    const before = objects.map(object => current.current.objects.find(x => x.id === object.id) ?? { ...object, deleted: true });
+    void send({ operationId: crypto.randomUUID(), edits: edits ?? objects.map(object => ({ expectedVersion: object.version, object })), before, mode });
+  }
+  function travel(mode: 'undo' | 'redo') {
+    const edits = (mode === 'undo' ? undo : redo).current.at(-1);
+    if (edits) {
+      commit(edits.map(x => x.object), mode, edits);
+    }
+  }
+  const item = board.objects.find(x => x.id === selected && !x.deleted);
+  const disabled = !board.canEdit || busy || uploading || !!pending;
+  const displayedBoard = pending ? { ...board, objects: [...board.objects.filter(object => !pending.edits.some(edit => edit.object.id === object.id)), ...pending.edits.map(edit => edit.object)] } : board;
+  async function addImage(file: File) {
+    if (disabled) {
+      return;
+    }
+    setUploading(true);
+    try {
+      if (file.size > 5 * 1024 * 1024 || !['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+        throw new Error('Choose a PNG, JPEG, or WebP image up to 5 MB.');
+      }
+      const bitmap = await createImageBitmap(file);
+      const width = Math.min(500, bitmap.width);
+      const height = Math.max(1, width * bitmap.height / bitmap.width);
+      bitmap.close();
+      const data = new FormData();
+      data.append('file', file);
+      const result = await boardsApi<{ imageId: string }>(`/${board.id}/images`, 'POST', data);
+      const object = { ...newObject('image', { x: 60, y: 60 }, color, fill, strokeWidth), width, height: Math.min(10000, height), imageId: result.imageId };
+      commit([object]);
+      setSelected(object.id);
+      setTool('select');
+      window.dispatchEvent(new Event('documents-storage-changed'));
+    } catch (reason) {
+      report(reason);
+    } finally {
+      setUploading(false);
+    }
+  }
+  async function openPanel(value: 'share' | 'history') {
+    try {
+      if (value === 'share') {
+        setMembers(await boardsApi<Member[]>(`/${board.id}/members`));
+      } else {
+        setVersions(await boardsApi<Version[]>(`/${board.id}/versions`));
+      }
+      setPanel(panel === value ? null : value);
+    } catch (reason) {
+      report(reason);
+    }
+  }
+  async function exportSvg() {
+    try {
+      const clone = svgRef.current!.cloneNode(true) as SVGSVGElement;
+      clone.querySelectorAll('[data-selection], [data-cursor]').forEach(node => node.remove());
+      clone.querySelector('g')?.removeAttribute('transform');
+      const objects = board.objects.filter(x => !x.deleted);
+      const x = Math.min(0, ...objects.map(o => o.x)) - 20;
+      const y = Math.min(0, ...objects.map(o => o.y)) - 20;
+      const width = Math.max(800, ...objects.map(o => o.x + o.width)) - x + 20;
+      const height = Math.max(600, ...objects.map(o => o.y + o.height)) - y + 20;
+      clone.setAttribute('viewBox', `${x} ${y} ${width} ${height}`);
+      clone.setAttribute('width', String(width));
+      clone.setAttribute('height', String(height));
+      for (const image of clone.querySelectorAll('image')) {
+        const blob = await (await fetch(image.getAttribute('href')!)).blob();
+        const data = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result));
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        image.setAttribute('href', data);
+      }
+      const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${board.title.replace(/[^\w -]/g, '_')}.svg`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (reason) {
+      report(reason);
+    }
+  }
+  return <section className="whiteboard-workspace">
+    <header><button onClick={onBack} disabled={!!pending || busy || uploading}><ArrowLeft size={18} /> Boards</button><h2>{board.title}</h2><span role="status">{uploading ? 'Uploading…' : busy ? 'Saving…' : pending ? 'Not saved' : `Saved · ${online ? 'Live' : 'Reconnecting…'}`}{!board.canEdit && ' · View only'}</span>
+      {board.isOwner && <button onClick={() => {
+        const title = window.prompt('Board title', board.title);
+        if (title?.trim()) {
+          void boardsApi(`/${board.id}`, 'PUT', { title }).then(reload).catch(report);
+        }
+      }}>Rename</button>}
+      <button onClick={() => void exportSvg()}><Download size={16} /> Export SVG</button>
+      <button onClick={() => void openPanel('history')}><History size={16} /> History</button>
+      {board.isOwner && <button onClick={() => void openPanel('share')}><Share2 size={16} /> Share</button>}
+    </header>
+    {error && <div className="whiteboard-error" role="alert">{error}{pending && <><button disabled={busy} onClick={() => void send(pending)}>Retry save</button><button disabled={busy} onClick={() => { setPending(null); void reload().catch(report); }}>Discard pending change</button></>}</div>}
+    <div className="whiteboard-toolbar" role="toolbar" aria-label="Whiteboard tools">
+      {tools.map(([value, label, Icon]) => <button key={value} title={label} aria-label={label} aria-pressed={tool === value} disabled={disabled && value !== 'select' && value !== 'pan'} onClick={() => setTool(value)}><Icon size={19} /></button>)}
+      <button title="Upload image" aria-label="Upload image" disabled={disabled} onClick={() => upload.current?.click()}><ImagePlus size={19} /></button>
+      <input ref={upload} type="file" hidden accept="image/png,image/jpeg,image/webp" onChange={event => { const file = event.target.files?.[0]; if (file) {
+        void addImage(file);
+      } event.target.value = ''; }} />
+      <label>Color <input type="color" aria-label="Drawing color" value={color} onChange={e => setColor(e.target.value)} /></label>
+      <label>Fill <input type="color" aria-label="Fill color" value={fill === 'transparent' ? '#ffffff' : fill} onChange={e => setFill(e.target.value)} /></label>
+      <label><input type="checkbox" checked={fill === 'transparent'} onChange={e => setFill(e.target.checked ? 'transparent' : '#ffffff')} /> No fill</label>
+      <label>Stroke <input type="number" aria-label="Stroke width" min="1" max="40" value={strokeWidth} onChange={e => setStrokeWidth(Math.max(1, Math.min(40, Number(e.target.value))))} /></label>
+      <button aria-label="Undo" title="Undo" disabled={disabled || !undo.current.length} onClick={() => travel('undo')}><Undo2 size={18} /></button>
+      <button aria-label="Redo" title="Redo" disabled={disabled || !redo.current.length} onClick={() => travel('redo')}><Redo2 size={18} /></button>
+      <button aria-label="Copy object" title="Copy object" disabled={!item} onClick={() => { clipboard.current = item!; setCopied(true); }}><Copy size={18} /></button>
+      <button aria-label="Paste object" title="Paste object" disabled={disabled || !copied} onClick={() => { const source = clipboard.current!; const object = { ...source, id: crypto.randomUUID(), version: 0, x: source.x + 24, y: source.y + 24 }; commit([object]); setSelected(object.id); }}><ClipboardPaste size={18} /></button>
+      <button aria-label="Delete object" title="Delete object" disabled={disabled || !item} onClick={() => commit([{ ...item!, deleted: true }])}><Trash2 size={18} /></button>
+      <button aria-label="Zoom out" onClick={() => setZoom(Math.max(.2, zoom / 1.2))}>−</button><button title="Reset zoom" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button><button aria-label="Zoom in" onClick={() => setZoom(Math.min(4, zoom * 1.2))}>+</button>
+    </div>
+    <div className="whiteboard-body">
+      <WhiteboardCanvas board={displayedBoard} tool={tool} color={color} fill={fill} strokeWidth={strokeWidth} selected={selected} onSelect={setSelected} onCommit={commit} disabled={disabled} onCursor={point => cursorSender.current(point)} cursors={cursors} onImage={file => void addImage(file)} zoom={zoom} setZoom={setZoom} svgRef={svgRef} />
+      {(panel || item) && <aside className="whiteboard-inspector">
+        {panel && <button onClick={() => setPanel(null)}>Close panel</button>}
+        {panel === 'share' && <><h3>Share board</h3><p>Only invited accounts can open this board.</p><button onClick={() => void navigator.clipboard.writeText(`${location.origin}${location.pathname}?whiteboard=${board.id}`).catch(report)}>Copy board link</button>
+          <form onSubmit={event => {
+            event.preventDefault();
+            const data = new FormData(event.currentTarget);
+            void boardsApi(`/${board.id}/members`, 'POST', { username: data.get('username'), canEdit: data.get('role') === 'editor' }).then(async () => setMembers(await boardsApi<Member[]>(`/${board.id}/members`))).catch(report);
+          }}><label>Username<input name="username" required /></label><label>Role<select name="role"><option value="editor">Editor</option><option value="viewer">Viewer</option></select></label><button type="submit">Grant access</button></form>
+          {members.map(member => <div key={member.userId}><p>{member.username} · {member.canEdit ? 'Editor' : 'Viewer'}</p><button onClick={() => void boardsApi(`/${board.id}/members/${member.userId}`, 'DELETE').then(() => setMembers(items => items.filter(x => x.userId !== member.userId))).catch(report)}>Remove access</button></div>)}</>}
+        {panel === 'history' && <><h3>Version history</h3><p>Latest 50 saved changes.</p>{versions.map(version => <div key={version.revision}><p>Revision {version.revision} · {new Date(version.createdAt).toLocaleString()}</p>{board.isOwner && <button disabled={disabled || version.revision === board.revision} onClick={() => {
+          if (window.confirm('Restore this version for everyone?')) {
+            void boardsApi<Board>(`/${board.id}/versions/${version.revision}/restore`, 'POST', { expectedRevision: board.revision }).then(fresh => { undo.current = []; redo.current = []; update(fresh); setPanel(null); }).catch(report);
+          }
+        }}>Restore revision {version.revision}</button>}</div>)}</>}
+        {!panel && item && <form key={`${item.id}-${item.version}`} onSubmit={event => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          const width = Number(data.get('width'));
+          const height = Number(data.get('height'));
+          commit([{ ...item, x: Number(data.get('x')), y: Number(data.get('y')), width, height, color: String(data.get('color')), fill: data.get('transparent') ? 'transparent' : String(data.get('fill')), text: String(data.get('text') ?? item.text), fontSize: Number(data.get('fontSize') ?? item.fontSize), points: item.points.map(p => ({ x: p.x * width / item.width, y: p.y * height / item.height })) }]);
+        }}><h3>Object settings</h3><fieldset disabled={disabled}>
+          {(['x', 'y', 'width', 'height'] as const).map(key => <label key={key}>{key}<input aria-label={`Object ${key}`} name={key} type="number" step="any" min={key === 'x' || key === 'y' ? -100000 : 1} max={key === 'x' || key === 'y' ? 100000 : 10000} defaultValue={item[key]} required /></label>)}
+          <label>Color<input name="color" type="color" defaultValue={item.color} /></label><label>Fill<input name="fill" type="color" defaultValue={item.fill === 'transparent' ? '#ffffff' : item.fill} /></label><label><input name="transparent" type="checkbox" defaultChecked={item.fill === 'transparent'} /> No fill</label>
+          {['text', 'sticky'].includes(item.kind) && <><label>Text<textarea name="text" defaultValue={item.text} maxLength={4000} /></label><label>Font size<input name="fontSize" type="number" min={8} max={200} defaultValue={item.fontSize} /></label></>}
+          <button type="submit">Apply settings</button></fieldset></form>}
+      </aside>}
+    </div>
+    <footer>Drag to draw or move · Select an object to resize · Double-click text to edit · Scroll to pan · Drop or paste an image</footer>
+  </section>;
+}

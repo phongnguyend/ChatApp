@@ -1,5 +1,15 @@
 # Huddle Chat App
 
+## Whiteboards
+
+Open **Whiteboards** in the sidebar to create a persistent, editable canvas. Tools include freehand pen, rectangle, ellipse, line, text, sticky notes, and images. Select objects to move or resize them, or use Object settings for exact position, dimensions, colors, and text. Scroll to pan; use the zoom controls or Ctrl/Command-scroll to zoom. Copy/paste buttons duplicate the selected object, and undo/redo applies to your own edits in the current session. Export SVG includes the board's loaded images.
+
+Owners can rename/delete boards, invite existing accounts by username as viewers or editors, copy a board link, and restore any of the latest 50 saved revisions. Links require sign-in and an invitation. SignalR supplies live changes and collaborator cursors; reconnecting reloads the document. Each completed drawing or edit saves an object-level command. Simultaneous changes to different objects merge; stale changes to the same object are rejected rather than overwriting another person's work. Failed saves remain visible with retry/discard controls. This is online collaboration, without offline editing or CRDT merging; multiple API instances require a SignalR backplane.
+
+PNG, JPEG, and WebP images (up to 5 MB each) can be uploaded, dropped, or pasted onto the canvas. Images use the configured object storage through normal `StoredDocument` records and count toward the uploader's storage quota. They remain in the uploader's My Documents after removing an image from a board or deleting a board; deleting the underlying document makes that image unavailable on boards and in history. Only authorized board members can fetch board images.
+
+Boards support up to 2,000 objects (including deletion records used for conflict detection), a 2 MB JSON document, 4,000 points per stroke, and 4,000 characters per text object. The `AddWhiteboards` EF migration adds boards, memberships, revisions, and image references with database-generated IDs. Run the usual database migration workflow before deploying. Coverage is in `WhiteboardRulesTests.cs` and `e2e/tests/whiteboards.spec.ts`.
+
 A simple real-time chat application built with:
 
 - ASP.NET Core 10 Web API and SignalR

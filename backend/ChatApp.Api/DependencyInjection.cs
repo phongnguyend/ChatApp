@@ -14,6 +14,7 @@ public static class DependencyInjection
     public static IServiceCollection AddApi(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddApplicationEndpoints();
+        services.AddScoped<WhiteboardService>();
         services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = false);
         services.AddSignalR(options => options.AddFilter<AuthenticatedHubFilter>());
         services.AddHttpClient();
@@ -67,6 +68,8 @@ public static class DependencyInjection
     public static void MapApplicationEndpoints(this WebApplication app)
     {
         FormsEndpoints.Map(app);
+
+        WhiteboardsEndpoints.Map(app);
 
         AttachmentsEndpoints.Map(app);
         AvatarsEndpoints.Map(app);

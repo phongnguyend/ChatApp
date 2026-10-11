@@ -38,7 +38,7 @@ public static class AuthenticationSetup
             {
                 OnMessageReceived = context =>
                 {
-                    if (context.Request.Path.StartsWithSegments("/hubs/chat"))
+                    if (context.Request.Path.StartsWithSegments("/hubs/chat") || context.Request.Path.StartsWithSegments("/hubs/whiteboards"))
                     {
                         context.Token = context.Request.Query["access_token"];
                     }

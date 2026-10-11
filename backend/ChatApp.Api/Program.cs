@@ -52,6 +52,9 @@ if (!string.IsNullOrWhiteSpace(builder.Configuration["Authentication:Microsoft:C
 
 app.MapApplicationEndpoints();
 app.MapHub<ChatHub>("/hubs/chat", options => options.CloseOnAuthenticationExpiration = true).RequireAuthorization();
+
+app.MapHub<WhiteboardHub>("/hubs/whiteboards", options => options.CloseOnAuthenticationExpiration = true).RequireAuthorization();
+
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" })).AllowAnonymous();
 
 await using (var scope = app.Services.CreateAsyncScope())

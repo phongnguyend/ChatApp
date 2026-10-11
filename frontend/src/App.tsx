@@ -104,6 +104,8 @@ import { StorageManagementView } from "./pages/StorageManagementView";
 import { TasksView } from "./pages/TasksView";
 import { NotesView } from "./pages/NotesView";
 import { FormsView } from "./pages/FormsView";
+import { WhiteboardsView } from "./pages/WhiteboardsView";
+import { Presentation } from "lucide-react";
 import { PublicFormView } from "./pages/PublicFormView";
 import { RemindersView } from "./pages/RemindersView";
 import { NotificationsView, type UserNotification } from "./pages/NotificationsView";
@@ -1278,6 +1280,7 @@ function ChatApp({
   const [isTasksOpen, setIsTasksOpen] = useState(false);
   const [isNotesOpen, setIsNotesOpen] = useState(false);
   const [isFormsOpen, setIsFormsOpen] = useState(false);
+  const [isWhiteboardsOpen, setIsWhiteboardsOpen] = useState(() => new URLSearchParams(location.search).has("whiteboard"));
   const [isRemindersOpen, setIsRemindersOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notificationUnreadCount, setNotificationUnreadCount] = useState<number | null>(null);
@@ -3411,6 +3414,7 @@ function ChatApp({
       setIsStorageManagementOpen(false);
       setIsTasksOpen(false);
       setIsNotesOpen(false);
+      setIsWhiteboardsOpen(false);
       setIsFormsOpen(false);
       setIsRemindersOpen(false);
       setNewGroupTitle("");
@@ -3462,6 +3466,7 @@ function ChatApp({
       setIsStorageManagementOpen(false);
       setIsTasksOpen(false);
       setIsNotesOpen(false);
+      setIsWhiteboardsOpen(false);
       setIsFormsOpen(false);
       setIsRemindersOpen(false);
       setConversationTab("chat");
@@ -3579,6 +3584,7 @@ function ChatApp({
     setIsStorageManagementOpen(false);
     setIsTasksOpen(false);
     setIsNotesOpen(false);
+    setIsWhiteboardsOpen(false);
     setIsFormsOpen(false);
     setIsRemindersOpen(false);
     setIsSidebarOpen(false);
@@ -3594,6 +3600,7 @@ function ChatApp({
       setIsStorageManagementOpen(false);
       setIsTasksOpen(false);
       setIsNotesOpen(false);
+      setIsWhiteboardsOpen(false);
       setIsFormsOpen(false);
       setIsRemindersOpen(false);
     };
@@ -3627,6 +3634,7 @@ function ChatApp({
     if (notification.type === "note_share") {
       setNotificationNoteTarget({ id: notification.targetId, request });
       setIsNotesOpen(true);
+      setIsWhiteboardsOpen(false);
       setIsFormsOpen(false);
       return;
     }
@@ -3745,6 +3753,7 @@ function ChatApp({
       setIsStorageManagementOpen(false);
       setIsTasksOpen(false);
       setIsNotesOpen(false);
+      setIsWhiteboardsOpen(false);
       setIsFormsOpen(false);
       setIsRemindersOpen(false);
       setConversationTab("chat");
@@ -4125,6 +4134,7 @@ function ChatApp({
     setIsStorageManagementOpen(false);
     setIsTasksOpen(false);
     setIsNotesOpen(false);
+    setIsWhiteboardsOpen(false);
     setIsFormsOpen(false);
     setIsRemindersOpen(false);
     setIsNotificationsOpen(false);
@@ -4132,7 +4142,7 @@ function ChatApp({
     setAccountView(view);
   }
   const isChatOpen =
-    !isFormsOpen &&
+    !isWhiteboardsOpen && !isFormsOpen &&
     !isAccountOpen &&
     !isCalendarOpen &&
     !isMeetingsOpen &&
@@ -4144,7 +4154,7 @@ function ChatApp({
     !isNotificationsOpen;
 
   return (
-    <main className={`chat-shell ${isFormsOpen ? "forms-open" : ""} ${isChatOpen ? "chat-open" : "section-open"} ${isAccountOpen ? "account-open" : ""} ${isCalendarOpen ? "calendar-open" : ""} ${isMeetingsOpen ? "meetings-open" : ""} ${isDocumentsOpen ? "documents-open" : ""} ${isStorageManagementOpen ? "storage-management-open" : ""} ${isTasksOpen ? "tasks-open" : ""} ${isNotesOpen ? "notes-open" : ""} ${isRemindersOpen ? "reminders-open" : ""} ${isNotificationsOpen ? "notifications-open" : ""}`}>
+    <main className={`chat-shell ${isWhiteboardsOpen ? "whiteboards-open" : ""} ${isFormsOpen ? "forms-open" : ""} ${isChatOpen ? "chat-open" : "section-open"} ${isAccountOpen ? "account-open" : ""} ${isCalendarOpen ? "calendar-open" : ""} ${isMeetingsOpen ? "meetings-open" : ""} ${isDocumentsOpen ? "documents-open" : ""} ${isStorageManagementOpen ? "storage-management-open" : ""} ${isTasksOpen ? "tasks-open" : ""} ${isNotesOpen ? "notes-open" : ""} ${isRemindersOpen ? "reminders-open" : ""} ${isNotificationsOpen ? "notifications-open" : ""}`}>
       <button
         className={`mobile-scrim ${isSidebarOpen ? "visible" : ""}`}
         aria-label="Close conversation menu"
@@ -4225,6 +4235,7 @@ function ChatApp({
               setIsStorageManagementOpen(false);
               setIsTasksOpen(false);
               setIsNotesOpen(false);
+              setIsWhiteboardsOpen(false);
               setIsFormsOpen(false);
               setIsRemindersOpen(false);
               setIsSidebarOpen(false);
@@ -4253,6 +4264,7 @@ function ChatApp({
               setIsStorageManagementOpen(false);
               setIsTasksOpen(false);
               setIsNotesOpen(false);
+              setIsWhiteboardsOpen(false);
               setIsFormsOpen(false);
               setIsRemindersOpen(false);
               setIsNotificationsOpen(false);
@@ -4273,6 +4285,7 @@ function ChatApp({
               setIsStorageManagementOpen(false);
               setIsTasksOpen(false);
               setIsNotesOpen(false);
+              setIsWhiteboardsOpen(false);
               setIsFormsOpen(false);
               setIsRemindersOpen(false);
               setIsSidebarOpen(false);
@@ -4292,6 +4305,7 @@ function ChatApp({
               setIsStorageManagementOpen(false);
               setIsTasksOpen(false);
               setIsNotesOpen(false);
+              setIsWhiteboardsOpen(false);
               setIsFormsOpen(false);
               setIsRemindersOpen(false);
               setIsSidebarOpen(false);
@@ -4311,6 +4325,7 @@ function ChatApp({
               setIsStorageManagementOpen(false);
               setIsTasksOpen(false);
               setIsNotesOpen(false);
+              setIsWhiteboardsOpen(false);
               setIsFormsOpen(false);
               setIsRemindersOpen(false);
               setIsSidebarOpen(false);
@@ -4330,6 +4345,7 @@ function ChatApp({
               setIsDocumentsOpen(false);
               setIsStorageManagementOpen(false);
               setIsNotesOpen(false);
+              setIsWhiteboardsOpen(false);
               setIsFormsOpen(false);
               setIsRemindersOpen(false);
               setIsSidebarOpen(false);
@@ -4350,6 +4366,7 @@ function ChatApp({
               setIsStorageManagementOpen(false);
               setIsTasksOpen(false);
               setIsNotesOpen(false);
+              setIsWhiteboardsOpen(false);
               setIsFormsOpen(false);
               setIsSidebarOpen(false);
             }}
@@ -4362,6 +4379,7 @@ function ChatApp({
             aria-current={isNotesOpen ? "page" : undefined}
             onClick={() => {
               setIsNotesOpen(true);
+              setIsWhiteboardsOpen(false);
               setIsFormsOpen(false);
               setIsNotificationsOpen(false);
               setIsCalendarOpen(false);
@@ -4390,9 +4408,29 @@ function ChatApp({
               setIsStorageManagementOpen(false);
               setIsRemindersOpen(false);
               setIsSidebarOpen(false);
+              setIsWhiteboardsOpen(false);
               setIsFormsOpen(true);
             }}
           ><ClipboardList size={21} /></button>
+          <button
+            className={`sidebar-rail-button ${isWhiteboardsOpen ? "active" : ""}`}
+            type="button" aria-label="Whiteboards" title="Whiteboards"
+            aria-current={isWhiteboardsOpen ? "page" : undefined}
+            onClick={() => {
+              setAccountView("chat");
+              setIsFormsOpen(false);
+              setIsNotesOpen(false);
+              setIsNotificationsOpen(false);
+              setIsCalendarOpen(false);
+              setIsMeetingsOpen(false);
+              setIsDocumentsOpen(false);
+              setIsTasksOpen(false);
+              setIsStorageManagementOpen(false);
+              setIsRemindersOpen(false);
+              setIsSidebarOpen(false);
+              setIsWhiteboardsOpen(true);
+            }}
+          ><Presentation size={21} /></button>
           {user.roles.includes("Global Admin") && (
           <button
             className={`sidebar-rail-button ${isStorageManagementOpen ? "active" : ""}`}
@@ -4408,6 +4446,7 @@ function ChatApp({
               setIsDocumentsOpen(false);
               setIsTasksOpen(false);
               setIsNotesOpen(false);
+              setIsWhiteboardsOpen(false);
               setIsFormsOpen(false);
               setIsRemindersOpen(false);
               setIsSidebarOpen(false);
@@ -4465,6 +4504,7 @@ function ChatApp({
                     setIsStorageManagementOpen(false);
                     setIsTasksOpen(false);
                     setIsNotesOpen(false);
+                    setIsWhiteboardsOpen(false);
                     setIsFormsOpen(false);
                     setIsRemindersOpen(false);
                     setIsSidebarOpen(false);
@@ -4634,6 +4674,7 @@ function ChatApp({
           setIsStorageManagementOpen(false);
           setIsTasksOpen(false);
           setIsNotesOpen(false);
+          setIsWhiteboardsOpen(false);
           setIsFormsOpen(false);
           setIsRemindersOpen(false);
           setIsSidebarOpen(false);
@@ -4655,6 +4696,7 @@ function ChatApp({
         hidden={!isTasksOpen}
       />
       <FormsView hidden={!isFormsOpen} onBack={() => setIsFormsOpen(false)} />
+      <WhiteboardsView hidden={!isWhiteboardsOpen} onBack={() => setIsWhiteboardsOpen(false)} />
       <NotesView
         apiUrl={API_URL}
         currentUsername={user.username}
@@ -7581,6 +7623,7 @@ function ChatApp({
           setIsStorageManagementOpen(false);
           setIsTasksOpen(false);
           setIsNotesOpen(false);
+          setIsWhiteboardsOpen(false);
           setIsFormsOpen(false);
           setIsRemindersOpen(false);
           setIsSidebarOpen(false);
