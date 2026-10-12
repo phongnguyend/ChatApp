@@ -2,6 +2,12 @@
 
 ## Whiteboards
 
+Creating an object automatically returns to **Select** mode, leaving the new object selected for moving or editing. This also applies after finishing a pen stroke.
+
+With the canvas focused, **Ctrl/Command+C** copies selected objects and **Ctrl/Command+V** pastes them into the active sheet. This uses the same in-board clipboard as the toolbar buttons, supports multiple objects and cross-sheet pasting, and preserves normal clipboard behavior in text fields. Pasted objects receive new IDs and can be undone together.
+
+**View JSON** opens a read-only snapshot of the whole whiteboard, including every sheet, object, lock, and deleted-object record. Use **Copy JSON** to copy the formatted content; if clipboard access is blocked, it selects the text for manual copying. Images are referenced by ID rather than embedded.
+
 Whiteboards support up to 50 sheets using the tabs below the canvas. Use **+** to add a sheet, double-click a tab (or use **Rename sheet**) to rename it, and use the left/right actions to reorder it. Delete removes that sheet and its objects after confirmation; at least one sheet must remain. Editors can manage sheets; viewers can switch between them. Existing boards open as **Sheet 1**.
 
 Objects, selections, collaborator cursors, and SVG exports belong to the active sheet. Copy/paste works across sheets, and object undo/redo is retained separately while switching tabs. Sheet management creates a board revision and clears local undo stacks; owners can recover deleted sheets and their objects using **Version history**. Board limits (2,000 objects including deleted objects and 2 MB) apply across all sheets.

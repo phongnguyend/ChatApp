@@ -5,7 +5,8 @@ import { API_URL, getAccessToken } from '../../services/auth';
 import { BoardError, boardsApi } from '../../services/whiteboardsApi';
 import { defaultSheetId, mergeUpdate, newObject, orderedObjects, withLineEndpoints, type Board, type BoardSheet, type BoardEdit, type BoardObject, type BoardUpdate, type Cursor, type Point } from './boardModel';
 import { WhiteboardSheets } from './WhiteboardSheets';
-import { BringToFront, SendToBack, ArrowUp, ArrowDown, ArrowLeftRight, Lock, LockOpen } from 'lucide-react';
+import { WhiteboardJsonDialog } from './WhiteboardJsonDialog';
+import { BringToFront, SendToBack, ArrowUp, ArrowDown, ArrowLeftRight, Lock, LockOpen, Braces } from 'lucide-react';
 import { WhiteboardCanvas, type BoardTool } from './WhiteboardCanvas';
 
 const tools = [['select', 'Select', MousePointer2], ['pan', 'Pan', Hand], ['path', 'Pen', Pencil], ['rectangle', 'Rectangle', Square], ['ellipse', 'Ellipse', Circle], ['line', 'Line', Minus], ['text', 'Text', Type], ['sticky', 'Sticky note', StickyNote], ['eraser', 'Eraser', Eraser]] as const;
@@ -15,6 +16,7 @@ type Version = { revision: number; createdAt: string };
 
 export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBack: () => void }) {
   const [board, setBoard] = useState(initial);
+  const [jsonSnapshot, setJsonSnapshot] = useState<Board | null>(null);
   const current = useRef(board);
   const [activeSheet, setActiveSheet] = useState(initial.sheets?.[0]?.id ?? defaultSheetId);
   const activeSheetRef = useRef(activeSheet);
@@ -264,6 +266,25 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
   const previewObjects = moveDraft ?? pending?.edits.map(edit => edit.object);
   const displayedBoard = previewObjects ? { ...board, objects: [...board.objects.filter(object => !previewObjects.some(preview => preview.id === object.id)), ...previewObjects] } : board;
   const sheetBoard = { ...displayedBoard, objects: displayedBoard.objects.filter(object => (object.sheetId ?? defaultSheetId) === sheetId) };
+  function copyObjects() {
+    const objects = orderedObjects(sheetBoard.objects).filter(object => selected.includes(object.id));
+    if (objects.length > 0) {
+      clipboard.current = objects;
+      setCopied(true);
+    }
+  }
+  function pasteObjects() {
+    if (disabled || busyRef.current || clipboard.current.length === 0) {
+      return;
+    }
+    const dx = Math.min(24, ...clipboard.current.map(object => 100000 - object.x));
+    const dy = Math.min(24, ...clipboard.current.map(object => 100000 - object.y));
+    const objects = clipboard.current.map(source => ({ ...source, id: crypto.randomUUID(), version: 0, x: source.x + dx, y: source.y + dy }));
+    commit(objects);
+    setSelected(objects.map(object => object.id));
+    setTool('select');
+    setPanel(null);
+  }
   function selectSheet(id: string) {
     sheetHistory.current.set(sheetId, { undo: undo.current, redo: redo.current });
     const history = sheetHistory.current.get(id);
@@ -374,6 +395,16 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
       setSelected(sheetBoard.objects.filter(object => !object.deleted).map(object => object.id));
       setPanel(null);
       setTool('select');
+    } else if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'c' && selectedItems.length > 0) {
+      event.preventDefault();
+      if (!event.repeat) {
+        copyObjects();
+      }
+    } else if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'v' && clipboard.current.length > 0) {
+      event.preventDefault();
+      if (!event.repeat) {
+        pasteObjects();
+      }
     } else if ((event.ctrlKey || event.metaKey) && (event.key.toLowerCase() === 'z' || (event.key.toLowerCase() === 'y' && !event.shiftKey))) {
       event.preventDefault();
       if (!event.repeat && !disabled) {
@@ -415,6 +446,7 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
         }
       }}>Rename</button>}
       <button onClick={() => void exportSvg()}><Download size={16} /> Export SVG</button>
+      <button type="button" onClick={() => setJsonSnapshot({ ...displayedBoard, sheets: pending?.sheets ?? sheets })}><Braces size={16} /> View JSON</button>
       <button onClick={() => void openPanel('history')}><History size={16} /> History</button>
       {board.isOwner && <button onClick={() => void openPanel('share')}><Share2 size={16} /> Share</button>}
     </header>
@@ -431,12 +463,8 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
       <label>Stroke <input type="number" aria-label="Stroke width" min="1" max="40" value={strokeWidth} onChange={e => setStrokeWidth(Math.max(1, Math.min(40, Number(e.target.value))))} /></label>
       <button aria-label="Undo" title="Undo (Ctrl/Command+Z)" disabled={disabled || !undo.current.length} onClick={() => travel('undo')}><Undo2 size={18} /></button>
       <button aria-label="Redo" title="Redo (Ctrl/Command+Shift+Z or Ctrl+Y)" disabled={disabled || !redo.current.length} onClick={() => travel('redo')}><Redo2 size={18} /></button>
-      <button aria-label="Copy object" title="Copy selected objects" disabled={!selectedItems.length} onClick={() => { clipboard.current = selectedItems; setCopied(true); }}><Copy size={18} /></button>
-      <button aria-label="Paste object" title="Paste copied objects" disabled={disabled || !copied} onClick={() => {
-        const objects = clipboard.current.map(source => ({ ...source, id: crypto.randomUUID(), version: 0, x: source.x + 24, y: source.y + 24 }));
-        commit(objects);
-        setSelected(objects.map(object => object.id));
-      }}><ClipboardPaste size={18} /></button>
+      <button aria-label="Copy object" title="Copy selected objects (Ctrl/Command+C)" disabled={!selectedItems.length} onClick={copyObjects}><Copy size={18} /></button>
+      <button aria-label="Paste object" title="Paste copied objects (Ctrl/Command+V)" disabled={disabled || !copied} onClick={pasteObjects}><ClipboardPaste size={18} /></button>
       <button aria-label="Delete object" title="Delete selected objects" disabled={disabled || !selectedItems.length} onClick={() => commit(selectedItems.map(object => ({ ...object, deleted: true })))}><Trash2 size={18} /></button>
       <button aria-label="Lock selected objects" title="Lock selected objects" disabled={disabled || !movableItems.length} onClick={() => commit(movableItems.map(object => ({ ...object, locked: true })))}><Lock size={18} /></button>
       <button aria-label="Unlock selected objects" title="Unlock selected objects" disabled={disabled || !selectedItems.some(object => object.locked)} onClick={() => commit(selectedItems.filter(object => object.locked).map(object => ({ ...object, locked: false })))}><LockOpen size={18} /></button>
@@ -503,6 +531,7 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
       </aside>}
     </div>
     <WhiteboardSheets sheets={sheets} activeId={sheetId} disabled={disabled} switchingDisabled={busy || uploading || !!pending || !!moveDraft} onSelect={selectSheet} onSave={saveSheets} />
+    {jsonSnapshot && <WhiteboardJsonDialog board={jsonSnapshot} onClose={() => setJsonSnapshot(null)} />}
     <footer>Arrow keys move selection · Shift+Arrow moves 10 units · Ctrl/Command+A selects all · Delete removes selection</footer>
   </section>;
 }

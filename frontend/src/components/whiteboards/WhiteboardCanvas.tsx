@@ -194,6 +194,9 @@ export function WhiteboardCanvas({ board, tool, onToolChange, onEditText, color,
     }
     if (gesture.current && gesture.current.mode !== 'pan' && draftRef.current && !cancel) {
       const item = draftRef.current;
+      if (gesture.current.mode === 'draw') {
+        onToolChange('select');
+      }
       // Normalize freehand bounds so selection and resize handles cover the whole stroke.
       if (item.kind === 'path' && gesture.current.mode === 'draw') {
         const minX = Math.min(...item.points.map(p => p.x));

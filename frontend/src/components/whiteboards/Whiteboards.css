@@ -55,4 +55,11 @@
 .whiteboard-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
 .whiteboard-confirm-actions .whiteboard-danger { background: #b91c1c; border-color: #b91c1c; color: white; }
 .whiteboard-confirm-actions .whiteboard-danger:hover { background: #991b1b; }
+.whiteboard-json-dialog { width: min(880px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); box-sizing: border-box; padding: 20px; border: 1px solid #dbe3e9; border-radius: 12px; color: #172b3a; background: white; }
+.whiteboard-json-dialog[open] { display: flex; flex-direction: column; gap: 14px; }
+.whiteboard-json-dialog::backdrop { background: #0f172a80; }
+.whiteboard-json-dialog header, .whiteboard-workspace .whiteboard-json-dialog footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; }
+.whiteboard-json-dialog h2 { display: flex; align-items: center; gap: 8px; margin: 0; }
+.whiteboard-json-dialog textarea { height: min(55dvh, 540px); min-height: 120px; resize: none; padding: 12px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; line-height: 1.6; }
+.whiteboard-json-dialog [role=alert] { color: #b91c1c; }
 @media (max-width: 800px) { .whiteboards-view { grid-column: 1 / -1; } .whiteboard-inspector { width: 190px; } .whiteboard-workspace footer { display: none; } }

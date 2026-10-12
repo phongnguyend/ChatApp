@@ -49,6 +49,18 @@ test('Sheets isolate objects, synchronize tabs, enforce permissions, and restore
     await expect(viewerPage.getByRole('application').locator('[data-object-id]')).toHaveCount(1);
     const stored = await (await request.get(base, { headers })).json() as Board;
     expect(stored.sheets!.map(sheet => sheet.name)).toEqual(['Notes', 'Sheet 1']);
+    await page.getByRole('button', { name: 'View JSON', exact: true }).click();
+    const jsonDialog = page.getByRole('dialog', { name: 'Whiteboard JSON', exact: true });
+    const jsonText = jsonDialog.getByRole('textbox', { name: 'Whiteboard JSON', exact: true });
+    await expect(jsonText).toHaveAttribute('readonly', '');
+    const json = await jsonText.inputValue();
+    expect(JSON.parse(json)).toEqual({ id: stored.id, title: stored.title, revision: stored.revision, sheets: stored.sheets, objects: stored.objects });
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await jsonDialog.getByRole('button', { name: 'Copy JSON', exact: true }).click();
+    await expect(jsonDialog.getByRole('status')).toHaveText('JSON copied to clipboard.');
+    expect(JSON.parse(await page.evaluate(() => navigator.clipboard.readText()))).toEqual(JSON.parse(json));
+    await jsonDialog.press('Escape');
+    await expect(jsonDialog).not.toBeVisible();
     expect((await request.post(`${base}/commands`, { headers: headersFor(viewer.username), data: { operationId: randomUUID(), edits: [], sheets: stored.sheets, expectedRevision: stored.revision } })).status()).toBe(403);
     await page.getByRole('button', { name: 'Delete sheet', exact: true }).click();
     const confirmation = page.getByRole('dialog', { name: 'Delete sheet?', exact: true });
@@ -364,8 +376,10 @@ test('Lines save on click and when dragged horizontally, vertically, or in rever
     expect(response.ok(), await response.text()).toBeTruthy();
     const update = await response.json() as BoardUpdate;
     expect(update.objects[0].points).toEqual([{ x: 0, y: 0 }, { x: 160, y: 0 }]);
+    await expect(page.getByRole('button', { name: 'Select', exact: true })).toHaveAttribute('aria-pressed', 'true');
     for (const [start, end] of [[[50, 200], [200, 200]], [[250, 50], [250, 200]], [[450, 250], [350, 150]]]) {
       await expect(page.getByRole('button', { name: 'Undo', exact: true })).toBeEnabled();
+      await page.getByRole('button', { name: 'Line', exact: true }).click();
       const bounds = (await canvas.boundingBox())!;
       await page.mouse.move(bounds.x + start[0], bounds.y + start[1]);
       await page.mouse.down();
@@ -376,6 +390,7 @@ test('Lines save on click and when dragged horizontally, vertically, or in rever
       expect(result.ok(), await result.text()).toBeTruthy();
       const change = await result.json() as BoardUpdate;
       expect(change.objects[0].points).toHaveLength(2);
+      await expect(page.getByRole('button', { name: 'Select', exact: true })).toHaveAttribute('aria-pressed', 'true');
     }
     await expect(canvas.locator('[data-object-id]')).toHaveCount(4);
     await expect(page.locator('.whiteboard-error')).toHaveCount(0);
@@ -481,10 +496,17 @@ test('Ctrl-click toggles multiple objects for moving, copying, deletion, and und
     await expect(second).toHaveAttribute('transform', 'translate(300 50)');
     await page.getByRole('button', { name: 'Redo', exact: true }).click();
     await expect(second).toHaveAttribute('transform', 'translate(330 70)');
-    await page.getByRole('button', { name: 'Copy object', exact: true }).click();
-    await page.getByRole('button', { name: 'Paste object', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Delete object', exact: true })).toBeEnabled();
+    await canvas.press('Control+c');
+    await canvas.press('Control+v');
     await expect(canvas.locator('[data-object-id]')).toHaveCount(5);
     await expect(canvas.locator('[data-selection]')).toHaveCount(2);
+    await expect(page.getByRole('button', { name: 'Undo', exact: true })).toBeEnabled();
+    await canvas.press('Control+z');
+    await expect(canvas.locator('[data-object-id]')).toHaveCount(3);
+    await expect(page.getByRole('button', { name: 'Paste object', exact: true })).toBeEnabled();
+    await canvas.press('Meta+v');
+    await expect(canvas.locator('[data-object-id]')).toHaveCount(5);
     await page.getByRole('button', { name: 'Delete object', exact: true }).click();
     await expect(canvas.locator('[data-object-id]')).toHaveCount(3);
     await canvas.click({ position: { x: 580, y: 80 }, modifiers: ['Control'] });
