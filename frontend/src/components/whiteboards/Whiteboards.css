@@ -42,4 +42,17 @@
 .whiteboard-error { padding: 10px 16px; background: #fff1f2; color: #9f1239; }
 .whiteboard-error button { margin-left: 10px; }
 .whiteboard-workspace footer { padding: 6px 12px; border-top: 1px solid #dbe3e9; }
+.whiteboard-sheets { display: flex; align-items: center; gap: 4px; padding: 5px 10px; background: #f1f5f9; border-top: 1px solid #dbe3e9; flex-wrap: wrap; }
+.whiteboard-sheet-tabs { display: flex; flex: 1; min-width: 120px; overflow-x: auto; gap: 2px; }
+.whiteboard-sheet-tabs button { flex-shrink: 0; border-radius: 4px 4px 0 0; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.whiteboard-sheet-tabs [aria-selected=true] { border-bottom: 3px solid #0f766e; color: #0f766e; font-weight: 600; background: white; }
+.whiteboard-sheet-rename { display: flex; align-items: center; gap: 5px; flex-basis: 100%; }
+.whiteboard-sheet-rename input { padding: 6px; min-width: 0; }
+.whiteboard-confirm-dialog { width: min(420px, calc(100vw - 48px)); padding: 24px; border: 1px solid #dbe3e9; border-radius: 12px; background: white; color: #172b3a; box-shadow: 0 20px 60px #0003; }
+.whiteboard-confirm-dialog::backdrop { background: #0f172a80; }
+.whiteboard-confirm-dialog h2 { margin: 0 0 12px; }
+.whiteboard-confirm-dialog p { line-height: 1.5; overflow-wrap: anywhere; }
+.whiteboard-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
+.whiteboard-confirm-actions .whiteboard-danger { background: #b91c1c; border-color: #b91c1c; color: white; }
+.whiteboard-confirm-actions .whiteboard-danger:hover { background: #991b1b; }
 @media (max-width: 800px) { .whiteboards-view { grid-column: 1 / -1; } .whiteboard-inspector { width: 190px; } .whiteboard-workspace footer { display: none; } }

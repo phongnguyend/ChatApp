@@ -144,7 +144,7 @@ public static partial class WhiteboardsEndpoints
             board.Revision++;
             var old = WhiteboardRules.ReadDocument(version.DocumentJson);
             var restored = old.Select(x => x with { Version = board.Revision }).Concat(WhiteboardService.Objects(board).Where(x => old.All(y => y.Id != x.Id)).Select(x => x with { Deleted = true, Version = board.Revision })).ToArray();
-            board.DocumentJson = System.Text.Json.JsonSerializer.Serialize(restored, WhiteboardRules.Json);
+            board.DocumentJson = System.Text.Json.JsonSerializer.Serialize(new BoardDocument(WhiteboardRules.ReadSheets(version.DocumentJson), restored), WhiteboardRules.Json);
             if (System.Text.Encoding.UTF8.GetByteCount(board.DocumentJson) > 2000000)
             {
                 return Results.BadRequest(new { error = "Restoring this version would exceed the 2 MB board document limit." });

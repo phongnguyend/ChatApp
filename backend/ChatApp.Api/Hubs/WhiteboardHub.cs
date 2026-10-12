@@ -21,7 +21,7 @@ public sealed class WhiteboardHub(WhiteboardService boards) : Hub
         }
     }
 
-    public async Task Cursor(Guid id, double x, double y)
+    public async Task Cursor(Guid id, double x, double y, Guid sheetId)
     {
         if (!WhiteboardRules.Coordinate(x) || !WhiteboardRules.Coordinate(y) || !Context.Items.TryGetValue("board", out var joined) || !Equals(joined, id))
         {
@@ -36,7 +36,7 @@ public sealed class WhiteboardHub(WhiteboardService boards) : Hub
         try
         {
             await boards.Access(id, WhiteboardService.UserId(Context.User!), false, Context.ConnectionAborted);
-            await Clients.Users(await boards.Recipients(id, Context.ConnectionAborted)).SendAsync("WhiteboardCursor", new { BoardId = id, ConnectionId = Context.ConnectionId, Name = Context.User!.FindFirst("chat_username")?.Value ?? "Collaborator", X = x, Y = y });
+            await Clients.Users(await boards.Recipients(id, Context.ConnectionAborted)).SendAsync("WhiteboardCursor", new { BoardId = id, SheetId = sheetId, ConnectionId = Context.ConnectionId, Name = Context.User!.FindFirst("chat_username")?.Value ?? "Collaborator", X = x, Y = y });
         }
         catch (BoardFault)
         {

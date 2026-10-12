@@ -46,7 +46,7 @@ public sealed class WhiteboardService(ChatAppDbContext db, IHubContext<Whiteboar
     {
         var board = await Access(id, userId, false, ct);
         var canEdit = board.CreatedById == userId || await db.WhiteboardMembers.AnyAsync(x => x.WhiteboardId == id && x.UserId == userId && x.CanEdit, ct);
-        return new { board.Id, board.Title, board.CreatedById, board.Revision, board.UpdatedAt, CanEdit = canEdit, IsOwner = board.CreatedById == userId, Objects = Objects(board) };
+        return new { board.Id, board.Title, board.CreatedById, board.Revision, board.UpdatedAt, CanEdit = canEdit, IsOwner = board.CreatedById == userId, Objects = Objects(board), Sheets = WhiteboardRules.ReadSheets(board.DocumentJson) };
     }
 
     public async Task<string[]> Recipients(Guid id, CancellationToken ct) =>
@@ -67,12 +67,12 @@ public sealed class WhiteboardService(ChatAppDbContext db, IHubContext<Whiteboar
             {
                 throw new BoardFault(409, "This operation identifier has already been used.");
             }
-            return new { BoardId = id, board.Revision, Objects = Objects(board), Full = true };
+            return new { BoardId = id, board.Revision, Objects = Objects(board), Sheets = WhiteboardRules.ReadSheets(board.DocumentJson), Full = true };
         }
-        BoardObject[] result;
+        BoardDocument document;
         try
         {
-            result = WhiteboardRules.Apply(Objects(board), command, board.Revision + 1);
+            document = WhiteboardRules.ApplyDocument(board.DocumentJson, command, board.Revision + 1);
         }
         catch (ArgumentException error)
         {
@@ -89,13 +89,13 @@ public sealed class WhiteboardService(ChatAppDbContext db, IHubContext<Whiteboar
         }
         board.Revision++;
         board.UpdatedAt = DateTimeOffset.UtcNow;
-        board.DocumentJson = JsonSerializer.Serialize(result, WhiteboardRules.Json);
+        board.DocumentJson = JsonSerializer.Serialize(document, WhiteboardRules.Json);
         db.WhiteboardVersions.Add(new WhiteboardVersion { WhiteboardId = id, OperationId = command.OperationId, CreatedById = userId, Revision = board.Revision, DocumentJson = board.DocumentJson });
         await db.SaveChangesAsync(ct);
         await db.WhiteboardVersions.Where(x => x.WhiteboardId == id && x.Revision < board.Revision - 49).ExecuteDeleteAsync(ct);
         await transaction.CommitAsync(ct);
-        var changed = result.Where(x => command.Edits.Any(edit => edit.Object.Id == x.Id)).ToArray();
-        var update = new { BoardId = id, board.Revision, Objects = changed, Full = false };
+        var changed = document.Objects.Where(x => command.Edits.Any(edit => edit.Object.Id == x.Id)).ToArray();
+        var update = new { BoardId = id, board.Revision, Objects = command.Sheets is null ? changed : document.Objects, document.Sheets, Full = command.Sheets is not null };
         await hub.Clients.Users(await Recipients(id, ct)).SendAsync("WhiteboardChanged", update, ct);
         return update;
     }

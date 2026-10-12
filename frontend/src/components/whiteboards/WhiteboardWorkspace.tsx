@@ -3,18 +3,25 @@ import { HubConnectionBuilder, HubConnectionState } from '@microsoft/signalr';
 import { ArrowLeft, MousePointer2, Hand, Pencil, Square, Circle, Minus, Type, StickyNote, Eraser, ImagePlus, Undo2, Redo2, Copy, ClipboardPaste, Trash2, Share2, History, Download } from 'lucide-react';
 import { API_URL, getAccessToken } from '../../services/auth';
 import { BoardError, boardsApi } from '../../services/whiteboardsApi';
-import { mergeUpdate, newObject, orderedObjects, withLineEndpoints, type Board, type BoardEdit, type BoardObject, type BoardUpdate, type Cursor, type Point } from './boardModel';
+import { defaultSheetId, mergeUpdate, newObject, orderedObjects, withLineEndpoints, type Board, type BoardSheet, type BoardEdit, type BoardObject, type BoardUpdate, type Cursor, type Point } from './boardModel';
+import { WhiteboardSheets } from './WhiteboardSheets';
 import { BringToFront, SendToBack, ArrowUp, ArrowDown, ArrowLeftRight, Lock, LockOpen } from 'lucide-react';
 import { WhiteboardCanvas, type BoardTool } from './WhiteboardCanvas';
 
 const tools = [['select', 'Select', MousePointer2], ['pan', 'Pan', Hand], ['path', 'Pen', Pencil], ['rectangle', 'Rectangle', Square], ['ellipse', 'Ellipse', Circle], ['line', 'Line', Minus], ['text', 'Text', Type], ['sticky', 'Sticky note', StickyNote], ['eraser', 'Eraser', Eraser]] as const;
-type Pending = { operationId: string; edits: BoardEdit[]; mode: 'edit' | 'undo' | 'redo'; before: BoardObject[] };
+type Pending = { operationId: string; edits: BoardEdit[]; mode: 'edit' | 'undo' | 'redo'; before: BoardObject[]; sheets?: BoardSheet[]; expectedRevision?: number };
 type Member = { userId: string; username: string; canEdit: boolean };
 type Version = { revision: number; createdAt: string };
 
 export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBack: () => void }) {
   const [board, setBoard] = useState(initial);
   const current = useRef(board);
+  const [activeSheet, setActiveSheet] = useState(initial.sheets?.[0]?.id ?? defaultSheetId);
+  const activeSheetRef = useRef(activeSheet);
+  const sheets = board.sheets ?? [{ id: defaultSheetId, name: 'Sheet 1' }];
+  const sheetId = sheets.some(sheet => sheet.id === activeSheet) ? activeSheet : sheets[0].id;
+  activeSheetRef.current = sheetId;
+  const sheetObjects = board.objects.filter(object => (object.sheetId ?? defaultSheetId) === sheetId);
   const [tool, setTool] = useState<BoardTool>('select');
   const [selected, setSelected] = useState<string[]>([]);
   const [color, setColor] = useState('#1f2937');
@@ -37,12 +44,22 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
   const [versions, setVersions] = useState<Version[]>([]);
   const undo = useRef<BoardEdit[][]>([]);
   const redo = useRef<BoardEdit[][]>([]);
+  const sheetHistory = useRef(new Map<string, { undo: BoardEdit[][]; redo: BoardEdit[][] }>());
   const clipboard = useRef<BoardObject[]>([]);
   const [copied, setCopied] = useState(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const textEditor = useRef<HTMLTextAreaElement | null>(null);
   const upload = useRef<HTMLInputElement | null>(null);
   const cursorSender = useRef<(point: Point) => void>(() => {});
+  useEffect(() => {
+    if (activeSheet !== sheetId) {
+      setActiveSheet(sheetId);
+      setSelected([]);
+      undo.current = [];
+      redo.current = [];
+      sheetHistory.current.clear();
+    }
+  }, [activeSheet, sheetId]);
   function update(value: Board) {
     if (value.revision < current.current.revision) {
       return;
@@ -114,7 +131,7 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
     cursorSender.current = point => {
       if (connection.state === HubConnectionState.Connected && Date.now() - lastCursor > 80) {
         lastCursor = Date.now();
-        void connection.invoke('Cursor', initial.id, point.x, point.y).catch(() => {});
+        void connection.invoke('Cursor', initial.id, point.x, point.y, activeSheetRef.current).catch(() => {});
       }
     };
     const timer = window.setInterval(() => {
@@ -145,7 +162,7 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
     setError('');
     setPending(command);
     try {
-      const result = await boardsApi<BoardUpdate>(`/${board.id}/commands`, 'POST', { operationId: command.operationId, edits: command.edits });
+      const result = await boardsApi<BoardUpdate>(`/${board.id}/commands`, 'POST', { operationId: command.operationId, edits: command.edits, sheets: command.sheets, expectedRevision: command.expectedRevision });
       update(mergeUpdate(current.current, result));
       const inverse = command.before.map(object => ({ expectedVersion: result.objects.find(x => x.id === object.id)!.version, object }));
       if (command.mode === 'undo') {
@@ -171,6 +188,7 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
         // A retried operation may already have been followed by another user's changes.
         undo.current = [];
         redo.current = [];
+        sheetHistory.current.clear();
       }
       undo.current = undo.current.slice(-100);
       setPending(null);
@@ -190,7 +208,7 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
       return;
     }
     const top = Math.max(0, ...orderedObjects(current.current.objects).map(object => object.z!));
-    objects = objects.map((object, index) => current.current.objects.some(existing => existing.id === object.id) ? object : { ...object, z: top + index + 1 });
+    objects = objects.map((object, index) => current.current.objects.some(existing => existing.id === object.id) ? object : { ...object, sheetId: activeSheetRef.current, z: top + index + 1 });
     const before = objects.map(object => current.current.objects.find(x => x.id === object.id) ?? { ...object, deleted: true });
     void send({ operationId: crypto.randomUUID(), edits: edits ?? objects.map(object => ({ expectedVersion: object.version, object })), before, mode });
   }
@@ -222,10 +240,10 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
     window.addEventListener('blur', blur);
     return () => window.removeEventListener('blur', blur);
   });
-  const selectedItems = orderedObjects(board.objects).filter(object => selected.includes(object.id));
+  const selectedItems = orderedObjects(sheetObjects).filter(object => selected.includes(object.id));
   const movableItems = selectedItems.filter(object => !object.locked);
   const item = selectedItems.length === 1 ? selectedItems[0] : undefined;
-  const layers = orderedObjects(board.objects);
+  const layers = orderedObjects(sheetObjects);
   const layerIndex = layers.findIndex(object => object.id === item?.id);
   function changeLayer(action: 'front' | 'back' | 'forward' | 'backward') {
     if (!item || layerIndex < 0) {
@@ -245,6 +263,27 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
   const disabled = !board.canEdit || busy || uploading || !!pending || !!moveDraft;
   const previewObjects = moveDraft ?? pending?.edits.map(edit => edit.object);
   const displayedBoard = previewObjects ? { ...board, objects: [...board.objects.filter(object => !previewObjects.some(preview => preview.id === object.id)), ...previewObjects] } : board;
+  const sheetBoard = { ...displayedBoard, objects: displayedBoard.objects.filter(object => (object.sheetId ?? defaultSheetId) === sheetId) };
+  function selectSheet(id: string) {
+    sheetHistory.current.set(sheetId, { undo: undo.current, redo: redo.current });
+    const history = sheetHistory.current.get(id);
+    undo.current = history?.undo ?? [];
+    redo.current = history?.redo ?? [];
+    setActiveSheet(id);
+    setSelected([]);
+    setPanel(null);
+    setZoom(1);
+  }
+  async function saveSheets(next: BoardSheet[], activate?: string) {
+    if (disabled) {
+      return;
+    }
+    await send({ operationId: crypto.randomUUID(), edits: [], before: [], mode: 'edit', sheets: next, expectedRevision: current.current.revision });
+    if (activate && current.current.sheets?.some(sheet => sheet.id === activate)) {
+      selectSheet(activate);
+    }
+    setSelected([]);
+  }
   async function addImage(file: File) {
     if (disabled) {
       return;
@@ -289,7 +328,7 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
       const clone = svgRef.current!.cloneNode(true) as SVGSVGElement;
       clone.querySelectorAll('[data-selection], [data-cursor], [data-hit-target]').forEach(node => node.remove());
       clone.querySelector('g')?.removeAttribute('transform');
-      const objects = board.objects.filter(x => !x.deleted);
+      const objects = sheetObjects.filter(x => !x.deleted);
       const x = Math.min(0, ...objects.map(o => o.x)) - 20;
       const y = Math.min(0, ...objects.map(o => o.y)) - 20;
       const width = Math.max(800, ...objects.map(o => o.x + o.width)) - x + 20;
@@ -310,7 +349,7 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
       const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml' }));
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${board.title.replace(/[^\w -]/g, '_')}.svg`;
+      link.download = `${board.title.replace(/[^\w -]/g, '_')}-${sheets.find(sheet => sheet.id === sheetId)!.name.replace(/[^\w -]/g, '_')}.svg`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (reason) {
@@ -332,7 +371,7 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
     }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
       event.preventDefault();
-      setSelected(displayedBoard.objects.filter(object => !object.deleted).map(object => object.id));
+      setSelected(sheetBoard.objects.filter(object => !object.deleted).map(object => object.id));
       setPanel(null);
       setTool('select');
     } else if ((event.ctrlKey || event.metaKey) && (event.key.toLowerCase() === 'z' || (event.key.toLowerCase() === 'y' && !event.shiftKey))) {
@@ -404,14 +443,14 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
       <button aria-label="Zoom out" onClick={() => setZoom(Math.max(.2, zoom / 1.2))}>−</button><button title="Reset zoom" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button><button aria-label="Zoom in" onClick={() => setZoom(Math.min(4, zoom * 1.2))}>+</button>
     </div>
     <div className="whiteboard-body">
-      <WhiteboardCanvas board={displayedBoard} tool={tool} onToolChange={setTool} onEditText={id => {
+      <WhiteboardCanvas key={sheetId} board={sheetBoard} tool={tool} onToolChange={setTool} onEditText={id => {
         setSelected([id]);
         setPanel(null);
         requestAnimationFrame(() => textEditor.current?.focus());
       }} color={color} fill={fill} strokeWidth={strokeWidth} selected={selected.filter(id => displayedBoard.objects.some(object => object.id === id && !object.deleted))} onSelect={ids => {
         setSelected(ids);
         setPanel(null);
-      }} onCommit={commit} disabled={disabled} onCursor={point => cursorSender.current(point)} cursors={cursors} onImage={file => void addImage(file)} zoom={zoom} setZoom={setZoom} svgRef={svgRef} />
+      }} onCommit={commit} disabled={disabled} onCursor={point => cursorSender.current(point)} cursors={cursors.filter(cursor => (cursor.sheetId ?? defaultSheetId) === sheetId)} onImage={file => void addImage(file)} zoom={zoom} setZoom={setZoom} svgRef={svgRef} />
       {(panel || selectedItems.length > 0) && <aside className="whiteboard-inspector">
         {!panel && selectedItems.length > 1 && <><h3>{selectedItems.length} objects selected</h3><p>Drag any selected object to move them together. Copy and delete apply to the entire selection.</p><p>Ctrl-click (Command-click on Mac) toggles individual objects. Click empty space to clear the selection.</p></>}
         {panel && <button onClick={() => setPanel(null)}>Close panel</button>}
@@ -463,6 +502,7 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
           <button type="submit">Apply settings</button></fieldset></form>}
       </aside>}
     </div>
+    <WhiteboardSheets sheets={sheets} activeId={sheetId} disabled={disabled} switchingDisabled={busy || uploading || !!pending || !!moveDraft} onSelect={selectSheet} onSave={saveSheets} />
     <footer>Arrow keys move selection · Shift+Arrow moves 10 units · Ctrl/Command+A selects all · Delete removes selection</footer>
   </section>;
 }

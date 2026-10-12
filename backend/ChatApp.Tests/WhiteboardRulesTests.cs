@@ -6,6 +6,31 @@ namespace ChatApp.Tests;
 public sealed class WhiteboardRulesTests
 {
     [Fact]
+    public void SheetsPreserveLegacyObjectsAndDeleteOnlyTheirOwnContents()
+    {
+        var first = Shape();
+        var legacy = System.Text.Json.JsonSerializer.Serialize(new[] { first }, WhiteboardRules.Json);
+        var second = new BoardSheet(Guid.NewGuid(), "Notes");
+        var sheets = new[] { new BoardSheet(Guid.Empty, "Sheet 1"), second };
+        var document = WhiteboardRules.ApplyDocument(legacy, new(Guid.NewGuid(), [], sheets, 0), 1);
+        Assert.Equal(Guid.Empty, document.Objects[0].SheetId);
+        var json = System.Text.Json.JsonSerializer.Serialize(document, WhiteboardRules.Json);
+        var note = Shape() with { SheetId = second.Id };
+        document = WhiteboardRules.ApplyDocument(json, new(Guid.NewGuid(), [new(0, note)]), 2);
+        json = System.Text.Json.JsonSerializer.Serialize(document, WhiteboardRules.Json);
+        Assert.Throws<InvalidOperationException>(() => WhiteboardRules.ApplyDocument(json, new(Guid.NewGuid(), [], sheets, 1), 3));
+        Assert.Throws<ArgumentException>(() => WhiteboardRules.ApplyDocument(json, new(Guid.NewGuid(), [], [], 2), 3));
+        Assert.Throws<ArgumentException>(() => WhiteboardRules.ApplyDocument(json, new(Guid.NewGuid(), [], [sheets[0], second with { Name = "sheet 1" }], 2), 3));
+        Assert.Throws<ArgumentException>(() => WhiteboardRules.ApplyDocument(json, new(Guid.NewGuid(), [new(0, Shape() with { SheetId = Guid.NewGuid() })]), 3));
+        document = WhiteboardRules.ApplyDocument(json, new(Guid.NewGuid(), [], [sheets[0]], 2), 3);
+        Assert.False(document.Objects.Single(item => item.Id == first.Id).Deleted);
+        Assert.True(document.Objects.Single(item => item.Id == note.Id).Deleted);
+        var stored = System.Text.Json.JsonSerializer.Serialize(document, WhiteboardRules.Json);
+        Assert.Single(WhiteboardRules.ReadSheets(stored));
+        Assert.Equal(2, WhiteboardRules.ReadDocument(stored).Length);
+    }
+
+    [Fact]
     public void EntireBoardCanBeDeletedAndRestoredInOneCommand()
     {
         var objects = Enumerable.Range(0, 2000).Select(_ => Shape() with { Version = 1 }).ToArray();

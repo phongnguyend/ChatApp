@@ -40,20 +40,62 @@ public sealed record BoardObject
     public bool Deleted { get; init; }
 
     public bool Locked { get; init; }
+
+    public Guid SheetId { get; init; }
 }
 
 public sealed record BoardEdit(int ExpectedVersion, BoardObject Object);
 
-public sealed record BoardCommand(Guid OperationId, BoardEdit[] Edits);
+public sealed record BoardSheet(Guid Id, string Name);
+
+public sealed record BoardDocument(BoardSheet[] Sheets, BoardObject[] Objects);
+
+public sealed record BoardCommand(Guid OperationId, BoardEdit[] Edits, BoardSheet[]? Sheets = null, int? ExpectedRevision = null);
 
 public static partial class WhiteboardRules
 {
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
+    public static BoardSheet[] ReadSheets(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.ValueKind == JsonValueKind.Array
+            ? [new BoardSheet(Guid.Empty, "Sheet 1")]
+            : document.RootElement.GetProperty("sheets").Deserialize<BoardSheet[]>(Json)!;
+    }
+
+    public static BoardDocument ApplyDocument(string json, BoardCommand command, int revision)
+    {
+        var sheets = command.Sheets ?? ReadSheets(json);
+        if (sheets.Length is < 1 or > 50 || sheets.Any(sheet => sheet is null || string.IsNullOrWhiteSpace(sheet.Name) || sheet.Name.Length > 50) ||
+            sheets.Select(sheet => sheet.Id).Distinct().Count() != sheets.Length || sheets.Select(sheet => sheet.Name.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count() != sheets.Length)
+        {
+            throw new ArgumentException("Use 1–50 sheets with unique names of 1–50 characters.");
+        }
+        if (command.Sheets is not null && command.ExpectedRevision != revision - 1)
+        {
+            throw new InvalidOperationException("The board changed. Reload before changing sheets.");
+        }
+        var previous = ReadDocument(json);
+        var objects = Apply(previous, command, revision);
+        if (command.Edits.Any(edit => !edit.Object.Deleted && !sheets.Any(sheet => sheet.Id == edit.Object.SheetId)))
+        {
+            throw new ArgumentException("Choose an existing sheet for each object.");
+        }
+        objects = objects.Select(item => !item.Deleted && !sheets.Any(sheet => sheet.Id == item.SheetId) ? item with { Deleted = true, Version = revision } : item).ToArray();
+        var result = new BoardDocument(sheets.Select(sheet => sheet with { Name = sheet.Name.Trim() }).ToArray(), objects);
+        if (JsonSerializer.SerializeToUtf8Bytes(result, Json).Length > 2000000)
+        {
+            throw new ArgumentException("This board has reached its 2 MB document limit.");
+        }
+        return result;
+    }
+
     public static BoardObject[] ReadDocument(string json)
     {
         using var document = JsonDocument.Parse(json);
-        return document.RootElement.EnumerateArray().Select((element, index) =>
+        var objects = document.RootElement.ValueKind == JsonValueKind.Array ? document.RootElement : document.RootElement.GetProperty("objects");
+        return objects.EnumerateArray().Select((element, index) =>
         {
             var item = element.Deserialize<BoardObject>(Json)!;
             // Preserve layer order in documents and history saved before Z was renamed.
@@ -84,7 +126,7 @@ public static partial class WhiteboardRules
 
     public static BoardObject[] Apply(BoardObject[] current, BoardCommand command, int revision)
     {
-        if (command.OperationId == Guid.Empty || command.Edits is null || command.Edits.Length is < 1 or > 2000 ||
+        if (command.OperationId == Guid.Empty || command.Edits is null || command.Edits.Length > 2000 || (command.Edits.Length == 0 && command.Sheets is null) ||
             command.Edits.Any(x => x is null || !Valid(x.Object)) || command.Edits.Select(x => x.Object.Id).Distinct().Count() != command.Edits.Length)
         {
             throw new ArgumentException("Invalid board command. Use up to 2,000 valid objects per edit.");

@@ -2,6 +2,10 @@
 
 ## Whiteboards
 
+Whiteboards support up to 50 sheets using the tabs below the canvas. Use **+** to add a sheet, double-click a tab (or use **Rename sheet**) to rename it, and use the left/right actions to reorder it. Delete removes that sheet and its objects after confirmation; at least one sheet must remain. Editors can manage sheets; viewers can switch between them. Existing boards open as **Sheet 1**.
+
+Objects, selections, collaborator cursors, and SVG exports belong to the active sheet. Copy/paste works across sheets, and object undo/redo is retained separately while switching tabs. Sheet management creates a board revision and clears local undo stacks; owners can recover deleted sheets and their objects using **Version history**. Board limits (2,000 objects including deleted objects and 2 MB) apply across all sheets.
+
 Use **Lock selected objects** and **Unlock selected objects** in the toolbar to protect object positions. Locked objects remain selectable but cannot be dragged, resized, moved with arrow keys, or edited in settings. Group movement skips locked objects. Unlocked objects show a four-way move cursor in Select mode. Locks are saved with the board, shared with collaborators, and support undo/redo.
 
 For lines, **Object settings** provides **Start Left/Top** and **End Left/Top** in board coordinates. Apply settings to position either endpoint; line bounds are calculated automatically, and endpoint edits support undo/redo. You can also drag either circular endpoint handle across the other endpoint to turn the line in any direction. The start handle is green and the end handle is red, with tooltips identifying each point.
