@@ -4,6 +4,105 @@ import { readFile } from 'node:fs/promises';
 import { apiUrl, createUser, headersFor, login } from './helpers.js';
 import { newObject, type Board, type BoardUpdate } from '../../frontend/src/components/whiteboards/boardModel.js';
 
+test('Line handles can cross both axes and preserve endpoints through undo', async ({ page, request }) => {
+  const owner = await createUser(request, 'boardrotate');
+  const headers = headersFor(owner.username);
+  const board = await (await request.post(`${apiUrl}/api/whiteboards/`, { headers })).json() as Board;
+  const base = `${apiUrl}/api/whiteboards/${board.id}`;
+  const line = { ...newObject('line', { x: 250, y: 200 }, '#112233', 'transparent', 3), height: 1, points: [{ x: 0, y: 0 }, { x: 160, y: 0 }] };
+  expect((await request.post(`${base}/commands`, { headers, data: { operationId: randomUUID(), edits: [{ expectedVersion: 0, object: line }] } })).ok()).toBeTruthy();
+  await login(page, owner.username);
+  await page.goto(`/?whiteboard=${board.id}`);
+  const canvas = page.getByRole('application', { name: 'Whiteboard canvas' });
+  try {
+    await expect(canvas).toBeVisible();
+    await canvas.click({ position: { x: 300, y: 200 } });
+    for (const [index, x, y] of [[1, 150, 300], [1, 150, 100], [1, 350, 100], [0, 400, 300]]) {
+      await expect(page.getByRole('button', { name: 'Apply settings' })).toBeEnabled();
+      const handle = await canvas.locator(`[data-endpoint="${index}"]`).boundingBox();
+      const bounds = await canvas.boundingBox();
+      await page.mouse.move(handle!.x + handle!.width / 2, handle!.y + handle!.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(bounds!.x + x, bounds!.y + y, { steps: 10 });
+      const saved = page.waitForResponse(response => response.url().endsWith('/commands') && response.request().method() === 'POST');
+      await page.mouse.up();
+      const response = await saved;
+      expect(response.ok(), await response.text()).toBeTruthy();
+      const object = (await response.json() as BoardUpdate).objects[0];
+      expect(object.x + object.points[index].x).toBeCloseTo(x, 0);
+      expect(object.y + object.points[index].y).toBeCloseTo(y, 0);
+      const fixed = index === 1 ? { x: 250, y: 200 } : { x: 350, y: 100 };
+      expect(object.x + object.points[1 - index].x).toBeCloseTo(fixed.x, 0);
+      expect(object.y + object.points[1 - index].y).toBeCloseTo(fixed.y, 0);
+    }
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect(page.getByLabel('Start Left', { exact: true })).toHaveValue('250');
+    await page.getByRole('button', { name: 'Redo', exact: true }).click();
+    await expect(page.getByLabel('Start Left', { exact: true })).toHaveValue('400');
+    await page.getByRole('button', { name: 'Swap start/end', exact: true }).click();
+    await expect(page.getByLabel('Start Left', { exact: true })).toHaveValue('350');
+    await expect(page.getByLabel('Start Top', { exact: true })).toHaveValue('100');
+    await expect(page.getByLabel('End Left', { exact: true })).toHaveValue('400');
+    await expect(page.getByLabel('End Top', { exact: true })).toHaveValue('300');
+    await expect(page.getByRole('button', { name: 'Swap start/end', exact: true })).toBeEnabled();
+    const stored = (await (await request.get(base, { headers })).json() as Board).objects[0];
+    expect(stored.points).toEqual([{ x: 0, y: 0 }, { x: 50, y: 200 }]);
+    expect([stored.x, stored.y, stored.width, stored.height]).toEqual([350, 100, 50, 200]);
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect(page.getByLabel('Start Left', { exact: true })).toHaveValue('400');
+    await page.getByRole('button', { name: 'Redo', exact: true }).click();
+    await expect(page.getByLabel('Start Left', { exact: true })).toHaveValue('350');
+  } finally {
+    await request.delete(base, { headers });
+  }
+});
+
+test('Line endpoint settings preserve direction, axis-aligned lines, persistence, and undo', async ({ page, request }) => {
+  const owner = await createUser(request, 'boardendpoints');
+  const headers = headersFor(owner.username);
+  const board = await (await request.post(`${apiUrl}/api/whiteboards/`, { headers })).json() as Board;
+  const base = `${apiUrl}/api/whiteboards/${board.id}`;
+  const line = { ...newObject('line', { x: 50, y: 50 }, '#112233', 'transparent', 3), height: 1, points: [{ x: 0, y: 0 }, { x: 160, y: 0 }] };
+  expect((await request.post(`${base}/commands`, { headers, data: { operationId: randomUUID(), edits: [{ expectedVersion: 0, object: line }] } })).ok()).toBeTruthy();
+  await login(page, owner.username);
+  await page.goto(`/?whiteboard=${board.id}`);
+  const canvas = page.getByRole('application', { name: 'Whiteboard canvas' });
+  try {
+    await expect(canvas).toBeVisible();
+    await canvas.click({ position: { x: 100, y: 50 } });
+    await expect(page.getByLabel('Start Left', { exact: true })).toHaveValue('50');
+    await expect(page.getByLabel('End Left', { exact: true })).toHaveValue('210');
+    for (const [startX, startY, endX, endY] of [[300, 180, 80, 60], [120, 30, 120, 230], [-40, 80, 200, 80]]) {
+      await page.getByLabel('Start Left', { exact: true }).fill(String(startX));
+      await page.getByLabel('Start Top', { exact: true }).fill(String(startY));
+      await page.getByLabel('End Left', { exact: true }).fill(String(endX));
+      await page.getByLabel('End Top', { exact: true }).fill(String(endY));
+      const saved = page.waitForResponse(response => response.url().endsWith('/commands') && response.request().method() === 'POST');
+      await page.getByRole('button', { name: 'Apply settings' }).click();
+      const response = await saved;
+      expect(response.ok(), await response.text()).toBeTruthy();
+      const object = (await response.json() as BoardUpdate).objects[0];
+      expect(object.points.map(point => ({ x: object.x + point.x, y: object.y + point.y }))).toEqual([{ x: startX, y: startY }, { x: endX, y: endY }]);
+      expect(object.width).toBe(Math.max(1, Math.abs(startX - endX)));
+      expect(object.height).toBe(Math.max(1, Math.abs(startY - endY)));
+      await expect(page.getByRole('button', { name: 'Apply settings' })).toBeEnabled();
+    }
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect(page.getByLabel('End Top', { exact: true })).toHaveValue('230');
+    await page.getByRole('button', { name: 'Redo', exact: true }).click();
+    await expect(page.getByLabel('Start Left', { exact: true })).toHaveValue('-40');
+    await expect(page.getByRole('button', { name: 'Apply settings' })).toBeEnabled();
+    const stored = await (await request.get(base, { headers })).json() as Board;
+    expect(stored.objects[0].points).toEqual([{ x: 0, y: 0 }, { x: 240, y: 0 }]);
+    await page.getByLabel('End Left', { exact: true }).fill('20000');
+    await page.getByRole('button', { name: 'Apply settings' }).click();
+    await expect(page.getByRole('alert')).toContainText('no more than 10,000 units apart');
+    expect((await (await request.get(base, { headers })).json() as Board).revision).toBe(stored.revision);
+  } finally {
+    await request.delete(base, { headers });
+  }
+});
+
 test('Whiteboard keyboard shortcuts support whole boards without interfering with text editing or viewers', async ({ page, browser, request }) => {
   const owner = await createUser(request, 'boardkeys');
   const viewer = await createUser(request, 'boardkeyviewer');

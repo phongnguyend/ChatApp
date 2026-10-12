@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { API_URL, authFetch } from '../../services/auth';
-import { newObject, orderedObjects, type Board, type BoardObject, type Cursor, type Point } from './boardModel';
+import { newObject, orderedObjects, withLineEndpoints, type Board, type BoardObject, type Cursor, type Point } from './boardModel';
 
 export type BoardTool = 'select' | 'pan' | 'eraser' | BoardObject['kind'];
 type SelectionBox = { x: number; y: number; width: number; height: number };
@@ -43,7 +43,7 @@ export function WhiteboardCanvas({ board, tool, onToolChange, onEditText, color,
       urls.forEach(URL.revokeObjectURL);
     };
   }, [board.id, imageIds]);
-  const gesture = useRef<{ start: Point; screen: Point; original?: BoardObject; originals?: BoardObject[]; baseSelection?: string[]; mode: 'draw' | 'move' | 'resize' | 'pan' | 'place' | 'marquee'; pan: Point } | null>(null);
+  const gesture = useRef<{ start: Point; screen: Point; original?: BoardObject; originals?: BoardObject[]; baseSelection?: string[]; endpoint?: number; mode: 'draw' | 'move' | 'resize' | 'endpoint' | 'pan' | 'place' | 'marquee'; pan: Point } | null>(null);
   const draftRef = useRef<BoardObject | null>(null);
   useEffect(() => {
     const svg = svgRef.current;
@@ -86,6 +86,10 @@ export function WhiteboardCanvas({ board, tool, onToolChange, onEditText, color,
       onSelect(ids);
       if (item && !disabled) {
         gesture.current = { start, screen: start, pan, original: item, originals: board.objects.filter(object => ids.includes(object.id) && !object.deleted), mode: target.getAttribute('data-resize') && ids.length === 1 ? 'resize' : 'move' };
+        if (item.kind === 'line' && ids.length === 1 && target.hasAttribute('data-endpoint')) {
+          gesture.current.mode = 'endpoint';
+          gesture.current.endpoint = Number(target.getAttribute('data-endpoint'));
+        }
         preview(item);
       }
     } else if (!disabled && tool === 'eraser') {
@@ -138,6 +142,15 @@ export function WhiteboardCanvas({ board, tool, onToolChange, onEditText, color,
     const dy = current.y - active.start.y;
     if (active.mode === 'move') {
       preview({ ...original, x: original.x + dx, y: original.y + dy });
+    } else if (active.mode === 'endpoint') {
+      const endpoints = original.points.map(p => ({ x: original.x + p.x, y: original.y + p.y }));
+      const index = active.endpoint!;
+      const fixed = endpoints[1 - index];
+      endpoints[index] = {
+        x: Math.max(-100000, fixed.x - 10000, Math.min(100000, fixed.x + 10000, endpoints[index].x + dx)),
+        y: Math.max(-100000, fixed.y - 10000, Math.min(100000, fixed.y + 10000, endpoints[index].y + dy)),
+      };
+      preview(withLineEndpoints(original, endpoints[0], endpoints[1]));
     } else if (active.mode === 'resize') {
       const width = Math.max(1, Math.min(10000, original.width + dx));
       const height = Math.max(1, Math.min(10000, original.height + dy));
@@ -266,7 +279,12 @@ export function WhiteboardCanvas({ board, tool, onToolChange, onEditText, color,
             <rect width={item.width} height={item.height} rx={item.kind === 'sticky' ? 6 : 0} fill={item.kind === 'sticky' ? item.fill : 'transparent'} />
             <text fill={item.color} fontSize={item.fontSize} fontFamily="system-ui, sans-serif">{item.text.split('\n').flatMap(line => line.match(new RegExp(`.{1,${Math.max(1, Math.floor((item.width - 20) / (item.fontSize * .6)))}}`, 'g')) ?? ['']).map((line, index) => <tspan key={index} x="10" y={item.fontSize + 10 + index * item.fontSize * 1.3}>{line}</tspan>)}</text>
           </>}
-          {highlighted.includes(item.id) && <g data-selection="true"><rect x="-4" y="-4" width={item.width + 8} height={item.height + 8} fill="none" stroke="#0284c7" strokeWidth={1 / zoom} strokeDasharray={`${4 / zoom}`} pointerEvents="none" />{!disabled && !marquee && selected.length === 1 && <rect data-resize="true" x={item.width - 5 / zoom} y={item.height - 5 / zoom} width={10 / zoom} height={10 / zoom} fill="#0284c7" />}</g>}
+          {highlighted.includes(item.id) && <g data-selection="true">
+            <rect x="-4" y="-4" width={item.width + 8} height={item.height + 8} fill="none" stroke="#0284c7" strokeWidth={1 / zoom} strokeDasharray={`${4 / zoom}`} pointerEvents="none" />
+            {!disabled && !marquee && selected.length === 1 && (item.kind === 'line'
+              ? item.points.map((p, index) => <circle key={index} data-endpoint={index} aria-label={`${index === 0 ? 'Start' : 'End'} endpoint`} cx={p.x} cy={p.y} r={6 / zoom} fill={index === 0 ? '#16a34a' : '#dc2626'} stroke="white" strokeWidth={1 / zoom} style={{ cursor: 'crosshair' }}><title>{index === 0 ? 'Start point' : 'End point'}</title></circle>)
+              : <rect data-resize="true" x={item.width - 5 / zoom} y={item.height - 5 / zoom} width={10 / zoom} height={10 / zoom} fill="#0284c7" />)}
+          </g>}
         </g>)}
         {marquee && <rect data-marquee="true" data-selection="true" {...marquee} fill="rgba(2,132,199,0.1)" stroke="#0284c7" strokeWidth={1 / zoom} strokeDasharray={`${4 / zoom}`} pointerEvents="none" />}
         {cursors.map(cursor => <g key={cursor.connectionId} transform={`translate(${cursor.x} ${cursor.y})`} pointerEvents="none" data-cursor="true"><path d="M0 0 L0 18 L5 13 L11 21 L14 19 L8 11 L16 10 Z" fill="#c026d3" /><text x="18" y="20" fill="#86198f" fontSize={12 / zoom}>{cursor.name}</text></g>)}

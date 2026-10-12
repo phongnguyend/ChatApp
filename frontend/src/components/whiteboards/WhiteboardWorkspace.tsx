@@ -3,8 +3,8 @@ import { HubConnectionBuilder, HubConnectionState } from '@microsoft/signalr';
 import { ArrowLeft, MousePointer2, Hand, Pencil, Square, Circle, Minus, Type, StickyNote, Eraser, ImagePlus, Undo2, Redo2, Copy, ClipboardPaste, Trash2, Share2, History, Download } from 'lucide-react';
 import { API_URL, getAccessToken } from '../../services/auth';
 import { BoardError, boardsApi } from '../../services/whiteboardsApi';
-import { mergeUpdate, newObject, orderedObjects, type Board, type BoardEdit, type BoardObject, type BoardUpdate, type Cursor, type Point } from './boardModel';
-import { BringToFront, SendToBack, ArrowUp, ArrowDown } from 'lucide-react';
+import { mergeUpdate, newObject, orderedObjects, withLineEndpoints, type Board, type BoardEdit, type BoardObject, type BoardUpdate, type Cursor, type Point } from './boardModel';
+import { BringToFront, SendToBack, ArrowUp, ArrowDown, ArrowLeftRight } from 'lucide-react';
 import { WhiteboardCanvas, type BoardTool } from './WhiteboardCanvas';
 
 const tools = [['select', 'Select', MousePointer2], ['pan', 'Pan', Hand], ['path', 'Pen', Pencil], ['rectangle', 'Rectangle', Square], ['ellipse', 'Ellipse', Circle], ['line', 'Line', Minus], ['text', 'Text', Type], ['sticky', 'Sticky note', StickyNote], ['eraser', 'Eraser', Eraser]] as const;
@@ -368,7 +368,14 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
           const data = new FormData(event.currentTarget);
           const width = Number(data.get('width'));
           const height = Number(data.get('height'));
-          commit([{ ...item, x: Number(data.get('x')), y: Number(data.get('y')), width, height, color: String(data.get('color')), fill: data.get('transparent') ? 'transparent' : String(data.get('fill')), text: String(data.get('text') ?? item.text), fontSize: Number(data.get('fontSize') ?? item.fontSize), points: item.points.map(p => ({ x: p.x * width / item.width, y: p.y * height / item.height })) }]);
+          try {
+            const positioned = item.kind === 'line'
+              ? withLineEndpoints(item, { x: Number(data.get('startX')), y: Number(data.get('startY')) }, { x: Number(data.get('endX')), y: Number(data.get('endY')) })
+              : { ...item, x: Number(data.get('x')), y: Number(data.get('y')), width, height, points: item.points.map(p => ({ x: p.x * width / item.width, y: p.y * height / item.height })) };
+            commit([{ ...positioned, color: String(data.get('color')), fill: data.get('transparent') ? 'transparent' : String(data.get('fill')), text: String(data.get('text') ?? item.text), fontSize: Number(data.get('fontSize') ?? item.fontSize) }]);
+          } catch (reason) {
+            report(reason);
+          }
         }}><h3>Object settings</h3><fieldset disabled={disabled}>
           <div role="group" aria-label="Object layer">
             <p>Layer order</p>
@@ -377,7 +384,16 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
             <button type="button" disabled={layerIndex <= 0} onClick={() => changeLayer('backward')}><ArrowDown size={16} /> Send backward</button>
             <button type="button" disabled={layerIndex <= 0} onClick={() => changeLayer('back')}><SendToBack size={16} /> Send to back</button>
           </div>
-          {([['x', 'Left'], ['y', 'Top'], ['width', 'Width'], ['height', 'Height']] as const).map(([key, label]) => <label key={key}>{label}<input aria-label={`Object ${label.toLowerCase()}`} name={key} type="number" step="any" min={key === 'x' || key === 'y' ? -100000 : 1} max={key === 'x' || key === 'y' ? 100000 : 10000} defaultValue={item[key]} required /></label>)}
+          {item.kind === 'line' ? <>
+            <p>Endpoint positions on the board</p>
+            {(['start', 'end'] as const).map((endpoint, index) => <div key={endpoint} className="whiteboard-field-row" role="group" aria-label={`${endpoint === 'start' ? 'Start' : 'End'} position`}>
+              <label>{endpoint === 'start' ? 'Start' : 'End'} Left<input name={`${endpoint}X`} type="number" step="any" min={-100000} max={100000} defaultValue={item.x + (item.points[index]?.x ?? 0)} required /></label>
+              <label>{endpoint === 'start' ? 'Start' : 'End'} Top<input name={`${endpoint}Y`} type="number" step="any" min={-100000} max={100000} defaultValue={item.y + (item.points[index]?.y ?? 0)} required /></label>
+            </div>)}
+            <button type="button" onClick={() => commit([{ ...item, points: [...item.points].reverse() }])}><ArrowLeftRight size={16} /> Swap start/end</button>
+          </> : <div className="whiteboard-field-row">
+            {([['x', 'Left'], ['y', 'Top'], ['width', 'Width'], ['height', 'Height']] as const).map(([key, label]) => <label key={key}>{label}<input aria-label={`Object ${label.toLowerCase()}`} name={key} type="number" step="any" min={key === 'x' || key === 'y' ? -100000 : 1} max={key === 'x' || key === 'y' ? 100000 : 10000} defaultValue={item[key]} required /></label>)}
+          </div>}
           <label>Color<input name="color" type="color" defaultValue={item.color} /></label><label>Fill<input name="fill" type="color" defaultValue={item.fill === 'transparent' ? '#ffffff' : item.fill} /></label><label><input name="transparent" type="checkbox" defaultChecked={item.fill === 'transparent'} /> No fill</label>
           {['text', 'sticky'].includes(item.kind) && <><label>Text<textarea ref={textEditor} name="text" defaultValue={item.text} maxLength={4000} /></label><label>Font size<input name="fontSize" type="number" min={8} max={200} defaultValue={item.fontSize} /></label></>}
           <button type="submit">Apply settings</button></fieldset></form>}

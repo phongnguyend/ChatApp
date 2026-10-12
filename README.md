@@ -2,6 +2,8 @@
 
 ## Whiteboards
 
+For lines, **Object settings** provides **Start Left/Top** and **End Left/Top** in board coordinates. Apply settings to position either endpoint; line bounds are calculated automatically, and endpoint edits support undo/redo. You can also drag either circular endpoint handle across the other endpoint to turn the line in any direction. The start handle is green and the end handle is red, with tooltips identifying each point.
+
 With the whiteboard focused, **Ctrl/Command+Z** undoes your last action; **Ctrl/Command+Shift+Z** or **Ctrl+Y** redoes it. These shortcuts keep the browser's native text undo/redo when a settings input is focused.
 
 Drag from empty canvas space in Select mode to draw a selection box. Objects intersecting the box are selected when you release the mouse. Hold Ctrl/Command while dragging to add them to the existing selection; dragging an already selected object moves the selected group instead.

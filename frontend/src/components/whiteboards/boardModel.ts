@@ -10,6 +10,19 @@ export type BoardSummary = Pick<Board, 'id' | 'title' | 'revision' | 'updatedAt'
 export type BoardEdit = { expectedVersion: number; object: BoardObject };
 export type BoardUpdate = { boardId: string; revision: number; objects: BoardObject[]; full: boolean };
 export type Cursor = Point & { boardId: string; connectionId: string; name: string; seen: number };
+export function withLineEndpoints(item: BoardObject, start: Point, end: Point): BoardObject {
+  if (![start.x, start.y, end.x, end.y].every(value => Number.isFinite(value) && Math.abs(value) <= 100000)) {
+    throw new Error('Line endpoint positions must be between -100,000 and 100,000.');
+  }
+  const width = Math.max(1, Math.abs(end.x - start.x));
+  const height = Math.max(1, Math.abs(end.y - start.y));
+  if (width > 10000 || height > 10000) {
+    throw new Error('Line endpoints must be no more than 10,000 units apart on either axis.');
+  }
+  const x = Math.min(start.x, end.x);
+  const y = Math.min(start.y, end.y);
+  return { ...item, x, y, width, height, points: [{ x: start.x - x, y: start.y - y }, { x: end.x - x, y: end.y - y }] };
+}
 export function orderedObjects(objects: BoardObject[]): BoardObject[] {
   return objects.map((object, index) => ({ ...object, z: object.z ?? index }))
     .filter(object => !object.deleted)
