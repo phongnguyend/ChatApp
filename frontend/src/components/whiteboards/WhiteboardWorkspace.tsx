@@ -4,7 +4,7 @@ import { ArrowLeft, MousePointer2, Hand, Pencil, Square, Circle, Minus, Type, St
 import { API_URL, getAccessToken } from '../../services/auth';
 import { BoardError, boardsApi } from '../../services/whiteboardsApi';
 import { mergeUpdate, newObject, orderedObjects, withLineEndpoints, type Board, type BoardEdit, type BoardObject, type BoardUpdate, type Cursor, type Point } from './boardModel';
-import { BringToFront, SendToBack, ArrowUp, ArrowDown, ArrowLeftRight } from 'lucide-react';
+import { BringToFront, SendToBack, ArrowUp, ArrowDown, ArrowLeftRight, Lock, LockOpen } from 'lucide-react';
 import { WhiteboardCanvas, type BoardTool } from './WhiteboardCanvas';
 
 const tools = [['select', 'Select', MousePointer2], ['pan', 'Pan', Hand], ['path', 'Pen', Pencil], ['rectangle', 'Rectangle', Square], ['ellipse', 'Ellipse', Circle], ['line', 'Line', Minus], ['text', 'Text', Type], ['sticky', 'Sticky note', StickyNote], ['eraser', 'Eraser', Eraser]] as const;
@@ -26,6 +26,10 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
   const [uploading, setUploading] = useState(false);
   const busyRef = useRef(false);
   const [pending, setPending] = useState<Pending | null>(null);
+  const [moveDraft, setMoveDraft] = useState<BoardObject[] | null>(null);
+  const movement = useRef<{ before: BoardObject[]; objects: BoardObject[] } | null>(null);
+  const moveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const heldArrows = useRef(new Set<string>());
   const [online, setOnline] = useState(false);
   const [cursors, setCursors] = useState<Cursor[]>([]);
   const [panel, setPanel] = useState<'share' | 'history' | null>(null);
@@ -55,13 +59,18 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
     setError(reason instanceof Error ? reason.message : 'Unable to update the whiteboard.');
   }
   useEffect(() => {
-    if (!pending && !uploading) {
+    if (!pending && !uploading && !moveDraft) {
       return;
     }
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
-  }, [pending, uploading]);
+  }, [pending, uploading, moveDraft]);
+  useEffect(() => () => {
+    if (moveTimer.current) {
+      clearTimeout(moveTimer.current);
+    }
+  }, []);
   useEffect(() => {
     let stopped = false;
     const connection = new HubConnectionBuilder().withUrl(`${API_URL}/hubs/whiteboards`, { accessTokenFactory: () => getAccessToken() ?? '' }).withAutomaticReconnect().build();
@@ -191,7 +200,30 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
       commit(edits.map(x => x.object), mode, edits);
     }
   }
+  function flushMovement() {
+    if (moveTimer.current) {
+      clearTimeout(moveTimer.current);
+      moveTimer.current = null;
+    }
+    heldArrows.current.clear();
+    const change = movement.current;
+    movement.current = null;
+    setMoveDraft(null);
+    if (change && current.current.canEdit && change.objects.some((object, index) => object.x !== change.before[index].x || object.y !== change.before[index].y)) {
+      void send({ operationId: crypto.randomUUID(), edits: change.objects.map(object => ({ expectedVersion: object.version, object })), before: change.before, mode: 'edit' });
+    }
+  }
+  useEffect(() => {
+    const blur = () => {
+      if (movement.current) {
+        flushMovement();
+      }
+    };
+    window.addEventListener('blur', blur);
+    return () => window.removeEventListener('blur', blur);
+  });
   const selectedItems = orderedObjects(board.objects).filter(object => selected.includes(object.id));
+  const movableItems = selectedItems.filter(object => !object.locked);
   const item = selectedItems.length === 1 ? selectedItems[0] : undefined;
   const layers = orderedObjects(board.objects);
   const layerIndex = layers.findIndex(object => object.id === item?.id);
@@ -210,8 +242,9 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
     }
     commit([{ ...item, z }]);
   }
-  const disabled = !board.canEdit || busy || uploading || !!pending;
-  const displayedBoard = pending ? { ...board, objects: [...board.objects.filter(object => !pending.edits.some(edit => edit.object.id === object.id)), ...pending.edits.map(edit => edit.object)] } : board;
+  const disabled = !board.canEdit || busy || uploading || !!pending || !!moveDraft;
+  const previewObjects = moveDraft ?? pending?.edits.map(edit => edit.object);
+  const displayedBoard = previewObjects ? { ...board, objects: [...board.objects.filter(object => !previewObjects.some(preview => preview.id === object.id)), ...previewObjects] } : board;
   async function addImage(file: File) {
     if (disabled) {
       return;
@@ -284,7 +317,15 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
       report(reason);
     }
   }
-  return <section className="whiteboard-workspace" onKeyDown={event => {
+  return <section className="whiteboard-workspace" onBlur={() => {
+    if (movement.current) {
+      flushMovement();
+    }
+  }} onKeyUp={event => {
+    if (heldArrows.current.delete(event.key) && heldArrows.current.size === 0) {
+      moveTimer.current = setTimeout(flushMovement, 300);
+    }
+  }} onKeyDown={event => {
     const target = event.target as Element;
     if (event.defaultPrevented || event.nativeEvent.isComposing || event.altKey || target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) {
       return;
@@ -299,6 +340,27 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
       if (!event.repeat && !disabled) {
         travel(event.key.toLowerCase() === 'y' || event.shiftKey ? 'redo' : 'undo');
       }
+    } else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) && !event.ctrlKey && !event.metaKey) {
+      event.preventDefault();
+      if (board.canEdit && !busyRef.current && !uploading && !pending && movableItems.length > 0) {
+        if (moveTimer.current) {
+          clearTimeout(moveTimer.current);
+          moveTimer.current = null;
+        }
+        heldArrows.current.add(event.key);
+        const objects = movement.current?.objects ?? movableItems;
+        const step = event.shiftKey ? 10 : 1;
+        const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0;
+        const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0;
+        // Clamp the group together so objects keep their relative positions at the board limits.
+        const boundedX = Math.max(...objects.map(object => -100000 - object.x), Math.min(dx, ...objects.map(object => 100000 - object.x)));
+        const boundedY = Math.max(...objects.map(object => -100000 - object.y), Math.min(dy, ...objects.map(object => 100000 - object.y)));
+        if (boundedX !== 0 || boundedY !== 0) {
+          const moved = objects.map(object => ({ ...object, x: object.x + boundedX, y: object.y + boundedY }));
+          movement.current = { before: movement.current?.before ?? movableItems, objects: moved };
+          setMoveDraft(moved);
+        }
+      }
     } else if (event.key === 'Delete' && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
       event.preventDefault();
       if (!event.repeat && !disabled && selectedItems.length > 0) {
@@ -306,7 +368,7 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
       }
     }
   }}>
-    <header><button onClick={onBack} disabled={!!pending || busy || uploading}><ArrowLeft size={18} /> Boards</button><h2>{board.title}</h2><span role="status">{uploading ? 'Uploading…' : busy ? 'Saving…' : pending ? 'Not saved' : `Saved · ${online ? 'Live' : 'Reconnecting…'}`}{!board.canEdit && ' · View only'}</span>
+    <header><button onClick={onBack} disabled={!!pending || busy || uploading || !!moveDraft}><ArrowLeft size={18} /> Boards</button><h2>{board.title}</h2><span role="status">{uploading ? 'Uploading…' : moveDraft ? 'Moving…' : busy ? 'Saving…' : pending ? 'Not saved' : `Saved · ${online ? 'Live' : 'Reconnecting…'}`}{!board.canEdit && ' · View only'}</span>
       {board.isOwner && <button onClick={() => {
         const title = window.prompt('Board title', board.title);
         if (title?.trim()) {
@@ -337,6 +399,8 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
         setSelected(objects.map(object => object.id));
       }}><ClipboardPaste size={18} /></button>
       <button aria-label="Delete object" title="Delete selected objects" disabled={disabled || !selectedItems.length} onClick={() => commit(selectedItems.map(object => ({ ...object, deleted: true })))}><Trash2 size={18} /></button>
+      <button aria-label="Lock selected objects" title="Lock selected objects" disabled={disabled || !movableItems.length} onClick={() => commit(movableItems.map(object => ({ ...object, locked: true })))}><Lock size={18} /></button>
+      <button aria-label="Unlock selected objects" title="Unlock selected objects" disabled={disabled || !selectedItems.some(object => object.locked)} onClick={() => commit(selectedItems.filter(object => object.locked).map(object => ({ ...object, locked: false })))}><LockOpen size={18} /></button>
       <button aria-label="Zoom out" onClick={() => setZoom(Math.max(.2, zoom / 1.2))}>−</button><button title="Reset zoom" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button><button aria-label="Zoom in" onClick={() => setZoom(Math.min(4, zoom * 1.2))}>+</button>
     </div>
     <div className="whiteboard-body">
@@ -376,7 +440,7 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
           } catch (reason) {
             report(reason);
           }
-        }}><h3>Object settings</h3><fieldset disabled={disabled}>
+        }}><h3>Object settings</h3>{item.locked && <p>Locked. Unlock this object in the toolbar to move or edit it.</p>}<fieldset disabled={disabled || item.locked}>
           <div role="group" aria-label="Object layer">
             <p>Layer order</p>
             <button type="button" disabled={layerIndex === layers.length - 1} onClick={() => changeLayer('front')}><BringToFront size={16} /> Bring to front</button>
@@ -399,6 +463,6 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
           <button type="submit">Apply settings</button></fieldset></form>}
       </aside>}
     </div>
-    <footer>Ctrl/Command+A selects all · Delete removes selection · Drag empty space to box-select · Ctrl/Command-click adds to selection</footer>
+    <footer>Arrow keys move selection · Shift+Arrow moves 10 units · Ctrl/Command+A selects all · Delete removes selection</footer>
   </section>;
 }

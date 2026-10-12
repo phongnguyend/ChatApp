@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
+import { Lock } from 'lucide-react';
 import { API_URL, authFetch } from '../../services/auth';
 import { newObject, orderedObjects, withLineEndpoints, type Board, type BoardObject, type Cursor, type Point } from './boardModel';
 
@@ -84,8 +85,8 @@ export function WhiteboardCanvas({ board, tool, onToolChange, onEditText, color,
       }
       const ids = item ? selected.includes(item.id) ? selected : [item.id] : [];
       onSelect(ids);
-      if (item && !disabled) {
-        gesture.current = { start, screen: start, pan, original: item, originals: board.objects.filter(object => ids.includes(object.id) && !object.deleted), mode: target.getAttribute('data-resize') && ids.length === 1 ? 'resize' : 'move' };
+      if (item && !disabled && !item.locked) {
+        gesture.current = { start, screen: start, pan, original: item, originals: board.objects.filter(object => ids.includes(object.id) && !object.deleted && !object.locked), mode: target.getAttribute('data-resize') && ids.length === 1 ? 'resize' : 'move' };
         if (item.kind === 'line' && ids.length === 1 && target.hasAttribute('data-endpoint')) {
           gesture.current.mode = 'endpoint';
           gesture.current.endpoint = Number(target.getAttribute('data-endpoint'));
@@ -264,7 +265,7 @@ export function WhiteboardCanvas({ board, tool, onToolChange, onEditText, color,
       <defs><pattern id="board-grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#cbd5e1" /></pattern></defs>
       <rect width="100%" height="100%" fill="url(#board-grid)" />
       <g transform={`translate(${pan.x} ${pan.y}) scale(${zoom})`}>
-        {objects.map(item => <g key={item.id} data-object-id={item.id} transform={`translate(${item.x} ${item.y})`}>
+        {objects.map(item => <g key={item.id} data-object-id={item.id} transform={`translate(${item.x} ${item.y})`} style={{ cursor: tool === 'select' ? !disabled && !item.locked ? 'move' : 'default' : undefined }}>
           {item.kind === 'path' && <rect data-hit-target="true" x={-6 / zoom} y={-6 / zoom} width={item.width + 12 / zoom} height={item.height + 12 / zoom} fill="transparent" pointerEvents={tool === 'select' ? 'all' : 'none'} />}
           {item.kind === 'rectangle' && <rect width={item.width} height={item.height} fill={item.fill} stroke={item.color} strokeWidth={item.strokeWidth} />}
           {item.kind === 'ellipse' && <ellipse cx={item.width / 2} cy={item.height / 2} rx={item.width / 2} ry={item.height / 2} fill={item.fill} stroke={item.color} strokeWidth={item.strokeWidth} />}
@@ -280,8 +281,13 @@ export function WhiteboardCanvas({ board, tool, onToolChange, onEditText, color,
             <text fill={item.color} fontSize={item.fontSize} fontFamily="system-ui, sans-serif">{item.text.split('\n').flatMap(line => line.match(new RegExp(`.{1,${Math.max(1, Math.floor((item.width - 20) / (item.fontSize * .6)))}}`, 'g')) ?? ['']).map((line, index) => <tspan key={index} x="10" y={item.fontSize + 10 + index * item.fontSize * 1.3}>{line}</tspan>)}</text>
           </>}
           {highlighted.includes(item.id) && <g data-selection="true">
-            <rect x="-4" y="-4" width={item.width + 8} height={item.height + 8} fill="none" stroke="#0284c7" strokeWidth={1 / zoom} strokeDasharray={`${4 / zoom}`} pointerEvents="none" />
-            {!disabled && !marquee && selected.length === 1 && (item.kind === 'line'
+            <rect x="-4" y="-4" width={item.width + 8} height={item.height + 8} fill="none" stroke={item.locked ? '#d97706' : '#0284c7'} strokeWidth={(item.locked ? 2 : 1) / zoom} strokeDasharray={item.locked ? undefined : `${4 / zoom}`} pointerEvents="none" />
+            {item.locked && <g role="img" aria-label="Locked object" transform={`translate(${item.width - 20 / zoom} 0) scale(${1 / zoom})`} pointerEvents="none">
+              <title>Locked object</title>
+              <rect width="24" height="24" rx="5" fill="#fffbeb" stroke="#d97706" />
+              <Lock x={4} y={4} width={16} height={16} color="#92400e" />
+            </g>}
+            {!disabled && !item.locked && !marquee && selected.length === 1 && (item.kind === 'line'
               ? item.points.map((p, index) => <circle key={index} data-endpoint={index} aria-label={`${index === 0 ? 'Start' : 'End'} endpoint`} cx={p.x} cy={p.y} r={6 / zoom} fill={index === 0 ? '#16a34a' : '#dc2626'} stroke="white" strokeWidth={1 / zoom} style={{ cursor: 'crosshair' }}><title>{index === 0 ? 'Start point' : 'End point'}</title></circle>)
               : <rect data-resize="true" x={item.width - 5 / zoom} y={item.height - 5 / zoom} width={10 / zoom} height={10 / zoom} fill="#0284c7" />)}
           </g>}

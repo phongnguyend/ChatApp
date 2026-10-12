@@ -3,7 +3,7 @@ export type BoardObject = {
   id: string; kind: 'path' | 'rectangle' | 'ellipse' | 'line' | 'text' | 'sticky' | 'image';
   x: number; y: number; width: number; height: number; color: string; fill: string;
   strokeWidth: number; text: string; fontSize: number; points: Point[]; imageId?: string | null;
-  version: number; deleted: boolean; z?: number | null;
+  version: number; deleted: boolean; locked?: boolean; z?: number | null;
 };
 export type Board = { id: string; title: string; revision: number; updatedAt: string; createdById: string; isOwner: boolean; canEdit: boolean; objects: BoardObject[] };
 export type BoardSummary = Pick<Board, 'id' | 'title' | 'revision' | 'updatedAt' | 'isOwner'>;

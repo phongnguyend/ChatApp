@@ -2,9 +2,15 @@
 
 ## Whiteboards
 
+Use **Lock selected objects** and **Unlock selected objects** in the toolbar to protect object positions. Locked objects remain selectable but cannot be dragged, resized, moved with arrow keys, or edited in settings. Group movement skips locked objects. Unlocked objects show a four-way move cursor in Select mode. Locks are saved with the board, shared with collaborators, and support undo/redo.
+
 For lines, **Object settings** provides **Start Left/Top** and **End Left/Top** in board coordinates. Apply settings to position either endpoint; line bounds are calculated automatically, and endpoint edits support undo/redo. You can also drag either circular endpoint handle across the other endpoint to turn the line in any direction. The start handle is green and the end handle is red, with tooltips identifying each point.
 
 With the whiteboard focused, **Ctrl/Command+Z** undoes your last action; **Ctrl/Command+Shift+Z** or **Ctrl+Y** redoes it. These shortcuts keep the browser's native text undo/redo when a settings input is focused.
+
+**Arrow keys** move selected objects by one board unit; **Shift+Arrow** moves them by ten units, independent of zoom. All selected objects move together, with undo/redo support. These shortcuts leave settings inputs unchanged and are disabled for viewers and while saving.
+
+Repeated arrow-key movement previews immediately without saving each step. After you release the keys and pause for 300 ms, the movement saves as one revision and one undo action. Moving back to the original position creates no history entry. Mouse dragging saves once on release.
 
 Drag from empty canvas space in Select mode to draw a selection box. Objects intersecting the box are selected when you release the mouse. Hold Ctrl/Command while dragging to add them to the existing selection; dragging an already selected object moves the selected group instead.
 

@@ -4,6 +4,96 @@ import { readFile } from 'node:fs/promises';
 import { apiUrl, createUser, headersFor, login } from './helpers.js';
 import { newObject, type Board, type BoardUpdate } from '../../frontend/src/components/whiteboards/boardModel.js';
 
+test('Locked objects stay fixed during group movement and can be unlocked', async ({ page, request }) => {
+  const owner = await createUser(request, 'boardlock');
+  const headers = headersFor(owner.username);
+  const board = await (await request.post(`${apiUrl}/api/whiteboards/`, { headers })).json() as Board;
+  const base = `${apiUrl}/api/whiteboards/${board.id}`;
+  const objects = [100, 400].map(x => newObject('rectangle', { x, y: 100 }, '#112233', '#ffffff', 3));
+  await request.post(`${base}/commands`, { headers, data: { operationId: randomUUID(), edits: objects.map(object => ({ expectedVersion: 0, object })) } });
+  await login(page, owner.username);
+  await page.goto(`/?whiteboard=${board.id}`);
+  const canvas = page.getByRole('application', { name: 'Whiteboard canvas' });
+  const locked = canvas.locator(`[data-object-id="${objects[0].id}"]`);
+  try {
+    await canvas.click({ position: { x: 120, y: 120 } });
+    await expect(locked).toHaveCSS('cursor', 'move');
+    await page.getByRole('button', { name: 'Lock selected objects', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Unlock selected objects', exact: true })).toBeEnabled();
+    await expect(locked).toHaveCSS('cursor', 'default');
+    await expect(locked.locator('[data-resize]')).toHaveCount(0);
+    expect((await (await request.get(base, { headers })).json() as Board).objects[0].locked).toBe(true);
+    const bounds = (await canvas.boundingBox())!;
+    await page.mouse.move(bounds.x + 120, bounds.y + 120);
+    await page.mouse.down();
+    await page.mouse.move(bounds.x + 170, bounds.y + 170, { steps: 5 });
+    await page.mouse.up();
+    await expect(locked).toHaveAttribute('transform', 'translate(100 100)');
+    await canvas.press('Control+a');
+    await canvas.press('ArrowRight');
+    await expect(page.getByRole('button', { name: 'Unlock selected objects', exact: true })).toBeEnabled();
+    await expect(locked).toHaveAttribute('transform', 'translate(100 100)');
+    await expect(canvas.locator(`[data-object-id="${objects[1].id}"]`)).toHaveAttribute('transform', 'translate(401 100)');
+    await page.getByRole('button', { name: 'Unlock selected objects', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Lock selected objects', exact: true })).toBeEnabled();
+    await expect(locked).toHaveCSS('cursor', 'move');
+    await canvas.press('ArrowRight');
+    await expect(locked).toHaveAttribute('transform', 'translate(101 100)');
+    await expect(page.getByRole('button', { name: 'Undo', exact: true })).toBeEnabled();
+    await canvas.press('Control+z');
+    await expect(locked).toHaveAttribute('transform', 'translate(100 100)');
+    await expect(page.getByRole('button', { name: 'Undo', exact: true })).toBeEnabled();
+    await canvas.press('Control+z');
+    await expect(page.getByRole('button', { name: 'Unlock selected objects', exact: true })).toBeEnabled();
+    expect((await (await request.get(base, { headers })).json() as Board).objects[0].locked).toBe(true);
+  } finally {
+    await request.delete(base, { headers });
+  }
+});
+
+test('Held arrow movement previews immediately and saves one undoable revision after release', async ({ page, request }) => {
+  const owner = await createUser(request, 'boardnudge');
+  const headers = headersFor(owner.username);
+  const board = await (await request.post(`${apiUrl}/api/whiteboards/`, { headers })).json() as Board;
+  const base = `${apiUrl}/api/whiteboards/${board.id}`;
+  const rectangle = newObject('rectangle', { x: 100, y: 100 }, '#112233', '#ffffff', 3);
+  await request.post(`${base}/commands`, { headers, data: { operationId: randomUUID(), edits: [{ expectedVersion: 0, object: rectangle }] } });
+  await login(page, owner.username);
+  await page.goto(`/?whiteboard=${board.id}`);
+  const canvas = page.getByRole('application', { name: 'Whiteboard canvas' });
+  let commands = 0;
+  page.on('request', request => {
+    if (request.url().endsWith('/commands') && request.method() === 'POST') {
+      commands++;
+    }
+  });
+  try {
+    await canvas.click({ position: { x: 120, y: 120 } });
+    await page.keyboard.down('ArrowRight');
+    await expect(canvas.locator(`[data-object-id="${rectangle.id}"]`)).toHaveAttribute('transform', 'translate(101 100)');
+    // Holding a key beyond the debounce period must not create a revision.
+    await page.waitForTimeout(650);
+    for (let index = 0; index < 9; index++) {
+      await page.keyboard.down('ArrowRight');
+    }
+    await expect(canvas.locator(`[data-object-id="${rectangle.id}"]`)).toHaveAttribute('transform', 'translate(110 100)');
+    expect(commands).toBe(0);
+    await page.keyboard.up('ArrowRight');
+    await expect(page.getByRole('button', { name: 'Undo', exact: true })).toBeEnabled();
+    expect(commands).toBe(1);
+    const stored = await (await request.get(base, { headers })).json() as Board;
+    expect(stored.revision).toBe(2);
+    expect(stored.objects[0].x).toBe(110);
+    await canvas.press('Control+z');
+    await expect(page.getByLabel('Object left', { exact: true })).toHaveValue('100');
+    await expect(page.getByRole('button', { name: 'Redo', exact: true })).toBeEnabled();
+    await canvas.press('Control+y');
+    await expect(page.getByLabel('Object left', { exact: true })).toHaveValue('110');
+  } finally {
+    await request.delete(base, { headers });
+  }
+});
+
 test('Line handles can cross both axes and preserve endpoints through undo', async ({ page, request }) => {
   const owner = await createUser(request, 'boardrotate');
   const headers = headersFor(owner.username);
@@ -131,6 +221,20 @@ test('Whiteboard keyboard shortcuts support whole boards without interfering wit
     await canvas.focus();
     await canvas.press('Control+a');
     await expect(canvas.locator('[data-selection]')).toHaveCount(101);
+    for (const [shortcut, dx, dy] of [['ArrowRight', 1, 0], ['Shift+ArrowUp', 1, -10], ['ArrowLeft', 0, -10], ['Shift+ArrowDown', 0, 0]] as const) {
+      await expect(page.getByRole('button', { name: 'Delete object', exact: true })).toBeEnabled();
+      const saved = page.waitForResponse(response => response.url().endsWith('/commands') && response.request().method() === 'POST');
+      await canvas.press(shortcut);
+      const response = await saved;
+      expect(response.ok(), await response.text()).toBeTruthy();
+      const moved = (await response.json() as BoardUpdate).objects;
+      expect(moved).toHaveLength(objects.length);
+      for (const original of objects) {
+        const object = moved.find(object => object.id === original.id)!;
+        expect([object.x, object.y]).toEqual([original.x + dx, original.y + dy]);
+      }
+    }
+    await expect(page.getByRole('button', { name: 'Delete object', exact: true })).toBeEnabled();
     await canvas.press('Delete');
     await expect(canvas.locator('[data-object-id]')).toHaveCount(0);
     for (const [shortcut, action, count] of [

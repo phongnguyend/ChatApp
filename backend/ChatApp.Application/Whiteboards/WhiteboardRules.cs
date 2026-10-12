@@ -38,6 +38,8 @@ public sealed record BoardObject
     public int Version { get; init; }
 
     public bool Deleted { get; init; }
+
+    public bool Locked { get; init; }
 }
 
 public sealed record BoardEdit(int ExpectedVersion, BoardObject Object);
