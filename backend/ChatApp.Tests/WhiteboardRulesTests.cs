@@ -6,6 +6,17 @@ namespace ChatApp.Tests;
 public sealed class WhiteboardRulesTests
 {
     [Fact]
+    public void EntireBoardCanBeDeletedAndRestoredInOneCommand()
+    {
+        var objects = Enumerable.Range(0, 2000).Select(_ => Shape() with { Version = 1 }).ToArray();
+        var deleted = WhiteboardRules.Apply(objects, new(Guid.NewGuid(), objects.Select(item => new BoardEdit(1, item with { Deleted = true })).ToArray()), 2);
+        Assert.All(deleted, item => Assert.True(item.Deleted));
+        var restored = WhiteboardRules.Apply(deleted, new(Guid.NewGuid(), objects.Select(item => new BoardEdit(2, item)).ToArray()), 3);
+        Assert.All(restored, item => Assert.False(item.Deleted));
+        Assert.Throws<ArgumentException>(() => WhiteboardRules.Apply([], new(Guid.NewGuid(), Enumerable.Range(0, 2001).Select(_ => new BoardEdit(0, Shape())).ToArray()), 1));
+    }
+
+    [Fact]
     public void ReadsLegacyLayerOrderAndWritesOnlyZ()
     {
         var objects = WhiteboardRules.ReadDocument("""[{"zIndex":7},{"z":2,"zIndex":9},{}]""");

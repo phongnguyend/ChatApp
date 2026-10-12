@@ -284,7 +284,28 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
       report(reason);
     }
   }
-  return <section className="whiteboard-workspace">
+  return <section className="whiteboard-workspace" onKeyDown={event => {
+    const target = event.target as Element;
+    if (event.defaultPrevented || event.nativeEvent.isComposing || event.altKey || target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) {
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
+      event.preventDefault();
+      setSelected(displayedBoard.objects.filter(object => !object.deleted).map(object => object.id));
+      setPanel(null);
+      setTool('select');
+    } else if ((event.ctrlKey || event.metaKey) && (event.key.toLowerCase() === 'z' || (event.key.toLowerCase() === 'y' && !event.shiftKey))) {
+      event.preventDefault();
+      if (!event.repeat && !disabled) {
+        travel(event.key.toLowerCase() === 'y' || event.shiftKey ? 'redo' : 'undo');
+      }
+    } else if (event.key === 'Delete' && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+      event.preventDefault();
+      if (!event.repeat && !disabled && selectedItems.length > 0) {
+        commit(selectedItems.map(object => ({ ...object, deleted: true })));
+      }
+    }
+  }}>
     <header><button onClick={onBack} disabled={!!pending || busy || uploading}><ArrowLeft size={18} /> Boards</button><h2>{board.title}</h2><span role="status">{uploading ? 'Uploading…' : busy ? 'Saving…' : pending ? 'Not saved' : `Saved · ${online ? 'Live' : 'Reconnecting…'}`}{!board.canEdit && ' · View only'}</span>
       {board.isOwner && <button onClick={() => {
         const title = window.prompt('Board title', board.title);
@@ -307,8 +328,8 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
       <label>Fill <input type="color" aria-label="Fill color" value={fill === 'transparent' ? '#ffffff' : fill} onChange={e => setFill(e.target.value)} /></label>
       <label><input type="checkbox" checked={fill === 'transparent'} onChange={e => setFill(e.target.checked ? 'transparent' : '#ffffff')} /> No fill</label>
       <label>Stroke <input type="number" aria-label="Stroke width" min="1" max="40" value={strokeWidth} onChange={e => setStrokeWidth(Math.max(1, Math.min(40, Number(e.target.value))))} /></label>
-      <button aria-label="Undo" title="Undo" disabled={disabled || !undo.current.length} onClick={() => travel('undo')}><Undo2 size={18} /></button>
-      <button aria-label="Redo" title="Redo" disabled={disabled || !redo.current.length} onClick={() => travel('redo')}><Redo2 size={18} /></button>
+      <button aria-label="Undo" title="Undo (Ctrl/Command+Z)" disabled={disabled || !undo.current.length} onClick={() => travel('undo')}><Undo2 size={18} /></button>
+      <button aria-label="Redo" title="Redo (Ctrl/Command+Shift+Z or Ctrl+Y)" disabled={disabled || !redo.current.length} onClick={() => travel('redo')}><Redo2 size={18} /></button>
       <button aria-label="Copy object" title="Copy selected objects" disabled={!selectedItems.length} onClick={() => { clipboard.current = selectedItems; setCopied(true); }}><Copy size={18} /></button>
       <button aria-label="Paste object" title="Paste copied objects" disabled={disabled || !copied} onClick={() => {
         const objects = clipboard.current.map(source => ({ ...source, id: crypto.randomUUID(), version: 0, x: source.x + 24, y: source.y + 24 }));
@@ -324,10 +345,6 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
         setPanel(null);
         requestAnimationFrame(() => textEditor.current?.focus());
       }} color={color} fill={fill} strokeWidth={strokeWidth} selected={selected.filter(id => displayedBoard.objects.some(object => object.id === id && !object.deleted))} onSelect={ids => {
-        if (ids.length > 100) {
-          setError('Select up to 100 objects at a time.');
-          return;
-        }
         setSelected(ids);
         setPanel(null);
       }} onCommit={commit} disabled={disabled} onCursor={point => cursorSender.current(point)} cursors={cursors} onImage={file => void addImage(file)} zoom={zoom} setZoom={setZoom} svgRef={svgRef} />
@@ -366,6 +383,6 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
           <button type="submit">Apply settings</button></fieldset></form>}
       </aside>}
     </div>
-    <footer>Drag empty space to box-select · Ctrl/Command adds to selection · Drag objects to move · Double-click text to edit · Scroll to pan</footer>
+    <footer>Ctrl/Command+A selects all · Delete removes selection · Drag empty space to box-select · Ctrl/Command-click adds to selection</footer>
   </section>;
 }

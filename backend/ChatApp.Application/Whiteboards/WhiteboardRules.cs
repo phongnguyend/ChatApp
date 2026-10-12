@@ -82,10 +82,10 @@ public static partial class WhiteboardRules
 
     public static BoardObject[] Apply(BoardObject[] current, BoardCommand command, int revision)
     {
-        if (command.OperationId == Guid.Empty || command.Edits is null || command.Edits.Length is < 1 or > 100 ||
+        if (command.OperationId == Guid.Empty || command.Edits is null || command.Edits.Length is < 1 or > 2000 ||
             command.Edits.Any(x => x is null || !Valid(x.Object)) || command.Edits.Select(x => x.Object.Id).Distinct().Count() != command.Edits.Length)
         {
-            throw new ArgumentException("Invalid board command. Use up to 100 valid objects per edit.");
+            throw new ArgumentException("Invalid board command. Use up to 2,000 valid objects per edit.");
         }
         var objects = current.Select((item, index) => item with { Z = item.Z ?? index }).ToDictionary(x => x.Id);
         foreach (var edit in command.Edits)

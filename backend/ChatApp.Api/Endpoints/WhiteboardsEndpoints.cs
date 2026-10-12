@@ -52,7 +52,7 @@ public static partial class WhiteboardsEndpoints
         group.MapGet("/{id:guid}", async (Guid id, ClaimsPrincipal user, WhiteboardService boards, CancellationToken ct) => Results.Ok(await boards.Detail(id, WhiteboardService.UserId(user), ct)));
 
         group.MapPost("/{id:guid}/commands", async (Guid id, BoardCommand command, ClaimsPrincipal user, WhiteboardService boards, CancellationToken ct) => Results.Ok(await boards.Apply(id, WhiteboardService.UserId(user), command, ct)))
-            .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(2100000));
+            .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(3000000));
 
         group.MapPut("/{id:guid}", async (Guid id, Rename request, ClaimsPrincipal user, ChatAppDbContext db, WhiteboardService boards, CancellationToken ct) =>
         {

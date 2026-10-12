@@ -4,6 +4,113 @@ import { readFile } from 'node:fs/promises';
 import { apiUrl, createUser, headersFor, login } from './helpers.js';
 import { newObject, type Board, type BoardUpdate } from '../../frontend/src/components/whiteboards/boardModel.js';
 
+test('Whiteboard keyboard shortcuts support whole boards without interfering with text editing or viewers', async ({ page, browser, request }) => {
+  const owner = await createUser(request, 'boardkeys');
+  const viewer = await createUser(request, 'boardkeyviewer');
+  const headers = headersFor(owner.username);
+  const board = await (await request.post(`${apiUrl}/api/whiteboards/`, { headers })).json() as Board;
+  const base = `${apiUrl}/api/whiteboards/${board.id}`;
+  const note = { ...newObject('sticky', { x: 30, y: 30 }, '#112233', '#ffffff', 3), text: 'Keep this note' };
+  const objects = [note, ...Array.from({ length: 100 }, (_, index) => newObject('rectangle', { x: 400 + index * 5, y: 200 }, '#112233', '#ffffff', 3))];
+  const saved = await request.post(`${base}/commands`, { headers, data: { operationId: randomUUID(), edits: objects.map(object => ({ expectedVersion: 0, object })) } });
+  expect(saved.ok(), await saved.text()).toBeTruthy();
+  await request.post(`${base}/members`, { headers, data: { username: viewer.username, canEdit: false } });
+  await login(page, owner.username);
+  await page.goto(`/?whiteboard=${board.id}`);
+  const canvas = page.getByRole('application', { name: 'Whiteboard canvas' });
+  const viewerPage = await browser.newPage();
+  try {
+    await expect(canvas).toBeVisible();
+    await canvas.click({ position: { x: 70, y: 70 } });
+    const text = page.getByRole('textbox', { name: 'Text', exact: true });
+    await text.fill('Edit me');
+    await text.press('Control+a');
+    await text.press('Delete');
+    await expect(text).toHaveValue('');
+    await expect(canvas.locator('[data-object-id]')).toHaveCount(101);
+    await expect(canvas.locator('[data-selection]')).toHaveCount(1);
+    await canvas.focus();
+    await canvas.press('Control+a');
+    await expect(canvas.locator('[data-selection]')).toHaveCount(101);
+    await canvas.press('Delete');
+    await expect(canvas.locator('[data-object-id]')).toHaveCount(0);
+    for (const [shortcut, action, count] of [
+      ['Control+z', 'Undo', 101], ['Control+y', 'Redo', 0],
+      ['Control+z', 'Undo', 101], ['Control+Shift+z', 'Redo', 0],
+      ['Meta+z', 'Undo', 101], ['Meta+Shift+z', 'Redo', 0], ['Control+z', 'Undo', 101],
+    ] as const) {
+      await expect(page.getByRole('button', { name: action, exact: true })).toBeEnabled();
+      await canvas.press(shortcut);
+      await expect(canvas.locator('[data-object-id]')).toHaveCount(count);
+    }
+    await expect(page.locator('.whiteboard-workspace [role=status]')).toContainText('Saved');
+    const stored = await (await request.get(base, { headers })).json() as Board;
+    expect(stored.objects.find(object => object.id === note.id)!.text).toBe('Keep this note');
+    await canvas.click({ position: { x: 10, y: 10 } });
+    await canvas.click({ position: { x: 70, y: 70 } });
+    await text.fill('Local text');
+    await text.press('Control+z');
+    await text.press('Control+Shift+z');
+    expect((await (await request.get(base, { headers })).json() as Board).revision).toBe(stored.revision);
+    await login(viewerPage, viewer.username);
+    await viewerPage.goto(`/?whiteboard=${board.id}`);
+    const viewerCanvas = viewerPage.getByRole('application', { name: 'Whiteboard canvas' });
+    await expect(viewerPage.locator('.whiteboard-workspace [role=status]')).toContainText('View only');
+    await viewerCanvas.focus();
+    await viewerCanvas.press('Control+a');
+    await expect(viewerCanvas.locator('[data-selection]')).toHaveCount(101);
+    await viewerCanvas.press('Delete');
+    await viewerCanvas.press('Control+z');
+    await viewerCanvas.press('Control+y');
+    await expect(viewerCanvas.locator('[data-object-id]')).toHaveCount(101);
+    expect((await (await request.get(base, { headers })).json() as Board).revision).toBe(stored.revision);
+  } finally {
+    await viewerPage.close();
+    await request.delete(base, { headers });
+  }
+});
+
+test('Lines save on click and when dragged horizontally, vertically, or in reverse', async ({ page, request }) => {
+  const owner = await createUser(request, 'boardlines');
+  const headers = headersFor(owner.username);
+  const board = await (await request.post(`${apiUrl}/api/whiteboards/`, { headers })).json() as Board;
+  const base = `${apiUrl}/api/whiteboards/${board.id}`;
+  await login(page, owner.username);
+  await page.goto(`/?whiteboard=${board.id}`);
+  const canvas = page.getByRole('application', { name: 'Whiteboard canvas' });
+  try {
+    await expect(canvas).toBeVisible();
+    await page.getByRole('button', { name: 'Line', exact: true }).click();
+    const saved = page.waitForResponse(response => response.url().endsWith('/commands') && response.request().method() === 'POST');
+    await canvas.click({ position: { x: 40, y: 40 } });
+    const response = await saved;
+    expect(response.ok(), await response.text()).toBeTruthy();
+    const update = await response.json() as BoardUpdate;
+    expect(update.objects[0].points).toEqual([{ x: 0, y: 0 }, { x: 160, y: 0 }]);
+    for (const [start, end] of [[[50, 200], [200, 200]], [[250, 50], [250, 200]], [[450, 250], [350, 150]]]) {
+      await expect(page.getByRole('button', { name: 'Undo', exact: true })).toBeEnabled();
+      const bounds = (await canvas.boundingBox())!;
+      await page.mouse.move(bounds.x + start[0], bounds.y + start[1]);
+      await page.mouse.down();
+      await page.mouse.move(bounds.x + end[0], bounds.y + end[1], { steps: 5 });
+      const saving = page.waitForResponse(result => result.url().endsWith('/commands') && result.request().method() === 'POST');
+      await page.mouse.up();
+      const result = await saving;
+      expect(result.ok(), await result.text()).toBeTruthy();
+      const change = await result.json() as BoardUpdate;
+      expect(change.objects[0].points).toHaveLength(2);
+    }
+    await expect(canvas.locator('[data-object-id]')).toHaveCount(4);
+    await expect(page.locator('.whiteboard-error')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect(canvas.locator('[data-object-id]')).toHaveCount(3);
+    await page.getByRole('button', { name: 'Redo', exact: true }).click();
+    await expect(canvas.locator('[data-object-id]')).toHaveCount(4);
+  } finally {
+    await request.delete(base, { headers });
+  }
+});
+
 test('Dragging empty space box-selects objects with additive selection, pan, and zoom', async ({ page, request }) => {
   const owner = await createUser(request, 'boardbox');
   const headers = headersFor(owner.username);

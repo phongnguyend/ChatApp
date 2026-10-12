@@ -99,9 +99,10 @@ export function WhiteboardCanvas({ board, tool, onToolChange, onEditText, color,
         event.currentTarget.setPointerCapture(event.pointerId);
         return;
       }
-      item.width = 1;
+      item.width = tool === 'line' ? 160 : 1;
       item.height = 1;
-      item.points = [{ x: 0, y: 0 }];
+      // A click without dragging must still create a valid two-endpoint line.
+      item.points = tool === 'line' ? [{ x: 0, y: 0 }, { x: item.width, y: 0 }] : [{ x: 0, y: 0 }];
       gesture.current = { start, screen: start, pan, original: item, mode: 'draw' };
       preview(item);
       onSelect([item.id]);

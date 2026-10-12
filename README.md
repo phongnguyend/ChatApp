@@ -2,9 +2,11 @@
 
 ## Whiteboards
 
+With the whiteboard focused, **Ctrl/Command+Z** undoes your last action; **Ctrl/Command+Shift+Z** or **Ctrl+Y** redoes it. These shortcuts keep the browser's native text undo/redo when a settings input is focused.
+
 Drag from empty canvas space in Select mode to draw a selection box. Objects intersecting the box are selected when you release the mouse. Hold Ctrl/Command while dragging to add them to the existing selection; dragging an already selected object moves the selected group instead.
 
-In Select mode, Ctrl-click (Command-click on Mac) adds or removes objects from a selection. Select up to 100 objects and drag, copy, or delete them together; undo/redo applies to the complete action. Click empty canvas space to clear the selection, or click an unselected object without Ctrl to select only that object. Position, size, and layer settings apply when a single object is selected.
+In Select mode, Ctrl-click (Command-click on Mac) adds or removes objects from a selection. With the whiteboard focused, Ctrl+A (Command+A on Mac) selects all objects and Delete removes the selection. These shortcuts leave normal text editing in settings fields unchanged. You can select the entire board (up to 2,000 objects) and drag, copy, or delete objects together; undo/redo applies to the complete action. Click empty canvas space to clear the selection, or click an unselected object without Ctrl to select only that object. Position, size, and layer settings apply when a single object is selected.
 
 Select an object and use **Object settings → Layer order** to bring it forward, send it backward, bring it to the front, or send it to the back. Layer order is saved and shared with collaborators, included in SVG exports, and supports undo/redo.
 
