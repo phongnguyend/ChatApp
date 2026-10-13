@@ -225,9 +225,19 @@
 .form-code-block h3 { margin: 0 0 .5rem; }
 .form-code-block p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .form-code-language { font-size: .75rem; opacity: .7; }
+.form-code-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.form-code-toolbar button { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; font-size: .8rem; }
+.form-code-copy-status { display: block; margin-top: .3rem; font-size: .8rem; }
 .form-code-block pre { margin: .3rem 0 0; padding: 1rem; overflow: auto; background: rgba(127, 127, 127, .1); border: 1px solid rgba(127, 127, 127, .3); border-radius: .5rem; tab-size: 4; white-space: pre; }
 .form-code-block pre.wrap-code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .form-code-block code, .forms-code-editor { font-family: ui-monospace, Consolas, monospace; font-size: .875rem; line-height: 1.5; }
+.form-code-block pre { --code-keyword: #6b21a8; --code-string: #166534; --code-number: #9a3412; --code-name: #075985; --code-comment: #526575; background: #f8fafc; color: #334155; }
+.form-code-block .hljs-keyword, .form-code-block .hljs-selector-tag, .form-code-block .hljs-meta { color: var(--code-keyword); }
+.form-code-block .hljs-string, .form-code-block .hljs-regexp, .form-code-block .hljs-addition { color: var(--code-string); }
+.form-code-block .hljs-number, .form-code-block .hljs-literal, .form-code-block .hljs-symbol, .form-code-block .hljs-bullet { color: var(--code-number); }
+.form-code-block .hljs-title, .form-code-block .hljs-attr, .form-code-block .hljs-attribute, .form-code-block .hljs-name, .form-code-block .hljs-built_in, .form-code-block .hljs-type, .form-code-block .hljs-selector-class, .form-code-block .hljs-variable { color: var(--code-name); }
+.form-code-block .hljs-comment, .form-code-block .hljs-quote { color: var(--code-comment); font-style: italic; }
+html[data-theme='dark'] .form-code-block pre { --code-keyword: #d8b4fe; --code-string: #86efac; --code-number: #fdba74; --code-name: #7dd3fc; --code-comment: #94a3b8; background: #0f172a; color: #e2e8f0; }
 .form-markdown-block { min-width: 0; max-width: 100%; overflow-wrap: anywhere; line-height: 1.6; }
 .form-markdown-block > :first-child { margin-top: 0; }
 .form-markdown-block > :last-child { margin-bottom: 0; }

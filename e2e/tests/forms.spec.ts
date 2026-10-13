@@ -187,8 +187,24 @@ test('owner links and respondent URL questions publish and collect only URL answ
   await page.getByLabel('Markdown content', { exact: true }).fill('## Markdown instructions\n\n**Important**\n\n- First item\n\n| Name | Value |\n| --- | --- |\n| Example | 42 |\n\n```js\nconst answer = 42;\n```\n\n[Reference](https://example.com/reference)\n\n[Unsafe](javascript:alert%281%29)\n\n<script>window.markdownExecuted = true;</script>');
   await expect(page.locator('.form-markdown-block strong')).toHaveText('Important');
   await page.locator('.forms-palette').getByRole('button', { name: 'Code', exact: true }).click();
+  const codeBlock = page.locator('.form-code-block code');
+  for (const [language, source] of [
+    ['javascript', 'const answer = "hello"; // Example'], ['typescript', 'const answer: number = 42;'],
+    ['json', '{"answer": true, "count": 42}'], ['css', '.example { color: red; }'],
+    ['csharp', 'public class Example { public int Value = 42; }'], ['python', 'def answer():\n    return "hello"'],
+    ['sql', 'SELECT * FROM answers WHERE id = 42;'], ['shell', 'echo "hello"'],
+    ['yaml', 'answer: true\ncount: 42'], ['xml', '<answer value="42">hello</answer>'],
+  ]) {
+    await page.getByLabel('Code language', { exact: true }).selectOption(language);
+    await page.getByLabel('Code content', { exact: true }).fill(source);
+    await expect(codeBlock).toHaveText(source);
+    await expect(codeBlock.locator('span').first()).toBeVisible();
+  }
+  await page.getByLabel('Code language', { exact: true }).selectOption('text');
+  await expect(codeBlock.locator('span')).toHaveCount(0);
   await page.getByLabel('Code language', { exact: true }).selectOption('html');
   await page.getByLabel('Code content', { exact: true }).fill('<script>window.formCodeExecuted = true;</script>\n  <b>Example</b>');
+  await expect(codeBlock.locator('.hljs-tag').first()).toBeVisible();
   await page.getByLabel('Wrap long lines', { exact: true }).check();
   await page.locator('.forms-palette').getByRole('button', { name: 'Paragraph', exact: true }).click();
   await page.getByLabel('Heading (optional)', { exact: true }).fill('Before you start');
@@ -215,6 +231,17 @@ test('owner links and respondent URL questions publish and collect only URL answ
     await expect(markdown.locator('script, textarea')).toHaveCount(0);
     expect(await anonymous.evaluate(() => 'markdownExecuted' in window)).toBe(false);
     await expect(anonymous.locator('.form-code-block code')).toHaveText('<script>window.formCodeExecuted = true;</script>\n  <b>Example</b>');
+    await expect(anonymous.locator('.form-code-block .hljs-tag').first()).toBeVisible();
+    await anonymous.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await anonymous.getByRole('button', { name: 'Copy code', exact: true }).click();
+    await expect(anonymous.locator('.form-code-block [role=status]')).toHaveText('Code copied to clipboard.');
+    expect((await anonymous.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, '\n')).toBe('<script>window.formCodeExecuted = true;</script>\n  <b>Example</b>');
+    await anonymous.evaluate(() => {
+      Object.defineProperty(navigator.clipboard, 'writeText', { configurable: true, value: async () => { throw new Error('Clipboard blocked'); } });
+    });
+    await anonymous.getByRole('button', { name: 'Copy code', exact: true }).click();
+    await expect(anonymous.locator('.form-code-block [role=alert]')).toContainText('copy it manually');
+    expect(await anonymous.evaluate(() => window.getSelection()?.toString())).toBe('<script>window.formCodeExecuted = true;</script>\n  <b>Example</b>');
     await expect(anonymous.locator('.form-code-block pre')).toHaveCSS('white-space', 'pre-wrap');
     await expect(anonymous.locator('.form-code-block script, .form-code-block b, .form-code-block textarea')).toHaveCount(0);
     expect(await anonymous.evaluate(() => 'formCodeExecuted' in window)).toBe(false);
