@@ -52,8 +52,11 @@ test('Sheets isolate objects, synchronize tabs, enforce permissions, and restore
     await page.getByRole('button', { name: 'View JSON', exact: true }).click();
     const jsonDialog = page.getByRole('dialog', { name: 'Whiteboard JSON', exact: true });
     const jsonText = jsonDialog.getByRole('textbox', { name: 'Whiteboard JSON', exact: true });
-    await expect(jsonText).toHaveAttribute('readonly', '');
-    const json = await jsonText.inputValue();
+    await expect(jsonText).toHaveAttribute('aria-readonly', 'true');
+    await expect(jsonText.locator('.json-token-key').first()).toHaveText('"id":');
+    const json = (await jsonText.textContent())!;
+    await jsonText.press('Control+a');
+    expect(await page.evaluate(() => window.getSelection()?.toString())).toBe(json);
     expect(JSON.parse(json)).toEqual({ id: stored.id, title: stored.title, revision: stored.revision, sheets: stored.sheets, objects: stored.objects });
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
     await jsonDialog.getByRole('button', { name: 'Copy JSON', exact: true }).click();

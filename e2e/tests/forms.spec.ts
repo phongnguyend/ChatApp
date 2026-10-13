@@ -576,7 +576,9 @@ test('build nested conditional form by drag and drop, publish, submit anonymousl
   await page.getByRole('button', { name: 'View JSON schema', exact: true }).click();
   const schemaDialog = page.getByRole('dialog', { name: 'JSON schema', exact: true });
   await expect(schemaDialog).toBeVisible();
-  const schemaJson = await schemaDialog.getByRole('textbox', { name: 'Form JSON schema' }).inputValue();
+  const schemaViewer = schemaDialog.getByRole('textbox', { name: 'Form JSON schema' });
+  await expect(schemaViewer.locator('.json-token-key').first()).toBeVisible();
+  const schemaJson = (await schemaViewer.textContent())!;
   const draftSchema = JSON.parse(schemaJson) as FormDefinition;
   expect(draftSchema.title).toBe('Customer research');
   expect(flatten(draftSchema.nodes).filter(node => node.kind === 'columns')).toHaveLength(2);

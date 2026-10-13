@@ -60,6 +60,5 @@
 .whiteboard-json-dialog::backdrop { background: #0f172a80; }
 .whiteboard-json-dialog header, .whiteboard-workspace .whiteboard-json-dialog footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; }
 .whiteboard-json-dialog h2 { display: flex; align-items: center; gap: 8px; margin: 0; }
-.whiteboard-json-dialog textarea { height: min(55dvh, 540px); min-height: 120px; resize: none; padding: 12px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; line-height: 1.6; }
 .whiteboard-json-dialog [role=alert] { color: #b91c1c; }
 @media (max-width: 800px) { .whiteboards-view { grid-column: 1 / -1; } .whiteboard-inspector { width: 190px; } .whiteboard-workspace footer { display: none; } }

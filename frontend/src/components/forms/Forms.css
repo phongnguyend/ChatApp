@@ -145,7 +145,6 @@
 .forms-schema-dialog header, .forms-schema-dialog footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; }
 .forms-schema-dialog h2 { display: flex; align-items: center; gap: 8px; margin: 0; }
 .forms-schema-dialog p { margin: 0; }
-.forms-schema-dialog textarea { height: min(55dvh, 540px); min-height: 120px; resize: none; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; line-height: 1.6; tab-size: 2; }
 .forms-schema-dialog footer span { font-size: 12px; color: var(--forms-accent); }
 .forms-response-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .forms-response { border: 1px solid var(--line, #d6dfdc); border-radius: 9px; background: var(--paper, white); padding: 18px; margin: 14px 0; }
