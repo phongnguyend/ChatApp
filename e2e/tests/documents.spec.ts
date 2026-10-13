@@ -36,6 +36,14 @@ test('folders, uploads, conflicts, versions, clone, search, and trash', async ({
   await page.getByRole('textbox', { name: 'Search all documents' }).clear();
   await fileRow.getByRole('checkbox', { name: `Select ${file}` }).check();
   await page.locator('.documents-selection-bar').getByRole('button', { name: 'Move to Trash' }).click();
+  const trashDialog = page.getByRole('dialog', { name: 'Move 1 item to Trash?' });
+  const closeIcon = trashDialog.getByRole('button', { name: 'Close', exact: true }).locator('svg');
+  await expect(closeIcon).toHaveCSS('flex-shrink', '0');
+  expect((await closeIcon.boundingBox())?.width).toBe(18);
+  await trashDialog.screenshot({ path: 'test-results/documents-trash-close-icon.png' });
+  await trashDialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(fileRow).toBeVisible();
+  await page.locator('.documents-selection-bar').getByRole('button', { name: 'Move to Trash' }).click();
   await page.getByRole('dialog', { name: 'Move 1 item to Trash?' }).getByRole('button', { name: 'Move to Trash' }).click();
   await expect(fileRow).toHaveCount(0);
   await page.getByRole('tab', { name: 'Trash' }).click();

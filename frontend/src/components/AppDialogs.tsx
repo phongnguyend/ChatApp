@@ -5,7 +5,7 @@ import { currentDialog, finishDialog, subscribeDialogs, type DialogRequest } fro
 function Dialog({ item }: { item: DialogRequest }) {
   const [value, setValue] = useState(item.initial);
   const cancel = () => finishDialog(item, item.kind === 'prompt' ? null : false);
-  return <Modal returnFocus={item.opener} className="app-dialog" aria-labelledby="app-dialog-title" aria-describedby={item.kind === 'prompt' ? undefined : 'app-dialog-message'} onCancel={event => {
+  return <Modal returnFocus={item.opener} initialFocus={item.kind === 'prompt' ? 'input' : '.app-modal-footer button'} className="app-dialog" aria-labelledby="app-dialog-title" aria-describedby={item.kind === 'prompt' ? undefined : 'app-dialog-message'} onCancel={event => {
     event.preventDefault();
     cancel();
   }}>

@@ -37,6 +37,13 @@
   background: var(--paper, white); color: inherit; cursor: pointer; font: inherit;
 }
 .app-modal[open] .app-modal-footer button[class*=danger] { color: #b93737; }
+.app-modal[open] .app-modal-header button svg { flex-shrink: 0; }
+.app-modal[open] .app-modal-header .app-modal-close,
+.app-modal[open] .app-modal-header button[aria-label^="Close" i],
+.app-modal[open] .app-modal-header button[aria-label^="Dismiss" i] {
+  flex: 0 0 auto; margin-inline-start: auto; width: 36px; height: 36px; padding: 8px;
+  box-sizing: border-box;
+}
 .app-modal[open] .app-modal-footer button[class*=primary], .app-dialog button[type=submit] { background: var(--accent, #167c72); color: white; }
 .app-modal button:disabled { opacity: .5; cursor: not-allowed; }
 .app-modal :focus-visible { outline: 3px solid var(--accent, #167c72); outline-offset: 2px; }
