@@ -1,3 +1,5 @@
+import { useToastMessage } from '../components/useToastMessage';
+import { toast } from '../services/toasts';
 import { Modal } from '../components/Modal';
 import { authFetch as fetch } from "../services/auth";
 import { ArrowLeft, CalendarDays, Check, CircleCheck, ClipboardList, List, ListTodo, LoaderCircle, Pencil, Plus, RotateCcw, Share2, Trash2, UserRound, Users, X } from "lucide-react";
@@ -59,7 +61,7 @@ export function TasksView({ apiUrl, currentUsername, onBack, openTarget, hidden 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [error, setError] = useState("");
+  const setError = useToastMessage('error');
   const [dialogError, setDialogError] = useState("");
   const [editing, setEditing] = useState<UserTask | null>(null);
   const [draft, setDraft] = useState<TaskDraft | null>(null);
@@ -227,6 +229,7 @@ export function TasksView({ apiUrl, currentUsername, onBack, openTarget, hidden 
       const updated = await response.json() as UserTask;
       setTasks((current) => current.map((task) => task.id === updated.id ? updated : task));
       setAssigning(null);
+      toast.success('Task assignment updated.');
     } catch (reason) { setAssignError(reason instanceof Error ? reason.message : "Could not assign task."); }
     finally { setAssignSaving(false); }
   }
@@ -254,6 +257,7 @@ export function TasksView({ apiUrl, currentUsername, onBack, openTarget, hidden 
       const item = await response.json() as UserTask;
       setTasks((current) => editing ? current.map((task) => task.id === item.id ? item : task) : [item, ...current]);
       setDraft(null);
+      toast.success(editing ? 'Task updated.' : 'Task created.');
     } catch (reason) {
       setDialogError(reason instanceof Error ? reason.message : "Could not save task.");
     } finally { setSaving(false); }
@@ -289,7 +293,10 @@ export function TasksView({ apiUrl, currentUsername, onBack, openTarget, hidden 
     if (failed.length) {
       setCompletionTarget({ ...completionTarget, tasks: failed });
       setCompletionError(`Could not update ${failed.length} task${failed.length === 1 ? "" : "s"}. Please try again.`);
-    } else setCompletionTarget(null);
+    } else {
+      setCompletionTarget(null);
+      toast.success(completionTarget.isCompleted ? 'Tasks marked complete.' : 'Tasks marked to do.');
+    }
     setBusyId(null);
   }
 
@@ -314,7 +321,10 @@ export function TasksView({ apiUrl, currentUsername, onBack, openTarget, hidden 
     if (failed.length) {
       setDeleteTarget(failed);
       setDeleteError(`Could not delete ${failed.length} task${failed.length === 1 ? "" : "s"}. Please try again.`);
-    } else setDeleteTarget(null);
+    } else {
+      setDeleteTarget(null);
+      toast.success('Tasks deleted.');
+    }
     setBusyId(null);
   }
 
@@ -349,7 +359,7 @@ export function TasksView({ apiUrl, currentUsername, onBack, openTarget, hidden 
       <label><input type="checkbox" checked={allVisibleSelected} onChange={() => setSelectedIds((current) => { const next = new Set(current); selectable.forEach((task) => { if (allVisibleSelected) next.delete(task.id); else next.add(task.id); }); return next; })} disabled={!!busyId || selectable.length === 0} /> Select all</label>
       {selectedTasks.length > 0 && <div className="tasks-bulk-actions"><span>{selectedTasks.length} selected</span><button type="button" onClick={() => requestCompletion(selectedTasks, true)} disabled={!!busyId || selectedTasks.every((task) => task.isCompleted)}><Check size={15} /> Done</button><button type="button" onClick={() => requestCompletion(selectedTasks, false)} disabled={!!busyId || selectedTasks.every((task) => !task.isCompleted)}><RotateCcw size={15} /> Undone</button>{selectedTasks.every((task) => task.permission === "owner") && <button type="button" onClick={() => { setDeleteTarget(selectedTasks); setDeleteError(""); }} disabled={!!busyId}><Trash2 size={15} /> Delete</button>}</div>}
     </div>}
-    {error && <p className="tasks-error" role="alert">{error}</p>}
+
     <div className="tasks-list">
       {loading ? <div className="tasks-empty"><LoaderCircle className="tasks-spin" size={25} /> Loading tasks...</div> : visible.length === 0 ? <div className="tasks-empty"><ClipboardList size={35} /><strong>{mode === "shared" ? "Nothing shared with you" : mode === "outgoing" ? "No shared tasks yet" : filter === "active" ? "Nothing to do" : "No tasks here"}</strong><span>{mode === "shared" ? "Tasks others share with you appear here." : mode === "outgoing" ? "Share a task to see it here." : filter === "active" ? "Add a task to get started." : "Tasks in this view will appear here."}</span></div> :
         visible.map((task) => <article data-task-id={task.id} className={`tasks-item ${task.isCompleted ? "completed" : ""} ${openTarget?.id === task.id ? "notification-target" : ""}`} key={task.id}>

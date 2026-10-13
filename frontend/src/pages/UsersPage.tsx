@@ -1,3 +1,5 @@
+import { ToastNotice } from '../components/Toast';
+import { useToastMessage } from '../components/useToastMessage';
 import { Modal } from '../components/Modal';
 import { useEffect, useState, type FormEvent } from 'react';
 import { accountApi, type AccountUser } from '../services/auth';
@@ -17,7 +19,7 @@ export function UsersPage({ currentUser, onBack }: { currentUser: AccountUser; o
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const setNotice = useToastMessage('success');
   const [editor, setEditor] = useState<Editor | null>(null);
   const [passwordUser, setPasswordUser] = useState<ManagedUser | null>(null);
   const [passwordEnabled, setPasswordEnabled] = useState(false);
@@ -48,8 +50,8 @@ export function UsersPage({ currentUser, onBack }: { currentUser: AccountUser; o
     <AccountHeader title="Users" description="Manage your people and their access to Huddle." eyebrow="Workspace access" onBack={onBack} actions={<button className="primary-button" onClick={() => { setError(''); setEditor({ ...emptyUser }); }}><Plus size={16} aria-hidden="true" />Create user</button>} />
     <div className="account-summary"><span><strong>{users.length}</strong> people</span><span><i className="status-dot" /><strong>{users.filter(u => u.isEnabled).length}</strong> enabled</span><span><strong>{users.filter(u => u.roles.includes('Global Admin')).length}</strong> administrators</span></div>
     <label className="account-search">Search users<input placeholder="Name, email, phone, or role" value={query} onChange={e => setQuery(e.target.value)} /></label>
-    {error && !(editor || passwordUser || toggleUser) && <p role="alert" className="form-error">{error}</p>}
-    {notice && <p role="status">{notice}</p>}
+    <ToastNotice message={editor || passwordUser || toggleUser ? '' : error} />
+
     {loading ? <p role="status">Loading users...</p> : <div className="account-table-wrap"><table><thead><tr><th>Name / email</th><th>Roles</th><th>Status</th><th>Password access</th><th>Lockout</th><th>Actions</th></tr></thead><tbody>
       {filtered.map(u => <tr key={u.id}><td><strong>{[u.firstName, u.lastName].filter(Boolean).join(' ') || u.username}</strong>{u.id === currentUser.id && ' (you)'}<small>{u.email || 'Email not assigned'}</small></td><td><div className="account-badges">{u.roles.map(role => <span key={role} className={`account-badge ${role === 'Global Admin' ? 'admin' : ''}`}>{role}</span>)}</div></td><td><span className={`account-badge ${u.isEnabled ? 'positive' : 'muted'}`}>{u.isEnabled ? 'Enabled' : 'Disabled'}</span></td><td>{u.allowPasswordAuthentication ? 'Enabled' : 'Disabled'}</td><td>{locked(u) ? `Locked until ${new Date(u.lockoutEnd!).toLocaleString()}` : 'Not locked'}<small>Failed attempts: {u.accessFailedCount}</small></td><td className="user-actions-cell"><UserActions username={u.username}>
         <button className="secondary-button" onClick={() => setSelected(u)}><Eye size={14} aria-hidden="true" />View</button>

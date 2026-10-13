@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { AppDialogs } from './components/AppDialogs'
+import { ToastViewport } from './components/Toast'
 import { applyTheme, getThemePreference } from './theme'
 
 applyTheme(getThemePreference())
@@ -11,5 +12,6 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
     <AppDialogs />
+    <ToastViewport />
   </StrictMode>,
 )

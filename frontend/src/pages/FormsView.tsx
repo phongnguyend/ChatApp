@@ -1,6 +1,7 @@
+import { useToastMessage } from '../components/useToastMessage';
 import { confirmDialog } from '../services/dialogs';
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, ClipboardList, Copy, Download, ExternalLink, Eye, ListChecks, LoaderCircle, PencilRuler, Plus, Redo2, RefreshCw, Save, Search, Send, Share2, Square, Trash2, Undo2, X } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, ClipboardList, Copy, Download, ExternalLink, Eye, ListChecks, LoaderCircle, PencilRuler, Plus, Redo2, RefreshCw, Save, Search, Send, Share2, Square, Trash2, Undo2, X } from 'lucide-react';
 import { FormBuilder } from '../components/forms/FormBuilder';
 import { FormSchemaDialog } from '../components/forms/FormSchemaDialog';
 import { Braces } from 'lucide-react';
@@ -31,7 +32,7 @@ export function FormsView({ hidden, onBack }: { hidden: boolean; onBack: () => v
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const setNotice = useToastMessage('success');
   const [schemaOpen, setSchemaOpen] = useState(false);
   const [responses, setResponses] = useState<ResponsePage | null>(null);
   const dirty = !!form && !!draft && JSON.stringify(form.definition) !== JSON.stringify(draft);
@@ -197,7 +198,7 @@ export function FormsView({ hidden, onBack }: { hidden: boolean; onBack: () => v
         void run(async () => open(await formsApi<FormDetail>(`forms/${form.id}`)));
       }
     }}><RefreshCw size={16} aria-hidden="true" />Reload saved form</button>}</div>}
-    {notice && <div role="status" className="forms-banner"><Check size={16} />{notice}</div>}
+
     {!form ? <div className="forms-library"><div className="forms-library-toolbar"><label className="forms-search"><Search size={17} /><input aria-label="Search forms" placeholder="Search forms…" value={query} onChange={event => setQuery(event.target.value)} /></label><select aria-label="Filter forms" value={filter} onChange={event => setFilter(event.target.value)}><option value="all">All forms</option><option value="live">Published</option><option value="draft">Drafts</option><option value="closed">Closed</option></select><button type="button" disabled={busy} onClick={() => { void run(async () => setForms(await formsApi<FormSummary[]>('forms/'))); }}><RefreshCw size={16} aria-hidden="true" />Refresh</button></div>
       {loading && <p role="status">Loading your forms…</p>}
       {!loading && forms.length === 0 && <div className="forms-empty"><ClipboardList size={44} /><h2>A place for every question</h2><p>Create a survey, registration form, or feedback questionnaire. Arrange it your way and share a link.</p></div>}

@@ -1,4 +1,5 @@
 import { Modal } from '../components/Modal';
+import { toast } from '../services/toasts';
 import { authFetch as fetch } from "../services/auth";
 import { ArrowLeft, CalendarDays, CalendarX2, Check, CheckCircle2, Clock3, HelpCircle, LoaderCircle, MessageCircle, Pencil, Plus, Search, UserRound, Users, Video, X, XCircle } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
@@ -253,6 +254,7 @@ export function MeetingsView({ apiUrl, currentUsername, onBack, onOpenConversati
       });
       const saved = await readResponse<Meeting>(response);
       setForm(null);
+      toast.success(editingId ? 'Meeting updated.' : 'Meeting created.');
       setEditingId(null);
       if (tab !== "created") changeTab("created");
       else setPage(0);

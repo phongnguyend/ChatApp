@@ -362,13 +362,13 @@ test('owner links and respondent URL questions publish and collect only URL answ
     await expect(anonymous.locator('.form-code-block .hljs-tag').first()).toBeVisible();
     await anonymous.context().grantPermissions(['clipboard-read', 'clipboard-write']);
     await anonymous.getByRole('button', { name: 'Copy code', exact: true }).click();
-    await expect(anonymous.locator('.form-code-block [role=status]')).toHaveText('Code copied to clipboard.');
+    await expect(anonymous.locator('.app-toast [role=status]')).toHaveText('Code copied to clipboard.');
     expect((await anonymous.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, '\n')).toBe('<script>window.formCodeExecuted = true;</script>\n  <b>Example</b>');
     await anonymous.evaluate(() => {
       Object.defineProperty(navigator.clipboard, 'writeText', { configurable: true, value: async () => { throw new Error('Clipboard blocked'); } });
     });
     await anonymous.getByRole('button', { name: 'Copy code', exact: true }).click();
-    await expect(anonymous.locator('.form-code-block [role=alert]')).toContainText('copy it manually');
+    await expect(anonymous.locator('.app-toast [role=alert]')).toContainText('copy it manually');
     expect(await anonymous.evaluate(() => window.getSelection()?.toString())).toBe('<script>window.formCodeExecuted = true;</script>\n  <b>Example</b>');
     await expect(anonymous.locator('.form-code-block pre')).toHaveCSS('white-space', 'pre-wrap');
     await expect(anonymous.locator('.form-code-block script, .form-code-block b, .form-code-block textarea')).toHaveCount(0);

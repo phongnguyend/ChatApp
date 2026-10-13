@@ -1,4 +1,6 @@
 import { Modal } from '../Modal';
+import { useToastMessage } from '../useToastMessage';
+import { toast } from '../../services/toasts';
 import { useRef, useState } from 'react';
 import { Braces, Check, Copy, X } from 'lucide-react';
 import type { FormDefinition } from './formModel';
@@ -9,7 +11,7 @@ export function FormSchemaDialog({ definition, onClose }: { definition: FormDefi
   const dialogRef = useRef<HTMLDialogElement>(null);
   const textRef = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState(false);
-  const [error, setError] = useState('');
+  const setError = useToastMessage('error');
   const json = JSON.stringify(definition, null, 2);
 
 
@@ -19,6 +21,7 @@ export function FormSchemaDialog({ definition, onClose }: { definition: FormDefi
     try {
       await navigator.clipboard.writeText(json);
       setCopied(true);
+      toast.success('JSON copied to clipboard.');
     } catch {
       setCopied(false);
       setError('Could not access the clipboard. The JSON is selected so you can copy it manually.');
@@ -35,8 +38,7 @@ export function FormSchemaDialog({ definition, onClose }: { definition: FormDefi
 <Modal.Body>
 <p id="forms-schema-description">Current form definition, including unsaved changes, nested layouts, and conditional rules.</p>
 <JsonViewer ref={textRef} label="Form JSON schema" json={json} />
-{error && <p className="forms-error" role="alert">{error}</p>}
 </Modal.Body>
-<Modal.Footer as="footer"><span role="status">{copied ? 'JSON copied to clipboard.' : ''}</span><button type="button" className="forms-primary" onClick={() => { void copy(); }}>{copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}Copy JSON</button></Modal.Footer>
+<Modal.Footer as="footer"><button type="button" className="forms-primary" onClick={() => { void copy(); }}>{copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}Copy JSON</button></Modal.Footer>
 </Modal>;
 }

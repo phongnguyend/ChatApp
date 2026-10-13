@@ -1,3 +1,4 @@
+import { useToastMessage } from '../useToastMessage';
 import { useRef, useState } from 'react'
 import { Check, Download, FilePlus2, Pencil, RefreshCw, Save, Trash2 } from 'lucide-react'
 import {
@@ -28,7 +29,7 @@ export function SigningTemplatesDialog({ fields, pageCount, onLoad, onClose }: {
   const [newName, setNewName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  const setNotice = useToastMessage('info')
   const pending = useRef(false)
   const hasFields = fields.length > 0
 
@@ -63,7 +64,7 @@ export function SigningTemplatesDialog({ fields, pageCount, onLoad, onClose }: {
 <Modal.Body className="modal-body">
 <LoadingBar active={busy || templates.loading} />
 {(error || templates.error) && <ErrorBanner message={error || templates.error || ''} />}
-{notice && <p className="signing-notice" role="status">{notice}</p>}
+
 <form className="signing-template-save" onSubmit={event => {
       event.preventDefault()
       void run(async () => {

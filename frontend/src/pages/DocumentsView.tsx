@@ -1,3 +1,5 @@
+import { ToastNotice } from '../components/Toast';
+import { useToastMessage } from '../components/useToastMessage';
 import { Modal } from '../components/Modal';
 import { authFetch as fetch } from "../services/auth";
 import { ArrowLeft, Signature, CheckSquare2, ChevronRight, Copy, Download, FileImage, FileText, Folder, FolderInput, FolderOpen, FolderPlus, Globe2, History, Info, Link2, LoaderCircle, Pencil, QrCode, RotateCcw, Search, Send, Share2, Trash2, Upload, Users, X } from "lucide-react";
@@ -87,7 +89,7 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, onOpenConversat
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const setNotice = useToastMessage('success');
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Selection[]>([]);
   const [destinationAction, setDestinationAction] = useState<"move" | "copy" | null>(null);
@@ -695,9 +697,9 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, onOpenConversat
         {query.trim() ? <span>Search results across My Documents and Shared with me</span> : <><button type="button" className={dropTarget === "root" ? "documents-drop-target" : undefined} onClick={() => navigate(null)} onDragOver={mode === "mine" ? (event) => hoverDocumentFolder(event, null) : undefined} onDragLeave={() => setDropTarget(null)} onDrop={mode === "mine" ? (event) => dropDocumentInto(event, null) : undefined} aria-current={folderId === null ? "page" : undefined}>{mode === "mine" ? "My Documents" : mode === "shared" ? "Shared with me" : mode === "outgoing" ? "Shared by me" : "Trash"}</button>
         {listing?.breadcrumbs.map((folder) => <span key={folder.id}><ChevronRight size={14} /><button type="button" className={dropTarget === folder.id ? "documents-drop-target" : undefined} onClick={() => navigate(folder.id)} onDragOver={folder.permission === "owner" ? (event) => hoverDocumentFolder(event, folder.id) : undefined} onDragLeave={() => setDropTarget(null)} onDrop={folder.permission === "owner" ? (event) => dropDocumentInto(event, folder.id) : undefined} aria-current={folder.id === folderId ? "page" : undefined}>{folder.name}</button></span>)}</>}
       </nav>
-      {error && <div className="documents-message error" role="alert">{error}<button type="button" onClick={() => setError("")} aria-label="Dismiss error"><X size={14} /></button></div>}
+      <ToastNotice message={destinationAction || bulkTrashOpen || nameDialog || purgeDialog || shareDialog || conflict || versionFile || preview ? '' : error} />
       {uploadProgress && <div className="documents-upload-progress" role="status"><span>Uploading {uploadProgress.name}: {Math.round(uploadProgress.uploadedBytes / uploadProgress.totalBytes * 100)}%</span><progress value={uploadProgress.uploadedBytes} max={uploadProgress.totalBytes} /></div>}
-      {notice && <div className="documents-message" role="status">{notice}<button type="button" onClick={() => setNotice("")} aria-label="Dismiss message"><X size={14} /></button></div>}
+
       <div className={`documents-list ${dragging ? "dragging" : ""}`}>
         <div className="documents-list-heading"><span>Name</span><span>Modified</span><span>Size</span><span>Actions</span></div>
         {loading && <p className="documents-state"><LoaderCircle className="spin" size={18} /> Loading documents…</p>}

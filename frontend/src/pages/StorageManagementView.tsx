@@ -1,4 +1,6 @@
 import { Modal } from '../components/Modal';
+import { ToastNotice } from '../components/Toast';
+import { toast } from '../services/toasts';
 import { authFetch as fetch } from "../services/auth";
 import { ArrowLeft, HardDrive, LoaderCircle, Pencil, Search, Users, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -131,6 +133,7 @@ export function StorageManagementView({ apiUrl, currentUsername, onBack, hidden 
         ? { ...user, limitBytes: updated.limitBytes, customLimitBytes: updated.documentStorageLimitBytes }
         : user));
       setEditing(null);
+      toast.success('Storage limit updated.');
       window.dispatchEvent(new Event("documents-storage-changed"));
     } catch (reason) {
       setEditError(reason instanceof Error ? reason.message : "Could not update the storage limit.");
@@ -153,7 +156,7 @@ export function StorageManagementView({ apiUrl, currentUsername, onBack, hidden 
       <strong>{page ? `${page.totalCount.toLocaleString()} matching ${page.totalCount === 1 ? "user" : "users"}` : "Users"}</strong>
       <label><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} maxLength={100} placeholder="Search users" aria-label="Search users" /></label>
     </div>
-    {error && <p className="storage-management-error" role="alert">{error}</p>}
+    <ToastNotice message={error} />
     <div className="storage-management-table" role="table" aria-label="User storage usage">
       <div className="storage-management-row storage-management-table-header" role="row"><span role="columnheader">User</span><span role="columnheader">Storage used</span><span role="columnheader">Limit</span><span role="columnheader">Available</span><span role="columnheader">Action</span></div>
       {loading && <p className="storage-management-state"><LoaderCircle className="spin" size={18} /> Loading storage usage…</p>}

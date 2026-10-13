@@ -1,10 +1,11 @@
+import { useToastMessage } from '../useToastMessage';
 import { useState } from 'react';
 import { Download } from 'lucide-react';
 import { API_URL, authFetch } from '../../services/auth';
 
 export function FormAttachmentDownload({ formId, attachment }: { formId: string; attachment: { id: string; fileName: string; size: number } }) {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const setError = useToastMessage('error');
   async function download() {
     setBusy(true);
     setError('');
@@ -25,5 +26,5 @@ export function FormAttachmentDownload({ formId, attachment }: { formId: string;
       setBusy(false);
     }
   }
-  return <div><button type="button" disabled={busy} onClick={() => { void download(); }}><Download size={16} aria-hidden="true" />{attachment.fileName} ({Math.ceil(attachment.size / 1024)} KiB)</button>{error && <p className="forms-error" role="alert">{error}</p>}</div>;
+  return <div><button type="button" disabled={busy} onClick={() => { void download(); }}><Download size={16} aria-hidden="true" />{attachment.fileName} ({Math.ceil(attachment.size / 1024)} KiB)</button></div>;
 }

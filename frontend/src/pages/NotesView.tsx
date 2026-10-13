@@ -1,3 +1,5 @@
+import { useToastMessage } from '../components/useToastMessage';
+import { toast } from '../services/toasts';
 import { Modal } from '../components/Modal';
 import { authFetch as fetch } from "../services/auth";
 import { ArrowLeft, FileText, LoaderCircle, NotebookPen, Pencil, Pin, PinOff, Plus, Search, Share2, Trash2, Users, X } from "lucide-react";
@@ -41,7 +43,7 @@ export function NotesView({ apiUrl, currentUsername, onBack, openTarget, hidden 
   const [mode, setMode] = useState<"mine" | "shared" | "outgoing">("mine");
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const setError = useToastMessage('error');
   const [dialogError, setDialogError] = useState("");
   const [viewing, setViewing] = useState<UserNote | null>(null);
   const [editing, setEditing] = useState<UserNote | null>(null);
@@ -208,6 +210,7 @@ export function NotesView({ apiUrl, currentUsername, onBack, openTarget, hidden 
       const note = await response.json() as UserNote;
       setNotes((current) => editing ? current.map((item) => item.id === note.id ? note : item) : [note, ...current]);
       setDraft(null);
+      toast.success(editing ? 'Note updated.' : 'Note created.');
       setEditing(null);
       setViewing(note);
     } catch (reason) {
@@ -248,6 +251,7 @@ export function NotesView({ apiUrl, currentUsername, onBack, openTarget, hidden 
       setNotes((current) => current.filter((item) => item.id !== deleteTarget.id));
       setViewing((current) => current?.id === deleteTarget.id ? null : current);
       setDeleteTarget(null);
+      toast.success('Note deleted.');
     } catch (reason) { setDialogError(reason instanceof Error ? reason.message : "Could not delete note."); }
     finally { setBusy(false); }
   }
@@ -268,7 +272,7 @@ export function NotesView({ apiUrl, currentUsername, onBack, openTarget, hidden 
       <button type="button" role="tab" aria-selected={mode === "outgoing"} onClick={() => { setQuery(""); setMode("outgoing"); }}><Share2 size={15} aria-hidden="true" /> Shared by me</button>
     </div>
     <div className="notes-toolbar"><label><Search size={17} aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search notes" aria-label="Search notes" /></label><span>{visible.length} {visible.length === 1 ? "note" : "notes"}</span></div>
-    {error && <p className="notes-error" role="alert">{error}</p>}
+
     <div className="notes-list">
       {loading ? <div className="notes-empty"><LoaderCircle className="notes-spin" size={25} /> Loading notes...</div> : visible.length === 0 ? <div className="notes-empty"><FileText size={36} /><strong>{query ? "No matching notes" : mode === "shared" ? "Nothing shared with you" : mode === "outgoing" ? "No shared notes yet" : "No notes yet"}</strong><span>{query ? "Try another search." : mode === "shared" ? "Notes others share with you appear here." : mode === "outgoing" ? "Share a note to see it here." : "Create a note to get started."}</span></div> :
         visible.map((note) => <article className="notes-card" key={note.id}>

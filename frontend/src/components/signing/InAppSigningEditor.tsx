@@ -1,3 +1,4 @@
+import { useToastMessage } from '../useToastMessage';
 import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
 import { CalendarDays, CheckCheck, Eye, Hand, LayoutTemplate, PenLine, Save, Signature, TextCursorInput, Trash2, Type, X } from 'lucide-react'
 import { Document, Page } from 'react-pdf'
@@ -86,7 +87,7 @@ export default function InAppSigningEditor({ attachmentId, requestId, name, onCl
   const [activePage, setActivePage] = useState(1)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  const setNotice = useToastMessage('info')
   const [confirmClose, setConfirmClose] = useState(false)
   const [preview, setPreview] = useState<{ key: number; pdf: Blob } | null>(null)
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null)
@@ -427,7 +428,7 @@ export default function InAppSigningEditor({ attachmentId, requestId, name, onCl
 <Modal.Body className="modal-body">
 <LoadingBar active={busy || loading} />
 {error && <ErrorBanner message={error} />}
-{notice && <p className="signing-notice" role="status">{notice}</p>}
+
 {status && !editable && <p className="signing-notice" role="status">This request has been finished. Preview or download the signed PDF from the signing requests list.</p>}
 <div className="in-app-signing-layout">
         {showPalette && <aside className="signing-palette" aria-label="Fields">

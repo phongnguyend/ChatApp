@@ -1,4 +1,6 @@
 import { promptDialog, confirmDialog } from '../../services/dialogs';
+import { toast } from '../../services/toasts';
+import { ToastNotice } from '../Toast';
 import { useEffect, useRef, useState } from 'react';
 import { HubConnectionBuilder, HubConnectionState } from '@microsoft/signalr';
 import { ArrowLeft, MousePointer2, Hand, Pencil, Square, Circle, Minus, Type, StickyNote, Eraser, ImagePlus, Undo2, Redo2, Copy, ClipboardPaste, Trash2, Share2, History, Download } from 'lucide-react';
@@ -444,7 +446,8 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
       <button onClick={() => void openPanel('history')}><History size={16} /> History</button>
       {board.isOwner && <button onClick={() => void openPanel('share')}><Share2 size={16} /> Share</button>}
     </header>
-    {error && <div className="whiteboard-error" role="alert">{error}{pending && <><button disabled={busy} onClick={() => void send(pending)}>Retry save</button><button disabled={busy} onClick={() => { setPending(null); void reload().catch(report); }}>Discard pending change</button></>}</div>}
+    <ToastNotice message={pending ? '' : error} />
+    {error && pending && <div className="whiteboard-error" role="alert">{error}<button disabled={busy} onClick={() => void send(pending)}>Retry save</button><button disabled={busy} onClick={() => { setPending(null); void reload().catch(report); }}>Discard pending change</button></div>}
     <div className="whiteboard-toolbar" role="toolbar" aria-label="Whiteboard tools">
       {tools.map(([value, label, Icon]) => <button key={value} title={label} aria-label={label} aria-pressed={tool === value} disabled={disabled && value !== 'select' && value !== 'pan'} onClick={() => setTool(value)}><Icon size={19} /></button>)}
       <button title="Upload image" aria-label="Upload image" disabled={disabled} onClick={() => upload.current?.click()}><ImagePlus size={19} /></button>
@@ -476,7 +479,7 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
       {(panel || selectedItems.length > 0) && <aside className="whiteboard-inspector">
         {!panel && selectedItems.length > 1 && <><h3>{selectedItems.length} objects selected</h3><p>Drag any selected object to move them together. Copy and delete apply to the entire selection.</p><p>Ctrl-click (Command-click on Mac) toggles individual objects. Click empty space to clear the selection.</p></>}
         {panel && <button onClick={() => setPanel(null)}>Close panel</button>}
-        {panel === 'share' && <><h3>Share board</h3><p>Only invited accounts can open this board.</p><button onClick={() => void navigator.clipboard.writeText(`${location.origin}${location.pathname}?whiteboard=${board.id}`).catch(report)}>Copy board link</button>
+        {panel === 'share' && <><h3>Share board</h3><p>Only invited accounts can open this board.</p><button onClick={() => void navigator.clipboard.writeText(`${location.origin}${location.pathname}?whiteboard=${board.id}`).then(() => { toast.success('Board link copied.'); }).catch(report)}>Copy board link</button>
           <form onSubmit={event => {
             event.preventDefault();
             const data = new FormData(event.currentTarget);

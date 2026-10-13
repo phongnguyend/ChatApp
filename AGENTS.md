@@ -19,6 +19,14 @@
 - Run `npm run test:modals` in `frontend` after modal changes.
 - Before completing a modal migration, audit the entire requested scope for browser popup calls, raw dialogs, legacy modal shells/styles, and missing shared sections. Verify the actual rendered Header/Body/Footer layout, not just component imports. Test confirmation and cancellation, Escape, focus trapping/restoration, and representative existing dialogs; do not claim consistency while legacy-looking popups remain.
 
+## Frontend notifications
+
+- Use `frontend/src/services/toasts.ts` (`toast.success`, `toast.error`, `toast.warning`, `toast.info`) for transient action feedback everywhere. `components/useToastMessage.ts` is the scoped alternative for existing notification setters; clear it with an empty message. Do not create feature-specific success banners, toast hosts, or notification timers.
+- Mount `ToastViewport` exactly once in `main.tsx`. It handles stacking, accessible announcements, dismissal, timing, and placement above native modals. Do not put notifications in browser alerts or acknowledgement modals.
+- Keep field validation, loading/connection status, empty states, public form completion screens, and persistent recovery controls inline. Do not replace actionable validation with a disappearing toast or announce the same error both inline and as a toast.
+- Errors remain until dismissed by default; routine success/info messages expire after six seconds. Use an explicit duration or action only when the workflow needs it. Reuse an ID to update an existing notification; never include secrets in notification text.
+- After notification changes, run `npm run test:toasts` and verify representative flows, modal visibility, keyboard dismissal, duplicate suppression, and timers paused during hover/focus. Ensure icons do not shrink and check small screens and both themes.
+
 Preferred C# formatting:
 
 ```csharp

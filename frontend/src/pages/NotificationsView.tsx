@@ -1,3 +1,4 @@
+import { useToastMessage } from '../components/useToastMessage';
 import { authFetch as fetch } from "../services/auth";
 import { ArrowLeft, AtSign, Bell, CalendarDays, Check, CheckCheck, ClipboardList, FileText, FolderOpen, LoaderCircle, MessageCircle, NotebookPen, Radio, RefreshCw, Reply, UserRoundCheck } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -59,7 +60,7 @@ export function NotificationsView({ apiUrl, currentUsername, onBack, onOpen, onU
   const [busyId, setBusyId] = useState<string | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
   const [refreshVersion, setRefreshVersion] = useState(0);
-  const [error, setError] = useState("");
+  const setError = useToastMessage('error');
 
   useEffect(() => {
     if (hidden) return;
@@ -137,7 +138,7 @@ export function NotificationsView({ apiUrl, currentUsername, onBack, onOpen, onU
       <div className="notifications-header-actions"><button type="button" onClick={onBack}><ArrowLeft size={16} /> Back to chat</button><button type="button" onClick={refresh} disabled={loading}><RefreshCw size={15} /> Refresh</button></div>
     </header>
     <div className="notifications-toolbar"><span>{unreadCount} unread</span><button type="button" disabled={markingAll || unreadCount === 0} onClick={() => void markAllRead()}><CheckCheck size={15} /> Mark all as read</button></div>
-    {error && <p className="notifications-error" role="alert">{error}</p>}
+
     <div className="notifications-list">
     {loading && page === 0 ? <div className="notifications-empty"><LoaderCircle className="notifications-spin" size={26} /> Loading notifications...</div> : items.length === 0 ? <div className="notifications-empty"><Bell size={35} /><strong>No notifications yet</strong><span>New replies, mentions, reactions, recordings, invitations, shares, and assignments will appear here.</span></div> : items.map((item) => {
         const details = activity(item.type);

@@ -1,0 +1,40 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import ts from 'typescript';
+
+const source = fs.readFileSync(new URL('../src/services/toasts.ts', import.meta.url), 'utf8');
+const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
+const { toast, getToasts, subscribeToasts } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+let updates = 0;
+const unsubscribe = subscribeToasts(() => { updates++; });
+assert.equal(toast.success(' '), '');
+assert.equal(getToasts().length, 0);
+const id = toast.success('Saved');
+assert.equal(getToasts()[0].duration, 6000);
+assert.equal(toast.success('Saved'), id);
+assert.equal(getToasts().length, 1);
+assert.equal(getToasts()[0].revision, 2);
+toast.info('Changed', { id, duration: 1200 });
+assert.equal(getToasts()[0].message, 'Changed');
+assert.equal(getToasts()[0].duration, 1200);
+toast.error('Upload failed');
+assert.equal(getToasts()[1].duration, 0);
+toast.warning('Check your settings');
+assert.equal(getToasts()[2].duration, 10000);
+toast.info('Retry available', { action: { label: 'Retry', onClick() {} } });
+assert.equal(getToasts()[3].duration, 0);
+toast.dismiss(id);
+assert.equal(getToasts().some(item => item.id === id), false);
+toast.dismissAll();
+assert.equal(getToasts().length, 0);
+for (let index = 0; index < 25; index++) {
+  toast.info(`Message ${index}`);
+}
+assert.equal(getToasts().length, 20);
+assert.equal(getToasts()[0].message, 'Message 5');
+assert.ok(updates > 0);
+unsubscribe();
+const previousUpdates = updates;
+toast.dismissAll();
+assert.equal(updates, previousUpdates);
+console.log('Toast store passed: deduplication, updates, duration policy, queue bounds, dismissal, subscriptions.');

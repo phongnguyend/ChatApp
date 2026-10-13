@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 import type { FormNode } from './formModel';
 import { highlightFormCode } from './highlightFormCode';
+import { toast } from '../../services/toasts';
 
 export function FormCodeBlock({ node }: { node: FormNode }) {
   const codeRef = useRef<HTMLPreElement>(null);
@@ -15,8 +16,10 @@ export function FormCodeBlock({ node }: { node: FormNode }) {
     try {
       await navigator.clipboard.writeText(source);
       setResult({ source, status: 'copied' });
+      toast.success('Code copied to clipboard.');
     } catch {
       setResult({ source, status: 'error' });
+      toast.error('Could not access the clipboard. The code is selected so you can copy it manually.');
       if (codeRef.current) {
         codeRef.current.focus();
         const range = document.createRange();
@@ -38,7 +41,5 @@ export function FormCodeBlock({ node }: { node: FormNode }) {
       }}>{status === 'copied' ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}{status === 'copied' ? 'Copied' : 'Copy code'}</button>
     </div>
     <pre ref={codeRef} tabIndex={0} aria-label={node.label || 'Code block'} className={node.codeWrap ? 'wrap-code' : undefined}>{highlighted === null ? <code>{code}</code> : <code className={`hljs language-${language}`} dangerouslySetInnerHTML={{ __html: highlighted }} />}</pre>
-    {status === 'copied' && <span role="status" className="form-code-copy-status">Code copied to clipboard.</span>}
-    {status === 'error' && <p role="alert">Could not access the clipboard. The code is selected so you can copy it manually.</p>}
   </div>;
 }

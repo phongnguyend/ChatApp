@@ -1,4 +1,6 @@
 import { Modal } from '../Modal';
+import { useToastMessage } from '../useToastMessage';
+import { toast } from '../../services/toasts';
 import { useRef, useState } from 'react';
 import { Braces, Check, Copy, X } from 'lucide-react';
 import { defaultSheetId, type Board } from './boardModel';
@@ -9,7 +11,7 @@ export function WhiteboardJsonDialog({ board, onClose }: { board: Board; onClose
   const dialogRef = useRef<HTMLDialogElement>(null);
   const textRef = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState(false);
-  const [error, setError] = useState('');
+  const setError = useToastMessage('error');
   const json = JSON.stringify({
     id: board.id, title: board.title, revision: board.revision,
     sheets: board.sheets ?? [{ id: defaultSheetId, name: 'Sheet 1' }], objects: board.objects,
@@ -20,6 +22,7 @@ export function WhiteboardJsonDialog({ board, onClose }: { board: Board; onClose
     try {
       await navigator.clipboard.writeText(json);
       setCopied(true);
+      toast.success('JSON copied to clipboard.');
     } catch {
       setCopied(false);
       setError('Could not access the clipboard. The JSON is selected so you can copy it manually.');
@@ -35,8 +38,7 @@ export function WhiteboardJsonDialog({ board, onClose }: { board: Board; onClose
 <Modal.Body>
 <p id="whiteboard-json-description">Snapshot of all sheets and objects when opened, including pending changes and deleted objects. Images are referenced by ID.</p>
 <JsonViewer ref={textRef} label="Whiteboard JSON" json={json} />
-{error && <p role="alert">{error}</p>}
 </Modal.Body>
-<Modal.Footer as="footer"><span role="status">{copied ? 'JSON copied to clipboard.' : ''}</span><button type="button" onClick={() => void copy()}>{copied ? <Check size={16} /> : <Copy size={16} />}Copy JSON</button></Modal.Footer>
+<Modal.Footer as="footer"><button type="button" onClick={() => void copy()}>{copied ? <Check size={16} /> : <Copy size={16} />}Copy JSON</button></Modal.Footer>
 </Modal>;
 }

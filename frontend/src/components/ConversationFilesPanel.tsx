@@ -1,4 +1,5 @@
 import { authFetch as fetch } from "../services/auth";
+import { ToastNotice } from './Toast';
 import { Download, FileImage, FileText, LoaderCircle, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -99,7 +100,7 @@ export function ConversationFilesPanel({ apiUrl, currentUsername, scope, hidden,
       <div><strong>{heading}</strong><small>{files.length}{hasMore ? "+" : ""} {files.length === 1 && !hasMore ? "file" : "files"}</small></div>
       <label className="documents-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} maxLength={100} placeholder="Search conversation files" aria-label="Search conversation files" /></label>
     </div>
-    {error && <div className="documents-message error" role="alert">{error}</div>}
+    <ToastNotice message={error} />
     <div className="documents-list documents-conversation-list">
       <div className="documents-conversation-heading"><span>Name</span><span>Conversation</span><span>Shared</span><span>Actions</span></div>
       {loading && <p className="documents-state"><LoaderCircle className="spin" size={18} /> Loading conversation files…</p>}

@@ -1,3 +1,5 @@
+import { useToastMessage } from './components/useToastMessage';
+import { toast } from './services/toasts';
 import { Modal } from './components/Modal';
 import { Users as AccountUsersIcon, History as AccountHistoryIcon, Settings as AccountSettingsIcon } from "lucide-react";
 import { ActivityLogPage } from "./pages/ActivityLogPage";
@@ -1268,7 +1270,7 @@ function ChatApp({
     () => new Set(),
   );
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
-  const [error, setError] = useState("");
+  const setError = useToastMessage('error');
   const [hubConnection, setHubConnection] = useState<HubConnection | null>(
     null,
   );
@@ -3138,6 +3140,7 @@ function ChatApp({
         .join(", ");
     try {
       await navigator.clipboard.writeText(copyText);
+      toast.success('Message copied.');
     } catch {
       setError("Could not copy this message.");
     }
@@ -5043,12 +5046,7 @@ function ChatApp({
           </div>
         </header>
 
-        {error && (
-          <div className="chat-error" role="alert">
-            <span>{error}</span>
-            <button onClick={() => setError("")}>Dismiss</button>
-          </div>
-        )}
+
 
         <nav
           className="conversation-tabs"
@@ -6940,6 +6938,7 @@ function ChatApp({
                   try {
                     await navigator.clipboard.writeText(joinConversationUrl);
                     setIsJoinLinkCopied(true);
+                    toast.success('Invitation link copied.');
                   } catch {
                     setError("Could not copy the join link.");
                   }

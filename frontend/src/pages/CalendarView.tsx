@@ -1,4 +1,5 @@
 import { Modal } from '../components/Modal';
+import { toast } from '../services/toasts';
 import { authFetch as fetch } from "../services/auth";
 import { AlarmClock, CalendarDays, CalendarX2, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Clock3, HelpCircle, LoaderCircle, MessageCircle, Pencil, Plus, RefreshCw, UserRound, Video, X, XCircle } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
@@ -459,6 +460,7 @@ export function CalendarView({
       });
       const saved = await readResponse<CalendarReminder>(response);
       setReminders((current) => [...current, saved]);
+      toast.success('Reminder created.');
       setReminderForm(null);
       goToWeek(localDate(saved.reminderDate));
       setSelectedReminder(saved);
@@ -605,6 +607,7 @@ export function CalendarView({
         body: JSON.stringify({ ...form, title: form.title.trim(), description: form.description.trim(), start: form.allDay ? null : form.start, end: form.allDay ? null : form.end, people: form.people.map((person) => person.id) }),
       });
       const saved = await readResponse<CalendarMeeting>(response);
+      toast.success(editingId ? 'Meeting updated.' : 'Meeting created.');
       setForm(null);
       setEditingId(null);
       setSelectedMeeting(saved);

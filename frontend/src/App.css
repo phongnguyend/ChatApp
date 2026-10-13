@@ -1070,26 +1070,6 @@
   background: #e68a2e;
 }
 
-.chat-error {
-  grid-area: error;
-  padding: 9px 20px;
-  display: flex;
-  justify-content: center;
-  gap: 16px;
-  color: #823d34;
-  background: #fceae6;
-  font-size: 12px;
-}
-
-.chat-error button {
-  padding: 0;
-  border: 0;
-  color: inherit;
-  background: transparent;
-  font-weight: 700;
-  text-decoration: underline;
-}
-
 .conversation-tabs {
   grid-area: tabs;
   padding: 0 28px;
@@ -4680,9 +4660,6 @@ input.visually-hidden {
 .layout-header-actions .layout-account-action { width: auto; min-height: 32px; margin: 0; padding: 7px 9px; display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; font-size: 12px; white-space: nowrap; }
 .layout-user .sidebar-user-copy { min-width: 0; max-width: 160px; }
 .layout-user .sidebar-user-copy strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chat-error { min-width: 0; max-width: 100%; align-items: flex-start; }
-.chat-error > span { min-width: 0; overflow-wrap: anywhere; max-height: 100px; overflow-y: auto; }
-.chat-error > button { flex-shrink: 0; }
 @media (max-width: 900px) { .layout-account-action > span { display: none; }.layout-header-actions .layout-account-action { padding: 7px; }.layout-user { min-width: 0; }.layout-user .sidebar-user-copy { display: none; } }
 @media (max-width: 480px) { .layout-header .layout-brand { display: none; }.layout-header { padding: 0 8px; justify-content: flex-end; }.layout-header-actions { gap: 4px; }.layout-user { gap: 4px; padding-left: 6px; } }
 

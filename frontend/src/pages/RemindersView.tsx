@@ -1,3 +1,5 @@
+import { useToastMessage } from '../components/useToastMessage';
+import { toast } from '../services/toasts';
 import { Modal } from '../components/Modal';
 import { authFetch as fetch } from "../services/auth";
 import { AlarmClock, ArrowLeft, CalendarDays, Clock3, LoaderCircle, Pencil, Plus, Trash2, X } from "lucide-react";
@@ -62,7 +64,7 @@ export function RemindersView({ apiUrl, currentUsername, onBack, hidden }: {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState("");
+  const setError = useToastMessage('error');
   const [dialogError, setDialogError] = useState("");
   const [viewing, setViewing] = useState<Reminder | null>(null);
   const [editing, setEditing] = useState<Reminder | null>(null);
@@ -135,6 +137,7 @@ export function RemindersView({ apiUrl, currentUsername, onBack, hidden }: {
       if (!response.ok) throw new Error(await readError(response));
       setRefreshVersion((value) => value + 1);
       setDraft(null);
+      toast.success(editing ? 'Reminder updated.' : 'Reminder created.');
       setEditing(null);
     } catch (reason) { setDialogError(reason instanceof Error ? reason.message : "Could not save reminder."); }
     finally { setSaving(false); }
@@ -149,6 +152,7 @@ export function RemindersView({ apiUrl, currentUsername, onBack, hidden }: {
       if (!response.ok) throw new Error(await readError(response));
       setRefreshVersion((value) => value + 1);
       setDeleteTarget(null);
+      toast.success('Reminder deleted.');
     } catch (reason) { setDialogError(reason instanceof Error ? reason.message : "Could not delete reminder."); }
     finally { setDeleting(false); }
   }
@@ -168,7 +172,7 @@ export function RemindersView({ apiUrl, currentUsername, onBack, hidden }: {
       </div>
       {filterDateError && <p className="reminders-error" role="alert">{filterDateError}</p>}
     </div>
-    {error && <p className="reminders-error" role="alert">{error}</p>}
+
     <div className="reminders-list">
       {loading ? <div className="reminders-empty"><LoaderCircle className="reminders-spin" size={25} /> Loading reminders...</div> : reminders.length === 0 ? <div className="reminders-empty"><AlarmClock size={35} /><strong>{hasFilters ? "No reminders match your filters" : "No reminders yet"}</strong><span>{hasFilters ? "Try changing or clearing the filters." : "Create a reminder to see it here and on your calendar."}</span></div> :
         reminders.map((reminder) => <article className="reminders-item" key={reminder.id}>

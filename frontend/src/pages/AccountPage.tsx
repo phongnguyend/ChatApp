@@ -1,3 +1,4 @@
+import { useToastMessage } from '../components/useToastMessage';
 import { useEffect, useState, type FormEvent } from 'react';
 import { accountApi, clearSession, loadProfile, type AccountUser } from '../services/auth';
 import { microsoftEnabled, startMicrosoftSignIn } from '../services/microsoftAuth';
@@ -21,7 +22,7 @@ export function AccountPage({ user, avatarUrl, onAvatarSelected, onBack, onSaved
   const [newPassword, setNewPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const setNotice = useToastMessage('success');
   const [pendingPhoto, setPendingPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [savingPhoto, setSavingPhoto] = useState(false);
@@ -54,7 +55,7 @@ export function AccountPage({ user, avatarUrl, onAvatarSelected, onBack, onSaved
   return <section className="account-workspace"><AccountHeader title="Account settings" description="Your profile, connected accounts, and sign-in security." eyebrow="Your account" onBack={onBack} />
     <div className="profile-settings">
     <div className="account-identity"><span className="account-avatar">{avatarUrl ? <img src={avatarUrl} alt="" /> : (user.firstName || user.username).slice(0, 1).toUpperCase()}</span><div><strong>{[user.firstName, user.lastName].filter(Boolean).join(' ') || user.username}</strong><p>{user.email || user.username}</p></div><div className="account-badges">{user.roles.map(role => <span className="account-badge" key={role}>{role}</span>)}</div></div>
-    {error && <p role="alert" className="form-error">{error}</p>}{notice && <p role="status">{notice}</p>}
+    {error && <p role="alert" className="form-error">{error}</p>}
     <div className="profile-settings-grid">
     <section className="profile-settings-section profile-photo-section"><div className="profile-section-heading"><Camera size={19} aria-hidden="true" /><div><h2>Profile photo</h2><p>Choose an image or take a photo. Preview it before saving.</p></div></div>
       <fieldset className="profile-avatar-editor" disabled={savingPhoto} aria-label="Profile photo editor"><AvatarPicker disabled={savingPhoto} imageUrl={photoPreview ?? avatarUrl} fallback={(user.firstName || user.username).slice(0, 1).toUpperCase()} label="Your profile photo" onSelect={async file => {
