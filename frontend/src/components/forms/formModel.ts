@@ -2,7 +2,7 @@ export type Condition = { questionId: string; operator: string; value: string };
 export const codeLanguages = ['text', 'javascript', 'typescript', 'json', 'html', 'css', 'csharp', 'python', 'sql', 'shell', 'yaml', 'xml'];
 export const defaultAttachmentExtensions = ['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp', '.rtf', '.txt', '.csv', '.pdf', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tif', '.tiff', '.heic', '.heif'];
 export type FormNode = {
-  id: string; kind: string; label: string; description: string; required: boolean;
+  id: string; pageId?: string; kind: string; label: string; description: string; required: boolean;
   options: string[]; min: number | null; max: number | null; children: FormNode[];
   conditionMode: 'all' | 'any'; conditions: Condition[];
   imageDataUrl?: string;
@@ -23,7 +23,7 @@ export type FormNode = {
   codeLanguage?: string;
   codeWrap?: boolean;
 };
-export type FormDefinition = { title: string; description: string; confirmationMessage: string; nodes: FormNode[] };
+export type FormDefinition = { title: string; description: string; confirmationMessage: string; nodes: FormNode[]; pages?: Omit<FormPage, 'nodes'>[] };
 export type Answers = Record<string, string[]>;
 export type FormDetail = { id: string; title: string; revision: number; isPublished: boolean; publishedVersion: number; shareToken: string; updatedAt: string; definition: FormDefinition };
 export type FormSummary = Omit<FormDetail, 'definition'> & { responseCount: number };
@@ -40,7 +40,7 @@ export const questionTypes = [
 export const isQuestion = (node: FormNode) => questionTypes.some(([kind]) => kind === node.kind);
 export function createNode(kind: string): FormNode {
   const node: FormNode = {
-    id: crypto.randomUUID(), kind, label: questionTypes.find(([value]) => value === kind)?.[1] ?? (kind === 'image' ? 'Image' : kind === 'section' ? 'Section' : 'Columns'),
+    id: crypto.randomUUID(), pageId: '__first_page', kind, label: questionTypes.find(([value]) => value === kind)?.[1] ?? (kind === 'image' ? 'Image' : kind === 'section' ? 'Section' : 'Columns'),
     description: '', required: false, options: ['Option 1', 'Option 2'], min: null, max: null,
     children: [], conditionMode: 'all', conditions: [],
   };
@@ -81,6 +81,27 @@ export function createNode(kind: string): FormNode {
 }
 export function flatten(nodes: FormNode[]): FormNode[] {
   return nodes.flatMap(node => [node, ...flatten(node.children)]);
+}
+export type FormPage = { id: string; title: string; description: string; nodes: FormNode[] };
+export function formPages(definition: FormDefinition): FormPage[] {
+  const pages = definition.pages ?? [{ id: '__first_page', title: '', description: '' }];
+  return pages.map(page => ({ ...page, nodes: definition.nodes.filter(node => (node.pageId ?? pages[0].id) === page.id) }));
+}
+export function assignPage(node: FormNode, pageId: string): FormNode {
+  return { ...node, pageId, children: node.children.map(child => assignPage(child, pageId)) };
+}
+export function pageNodes(pages: FormPage[]): FormNode[] {
+  return pages.flatMap(page => page.nodes.map(node => assignPage(node, page.id)));
+}
+export function duplicateFormPage(page: FormPage): FormPage {
+  const ids = new Map(flatten(page.nodes).map(node => [node.id, crypto.randomUUID()]));
+  function copy(nodes: FormNode[]): FormNode[] {
+    return nodes.map(node => ({
+      ...node, id: ids.get(node.id)!, children: copy(node.children),
+      conditions: node.conditions.map(condition => ({ ...condition, questionId: ids.get(condition.questionId) ?? condition.questionId })),
+    }));
+  }
+  return { ...page, id: crypto.randomUUID(), title: `${(page.title || 'Page').slice(0, 493)} (copy)`, nodes: copy(page.nodes) };
 }
 export function isValidLinkUrl(value: string): boolean {
   if (value.length > 2048 || !/^https?:\/\//i.test(value) || /[\s\\]/.test(value) || Array.from(value).some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) {
@@ -150,6 +171,21 @@ export function visibleAnswers(nodes: FormNode[], answers: Answers): { ids: Set<
 
 export function definitionIssues(definition: FormDefinition): string[] {
   const issues: string[] = [];
+  if (definition.pages) {
+    const ids = new Set(definition.pages.map(page => page.id));
+    if (!definition.pages.length || definition.pages.length > 200 || ids.size !== definition.pages.length || definition.pages.some(page => !page.id || page.id.length > 80 || page.title.length > 500 || page.description.length > 2000)) {
+      issues.push('Use 1?200 pages with unique IDs and valid titles and descriptions.');
+    }
+    function checkPages(nodes: FormNode[], parentId?: string) {
+      for (const node of nodes) {
+        if (!node.pageId || !ids.has(node.pageId) || parentId && node.pageId !== parentId) {
+          issues.push(`${node.label}: assign the block to an existing page, matching its parent.`);
+        }
+        checkPages(node.children, node.pageId);
+      }
+    }
+    checkPages(definition.nodes);
+  }
   const earlier = new Set<string>();
   const nodes = flatten(definition.nodes);
   if (!definition.title.trim()) {
@@ -201,7 +237,7 @@ export function definitionIssues(definition: FormDefinition): string[] {
       }
     }
   }
-  visit(definition.nodes, 1);
+  visit(formPages(definition).flatMap(page => page.nodes), 1);
   return issues;
 }
 

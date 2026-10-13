@@ -6,6 +6,53 @@ namespace ChatApp.Tests;
 
 public sealed class FormRulesTests
 {
+    [Fact]
+    public void PageBreaksAreRootOnlyAndAnswersAreValidatedAcrossPages()
+    {
+        var page = new FormNode { Id = "page2", Kind = "page", Label = "Contact" };
+        var definition = Definition(Question("name", required: true), page, Question("email", "email", true));
+        Assert.Empty(FormRules.ValidateDefinition(definition, true));
+        Assert.Contains("email", FormRules.ValidateAnswers(definition, new() { ["name"] = ["Alice"] }).Errors.Keys);
+        Assert.Empty(FormRules.ValidateAnswers(definition, new() { ["name"] = ["Alice"], ["email"] = ["alice@example.com"] }).Errors);
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(new FormNode { Id = "section", Kind = "section", Children = [page] })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(page with { Children = [Question("child")] })));
+        Assert.NotEmpty(FormRules.ValidateDefinition(Definition(Question("name"), page with { Conditions = [new("name", "answered", "")] })));
+    }
+
+    [Fact]
+    public void PageIdsValidateMembershipAndUsePageOrderForConditions()
+    {
+        var source = Question("source") with { PageId = "first" };
+        var dependent = Question("dependent") with { PageId = "second", Conditions = [new("source", "answered", "")] };
+        var definition = Definition(dependent, source) with { Pages = [new("first", "First", ""), new("second", "Second", "")] };
+        Assert.Empty(FormRules.ValidateDefinition(definition));
+        Assert.Contains("dependent", FormRules.ValidateAnswers(definition, new() { ["source"] = ["yes"], ["dependent"] = ["answer"] }).Answers.Keys);
+        Assert.NotEmpty(FormRules.ValidateDefinition(definition with { Nodes = [source with { PageId = "missing" }] }));
+        Assert.NotEmpty(FormRules.ValidateDefinition(definition with { Nodes = [new FormNode { Id = "section", Kind = "section", PageId = "first", Children = [dependent] }] }));
+        Assert.NotEmpty(FormRules.ValidateDefinition(definition with { Pages = [new("first", "", ""), new("first", "", "")] }));
+        Assert.NotEmpty(FormRules.ValidateDefinition(definition with { Nodes = [new FormNode { Id = "marker", Kind = "page", PageId = "first", Required = true }] }));
+        var legacy = FormPages.Normalize(Definition(source, new FormNode { Id = "second", Kind = "page", Label = "Second" }, dependent));
+        Assert.Equal(2, legacy.Pages!.Length);
+        Assert.DoesNotContain(legacy.Nodes, node => node.Kind == "page");
+        Assert.Equal("second", legacy.Nodes[1].PageId);
+    }
+
+    [Fact]
+    public void DraftWithLegacyMarkersAndPageMetadataCanBeSavedWithoutLosingBlocks()
+    {
+        var marker = new FormNode { Id = "contact", Kind = "page", Label = "Contact", PageId = "first" };
+        var question = Question("email", "email", true) with { PageId = "first" };
+        var draft = Definition(Question("name") with { PageId = "first" }, marker, question) with { Pages = [new("first", "Introduction", "")] };
+        Assert.Empty(FormRules.ValidateDefinition(draft));
+        var converted = FormPages.Normalize(draft);
+        Assert.Equal(2, converted.Pages!.Length);
+        Assert.Equal("Introduction", converted.Pages[0].Title);
+        Assert.Equal("Contact", converted.Pages[1].Title);
+        Assert.Equal(new[] { "name", "email" }, converted.Nodes.Select(node => node.Id));
+        Assert.Equal("contact", converted.Nodes[1].PageId);
+        Assert.Equal(converted, FormPages.Normalize(converted));
+    }
+
     [Theory]
     [InlineData("<script>alert(1)</script><p onclick='alert(1)'>Safe</p>")]
     [InlineData("<svg onload='alert(1)'></svg><iframe srcdoc='<script>alert(1)</script>'></iframe><p>Safe</p>")]

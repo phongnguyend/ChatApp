@@ -1,5 +1,9 @@
 # Huddle Chat App
 
+Forms support multiple pages through **page tabs above the builder canvas**. Use the **+ (Add page)** button to create a page, and **Page settings** to rename it, edit its description, duplicate it, reorder it, or delete it with confirmation. Only the selected page's blocks are shown; tabs stay visible while the canvas scrolls and show question counts and validation indicators. **Move to page** moves a block and its nested content between pages. Duplication assigns new block IDs and remaps conditions within the copy. Reordering or deleting source questions can invalidate conditions; review the validation messages before publishing. The JSON schema stores page metadata in `pages` and assigns every block a `pageId` (including nested blocks). Page order follows the `pages` array. Legacy page-break definitions are converted on read without a database migration.
+
+Respondents use **Next** and **Back**, with page progress and validation before advancing. Answers and uploaded files are retained between steps, and submission happens only at the last visible page. Pages with no visible blocks are skipped. Conditions can use answers from earlier pages, and hidden answers are excluded from the final submission. Pages cannot be nested or conditional; conditional blocks still work across pages.
+
 ## Whiteboards
 
 Creating an object automatically returns to **Select** mode, leaving the new object selected for moving or editing. This also applies after finishing a pen stroke.

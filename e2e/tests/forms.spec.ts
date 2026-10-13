@@ -3,7 +3,135 @@ import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { adminEmail, adminPassword, apiUrl, createUser, headersFor, login, tokenFor } from './helpers.js';
-import { createNode, csvCell, definitionIssues, flatten, moveNode, visibleAnswers, type FormDefinition, type FormDetail, type ResponsePage } from '../../frontend/src/components/forms/formModel.js';
+import { createNode, csvCell, definitionIssues, duplicateFormPage, flatten, formPages, pageNodes, moveNode, visibleAnswers, type FormDefinition, type FormDetail, type ResponsePage } from '../../frontend/src/components/forms/formModel.js';
+
+test('Form pages validate each step, preserve answers, and skip hidden pages', async ({ page, browser, request }) => {
+  const user = await createUser(request, 'formpages');
+  await login(page, user.username);
+  await page.getByRole('navigation', { name: 'Main sections' }).getByRole('button', { name: 'Forms', exact: true }).click();
+  await page.getByRole('button', { name: 'New form', exact: true }).click();
+  await page.getByLabel('Title', { exact: true }).fill('Paged survey');
+  await page.locator('.forms-palette').getByRole('button', { name: 'Short answer', exact: true }).click();
+  await page.getByLabel('Question', { exact: true }).fill('Name');
+  await page.getByLabel('Required answer').check();
+  await page.getByRole('button', { name: 'Add page', exact: true }).click();
+  await expect(page.locator('.forms-palette').getByRole('button', { name: 'Page break', exact: true })).toHaveCount(0);
+  await expect(page.locator('.forms-block')).toHaveCount(0);
+  await page.getByLabel('Page title', { exact: true }).fill('Contact');
+  await page.locator('.forms-palette').getByRole('button', { name: 'Email', exact: true }).click();
+  await page.getByLabel('Question', { exact: true }).fill('Contact email');
+  await page.getByLabel('Required answer').check();
+  await page.getByRole('button', { name: 'Add condition', exact: true }).click();
+  await page.getByLabel('Condition question', { exact: true }).selectOption({ label: 'Name' });
+  await page.getByLabel('Value (case sensitive)', { exact: true }).fill('Alice');
+  // Whole-page operations keep content isolated, support undo, and use an app dialog.
+  await page.getByRole('button', { name: 'Duplicate page', exact: true }).click();
+  await expect(page.getByRole('tab', { name: 'Contact (copy) (1)', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.forms-block')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Move page left', exact: true }).click();
+  await expect(page.getByRole('tablist', { name: 'Form pages' }).getByRole('tab').nth(1)).toHaveText('Contact (copy) (1)');
+  await page.getByRole('button', { name: 'Delete page', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Delete page?' }).getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('tab', { name: 'Contact (copy) (1)', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Delete page', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Delete page?' }).getByRole('button', { name: 'Delete page', exact: true }).click();
+  await expect(page.getByRole('tablist', { name: 'Form pages' }).getByRole('tab')).toHaveCount(2);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(page.getByRole('tablist', { name: 'Form pages' }).getByRole('tab')).toHaveCount(3);
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  await expect(page.getByRole('tablist', { name: 'Form pages' }).getByRole('tab')).toHaveCount(2);
+  // New root blocks are added to the active page, not the last page.
+  await page.getByRole('tab', { name: 'Page 1 (1)', exact: true }).click();
+  await page.locator('.forms-palette').getByRole('button', { name: 'Paragraph', exact: true }).click();
+  await page.getByLabel('Paragraph text', { exact: true }).fill('Page-specific instructions');
+  await page.getByLabel('Move to page', { exact: true }).selectOption({ label: 'Contact' });
+  await expect(page.getByRole('tab', { name: 'Contact (1)', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.forms-block')).toHaveCount(2);
+  await page.getByRole('button', { name: 'Paragraph Paragraph', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete block', exact: true }).click();
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Alice');
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Contact', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Build', exact: true }).click();
+  await page.getByRole('button', { name: 'Publish form', exact: true }).click();
+  const url = await page.getByLabel('Response link').inputValue();
+  const respondent = await browser.newPage();
+  try {
+    await respondent.goto(url);
+    // A conditional second page is hidden until its condition matches.
+    await respondent.getByRole('textbox', { name: 'Name', exact: true }).fill('Alice');
+    await expect(respondent.getByRole('button', { name: 'Submit response', exact: true })).toHaveCount(0);
+    await respondent.getByRole('textbox', { name: 'Name', exact: true }).fill('');
+    await respondent.getByRole('button', { name: 'Submit response', exact: true }).click();
+    await expect(respondent.getByRole('textbox', { name: 'Name', exact: true })).toBeFocused();
+    await respondent.getByRole('textbox', { name: 'Name', exact: true }).fill('Alice');
+    await respondent.getByRole('button', { name: 'Next', exact: true }).click();
+    await expect(respondent.getByRole('heading', { name: 'Contact', exact: true })).toBeVisible();
+    await respondent.getByRole('button', { name: 'Submit response', exact: true }).click();
+    await expect(respondent.getByRole('textbox', { name: 'Contact email', exact: true })).toBeFocused();
+    await respondent.getByRole('textbox', { name: 'Contact email', exact: true }).fill('alice@example.com');
+    await respondent.getByRole('button', { name: 'Back', exact: true }).click();
+    await expect(respondent.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Alice');
+    await respondent.getByRole('button', { name: 'Next', exact: true }).click();
+    await expect(respondent.getByRole('textbox', { name: 'Contact email', exact: true })).toHaveValue('alice@example.com');
+    await respondent.getByRole('button', { name: 'Back', exact: true }).click();
+    await respondent.getByRole('textbox', { name: 'Name', exact: true }).fill('Bob');
+    await expect(respondent.getByRole('button', { name: 'Next', exact: true })).toHaveCount(0);
+    await respondent.getByRole('button', { name: 'Submit response', exact: true }).click();
+    await expect(respondent.getByRole('heading', { name: 'Response submitted' })).toBeVisible();
+  } finally {
+    await respondent.close();
+  }
+  const headers = headersFor(user.username);
+  const forms = await (await request.get(`${apiUrl}/api/forms/`, { headers })).json() as FormDetail[];
+  const form = forms.find(item => item.title === 'Paged survey')!;
+  const responses = await (await request.get(`${apiUrl}/api/forms/${form.id}/responses`, { headers })).json() as ResponsePage;
+  expect(Object.values(responses.items[0].answers)).toEqual([['Bob']]);
+  expect((await request.delete(`${apiUrl}/api/forms/${form.id}?revision=${form.revision}`, { headers })).status()).toBe(204);
+});
+
+test('Page tabs preserve legacy boundaries and duplicate nested conditional blocks with fresh IDs', () => {
+  const question = { ...createNode('text'), label: 'Source' };
+  const dependent = { ...createNode('email'), conditions: [{ questionId: question.id, operator: 'answered', value: '' }] };
+  const section = { ...createNode('section'), children: [question, dependent] };
+  const marker = { ...createNode('page'), label: 'Second page' };
+  const legacyBase = { title: 'Example', description: '', confirmationMessage: '' };
+  const pages = [{ id: '__first_page', title: '', description: '', nodes: [section] }, { id: marker.id, title: marker.label, description: '', nodes: [createNode('text')] }];
+  expect(pages).toHaveLength(2);
+  expect(pages[0].nodes).toEqual([section]);
+  const copy = duplicateFormPage(pages[0]);
+  const originals = new Set(flatten(pages[0].nodes).map(node => node.id));
+  expect(flatten(copy.nodes).every(node => !originals.has(node.id))).toBe(true);
+  expect(copy.nodes[0].children[1].conditions[0].questionId).toBe(copy.nodes[0].children[0].id);
+  const normalized = pages.map(page => page.id === '__first_page' ? { ...page, id: randomUUID(), title: 'First page' } : page);
+  const serialized = pageNodes([...normalized, copy]);
+  expect(formPages({ ...legacyBase, nodes: serialized, pages: [...normalized, copy].map(({ id, title, description }) => ({ id, title, description })) }).map(page => page.nodes.map(node => node.id))).toEqual([...normalized, copy].map(page => page.nodes.map(node => node.id)));
+  expect(flatten(serialized).every(node => !!node.pageId && node.kind !== 'page')).toBe(true);
+  expect(definitionIssues({ ...legacyBase, nodes: serialized, pages: [...normalized, copy] })).toEqual([]);
+  expect(formPages({ ...legacyBase, nodes: [] })).toHaveLength(1);
+});
+
+test('Saving a mixed legacy page draft converts markers to page IDs', async ({ request }) => {
+  const user = await createUser(request, 'legacypages');
+  const headers = headersFor(user.username);
+  const form = await (await request.post(`${apiUrl}/api/forms/`, { headers })).json() as FormDetail;
+  const firstPage = form.definition.pages![0];
+  const marker = { ...createNode('section'), kind: 'page', label: 'Contact', pageId: firstPage.id };
+  const question = { ...createNode('email'), pageId: firstPage.id };
+  const response = await request.put(`${apiUrl}/api/forms/${form.id}`, { headers, data: {
+    revision: form.revision,
+    definition: { ...form.definition, nodes: [marker, question] },
+  } });
+  expect(response.ok(), await response.text()).toBe(true);
+  const saved = await response.json() as FormDetail;
+  expect(saved.definition.nodes).toHaveLength(1);
+  expect(saved.definition.nodes[0].pageId).toBe(marker.id);
+  expect(saved.definition.pages!.find(page => page.id === marker.id)?.title).toBe('Contact');
+  const loaded = await (await request.get(`${apiUrl}/api/forms/${form.id}`, { headers })).json() as FormDetail;
+  expect(loaded.definition).toEqual(saved.definition);
+  expect((await request.delete(`${apiUrl}/api/forms/${form.id}?revision=${saved.revision}`, { headers })).status()).toBe(204);
+});
 
 test('Forms API sanitizes HTML submitted without the frontend', async ({ request }) => {
   const user = await createUser(request, 'htmlapi');

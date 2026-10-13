@@ -18,7 +18,36 @@ public static class FormRules
 
     public static Dictionary<string, string> ValidateDefinition(FormDefinition definition, bool publishing = false)
     {
+        definition = FormPages.Normalize(definition);
         var errors = new Dictionary<string, string>();
+        var pages = definition.Pages ?? [];
+        if (pages.Length is < 1 or > 200 || pages.Any(page => page is null || string.IsNullOrWhiteSpace(page.Id) || page.Id.Length > 80 || page.Title is null || page.Title.Length > 500 || page.Description is null || page.Description.Length > 2000) || pages.Select(page => page?.Id).Distinct().Count() != pages.Length)
+        {
+            errors["pages"] = "Use 1?200 pages with unique IDs, titles up to 500 characters, and descriptions up to 2000 characters.";
+            return errors;
+        }
+        var pageIds = pages.Select(page => page.Id).ToHashSet();
+        void CheckPages(FormNode[]? nodes, string? parentPage = null, int depth = 1)
+        {
+            if (depth > 8)
+            {
+                errors["nodes"] = "Layouts support up to eight nested levels.";
+                return;
+            }
+            foreach (var node in nodes ?? [])
+            {
+                if (node is null)
+                {
+                    continue;
+                }
+                if (node.PageId is null || !pageIds.Contains(node.PageId) || parentPage is not null && node.PageId != parentPage)
+                {
+                    errors[node.Id ?? "nodes"] = "Every block must reference an existing page and belong to the same page as its parent.";
+                }
+                CheckPages(node.Children, node.PageId, depth + 1);
+            }
+        }
+        CheckPages(definition.Nodes);
         if (string.IsNullOrWhiteSpace(definition.Title) || definition.Title.Length > 200)
         {
             errors["title"] = "A title of 1–200 characters is required.";
@@ -220,7 +249,7 @@ public static class FormRules
                 }
             }
         }
-        Visit(definition.Nodes, 1);
+        Visit(errors.Count == 0 ? FormPages.OrderedNodes(definition) : definition.Nodes, 1);
         if (imageBytes > 4 * 1024 * 1024)
         {
             errors["images"] = "Embedded images must total no more than 4 MiB per form.";
@@ -281,6 +310,7 @@ public static class FormRules
 
     public static (Dictionary<string, string[]> Answers, Dictionary<string, string> Errors) ValidateAnswers(FormDefinition definition, Dictionary<string, string[]>? supplied)
     {
+        definition = FormPages.Normalize(definition);
         var clean = new Dictionary<string, string[]>();
         var errors = new Dictionary<string, string>();
         if (supplied is null || supplied.Count > 200)
@@ -344,7 +374,7 @@ public static class FormRules
                 }
             }
         }
-        Visit(definition.Nodes);
+        Visit(FormPages.OrderedNodes(definition));
         return (clean, errors);
     }
 }

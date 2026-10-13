@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Code2 } from 'lucide-react';
+import { FormPages } from './FormPages';
 import { FormCodeBlock } from './FormCodeBlock';
 import { FormMarkdownBlock } from './FormMarkdownBlock';
 import { FormHtmlBlock } from './FormHtmlBlock';
@@ -11,7 +12,7 @@ import { ImagePlus, Link as LinkIcon, Paperclip, RotateCcw } from 'lucide-react'
 import { defaultAttachmentExtensions } from './formModel';
 import { FormImageEditor } from './FormImageEditor';
 import { AlignLeft, ArrowDown, ArrowUp, CalendarClock, CalendarDays, ChevronDown, CircleDot, Clock, Columns3, GitBranchPlus, GripVertical, Hash, ListChecks, Mail, PanelTop, Plus, Star, ToggleLeft, Trash2, Type, type LucideIcon } from 'lucide-react';
-import { createNode, flatten, insertNode, isQuestion, moveNode, questionTypes, removeNode, updateNode, type FormDefinition, type FormNode } from './formModel';
+import { assignPage, createNode, flatten, formPages, pageNodes, insertNode, isQuestion, moveNode, questionTypes, removeNode, updateNode, type FormDefinition, type FormPage, type FormNode } from './formModel';
 
 const dragType = 'application/x-chatapp-form-block';
 
@@ -33,23 +34,41 @@ const questionIcons: Record<(typeof questionTypes)[number][0], LucideIcon> = {
 };
 
 export function FormBuilder({ definition, onChange }: { definition: FormDefinition; onChange: (definition: FormDefinition) => void }) {
+  definition = { ...definition, nodes: formPages(definition).flatMap(page => page.nodes) };
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [activePageId, setActivePageId] = useState('__first_page');
+  const pages = formPages(definition);
+  const activePage = pages.find(page => page.id === activePageId) ?? pages[0];
+  const pageStart = pages.slice(0, pages.indexOf(activePage)).reduce((sum, page) => sum + page.nodes.length, 0);
+  const pageEnd = pageStart + activePage.nodes.length;
   const all = flatten(definition.nodes);
-  const selected = all.find(node => node.id === selectedId);
+  const pageBlocks = flatten(activePage.nodes);
+  function selectPage(id: string) {
+    setActivePageId(id);
+    setSelectedId(null);
+  }
+  function savePages(next: FormPage[], activate = activePage.id) {
+    onChange({ ...definition, pages: next.map(({ id, title, description }) => ({ id, title, description })), nodes: pageNodes(next) });
+    selectPage(activate);
+  }
+  const selected = pageBlocks.find(node => node.id === selectedId);
   const parent = selected ? all.find(node => node.children.some(child => child.id === selected.id)) : undefined;
   const structuralColumn = parent?.kind === 'columns';
   const beforeSelected = selected ? all.slice(0, all.indexOf(selected)).filter(isQuestion) : [];
-  const changeNodes = (nodes: FormNode[]) => onChange({ ...definition, nodes });
+  const changeNodes = (nodes: FormNode[]) => onChange({ ...definition,
+    pages: pages.map(({ id, title, description }) => ({ id, title, description })),
+    nodes: nodes.map(node => assignPage(node, node.pageId ?? pages[0].id)),
+  });
   const patch = (change: Partial<FormNode>) => {
     if (selected) {
       changeNodes(updateNode(definition.nodes, selected.id, node => ({ ...node, ...change })));
     }
   };
   function add(kind: string, parentId: string | null = null, index?: number) {
-    const node = createNode(kind);
+    const node = assignPage(createNode(kind), activePage.id);
     const destination = parentId === null ? definition.nodes : all.find(item => item.id === parentId)?.children ?? [];
-    changeNodes(insertNode(definition.nodes, node, parentId, index ?? destination.length));
+    changeNodes(insertNode(definition.nodes, node, parentId, index ?? (parentId === null ? pageEnd : destination.length)));
     setSelectedId(node.id);
   }
   function addFromPalette(kind: string) {
@@ -88,20 +107,21 @@ export function FormBuilder({ definition, onChange }: { definition: FormDefiniti
     </div>;
   }
   function renderList(nodes: FormNode[], parentId: string | null) {
-    return <div className="forms-block-list">{dropZone(parentId, 0, nodes.length === 0)}{nodes.map((node, index) => <div key={node.id}>
+    const offset = parentId === null ? pageStart : 0;
+    return <div className="forms-block-list">{dropZone(parentId, offset, nodes.length === 0)}{nodes.map((node, index) => <div key={node.id}>
       <article className={`forms-block ${selectedId === node.id ? 'selected' : ''}`}>
         <div className="forms-block-toolbar">
           <button type="button" className="forms-drag-handle" draggable onDragStart={event => drag(event, `move:${node.id}`)} onDragEnd={() => setDragging(false)} aria-label={`Drag ${node.label}`} title="Drag to move; or use the arrow buttons"><GripVertical size={16} /></button>
           <button className="forms-block-select" type="button" onClick={() => setSelectedId(node.id)}><span>{node.kind === 'html' ? 'HTML' : node.kind === 'markdown' ? 'Markdown' : node.kind === 'code' ? 'Code' : node.kind === 'image' ? 'Image' : node.kind === 'paragraph' ? 'Paragraph' : node.kind === 'link' ? 'Link' : isQuestion(node) ? questionTypes.find(([kind]) => kind === node.kind)?.[1] : node.kind === 'columns' ? `${node.children.length} columns` : 'Section'}</span><strong>{node.label || (node.kind === 'html' ? 'HTML' : node.kind === 'markdown' ? 'Markdown' : node.kind === 'code' ? 'Code' : node.kind === 'paragraph' ? 'Paragraph' : 'Untitled question')}{node.required && ' *'}</strong>{node.conditions.length > 0 && <small>Conditional · {node.conditions.length} rule{node.conditions.length > 1 ? 's' : ''}</small>}</button>
-          <button type="button" disabled={index === 0} aria-label={`Move ${node.label} up`} onClick={() => changeNodes(moveNode(definition.nodes, node.id, parentId, index - 1))}><ArrowUp size={15} /></button>
-          <button type="button" disabled={index === nodes.length - 1} aria-label={`Move ${node.label} down`} onClick={() => changeNodes(moveNode(definition.nodes, node.id, parentId, index + 2))}><ArrowDown size={15} /></button>
+          <button type="button" disabled={index === 0} aria-label={`Move ${node.label} up`} onClick={() => changeNodes(moveNode(definition.nodes, node.id, parentId, offset + index - 1))}><ArrowUp size={15} /></button>
+          <button type="button" disabled={index === nodes.length - 1} aria-label={`Move ${node.label} down`} onClick={() => changeNodes(moveNode(definition.nodes, node.id, parentId, offset + index + 2))}><ArrowDown size={15} /></button>
         </div>
         {node.kind === 'html' ? <FormHtmlBlock node={node} /> : node.kind === 'markdown' ? <FormMarkdownBlock node={node} /> : node.kind === 'code' ? <FormCodeBlock node={node} /> : node.kind === 'paragraph' ? <button className="forms-block-placeholder form-paragraph-block" style={{ textAlign: node.paragraphAlignment ?? 'left' }} type="button" onClick={() => setSelectedId(node.id)}>{node.description || 'Enter paragraph text'}</button> : node.kind === 'link' ? <button className="forms-block-placeholder" type="button" onClick={() => setSelectedId(node.id)}><LinkIcon size={16} aria-hidden="true" />{node.linkUrl || 'Set the destination URL'}</button> : node.kind === 'image' ? <button className="forms-image-preview" type="button" onClick={() => setSelectedId(node.id)} aria-label={`Edit image ${node.label}`}>
           {node.imageDataUrl ? <img className={`form-image form-image-${node.imageDisplay ?? 'banner'}`} style={{ width: node.imageWidth ?? undefined, height: node.imageHeight ?? undefined, maxWidth: node.imageWidth != null ? '100%' : undefined, maxHeight: node.imageHeight != null || node.imageWidth != null ? 'none' : undefined }} src={node.imageDataUrl} alt={node.label} draggable={false} /> : <span><ImagePlus size={24} aria-hidden="true" />Select this block to upload, drop, or paste an image</span>}
         </button> : isQuestion(node) ? <button className="forms-block-placeholder" type="button" onClick={() => setSelectedId(node.id)}>{['radio', 'checkbox', 'select'].includes(node.kind) ? node.options.join('  ·  ') : node.description || 'Click to edit question settings'}</button>
           : node.kind === 'columns' ? <div className="forms-columns-builder" style={{ gridTemplateColumns: `repeat(${node.children.length}, minmax(0, 1fr))` }}>{node.children.map(column => <div key={column.id} className="forms-column"><button type="button" className="forms-column-title" onClick={() => setSelectedId(column.id)}>{column.label}</button>{renderList(column.children, column.id)}</div>)}</div>
             : <div className="forms-section-builder">{renderList(node.children, node.id)}</div>}
-      </article>{dropZone(parentId, index + 1)}
+      </article>{dropZone(parentId, offset + index + 1)}
     </div>)}</div>;
   }
   const forbiddenDestinations = selected ? new Set(flatten([selected]).map(node => node.id)) : new Set<string>();
@@ -119,13 +139,16 @@ export function FormBuilder({ definition, onChange }: { definition: FormDefiniti
       <button type="button" draggable onDragStart={event => drag(event, 'new:paragraph')} onDragEnd={() => setDragging(false)} onClick={() => addFromPalette('paragraph')}><AlignLeft size={15} aria-hidden="true" />Paragraph</button>
       <h3>Layout</h3>{[['section', 'Section'], ['columns', 'Columns']].map(([kind, label]) => <button type="button" key={kind} draggable onDragStart={event => drag(event, `new:${kind}`)} onDragEnd={() => setDragging(false)} onClick={() => addFromPalette(kind)}>{kind === 'section' ? <PanelTop size={15} aria-hidden="true" /> : <Columns3 size={15} aria-hidden="true" />}{label}</button>)}
     </aside>
-    <div className="forms-canvas" role="region" aria-label="Form canvas" tabIndex={0}>
-      <div className="forms-cover-editor"><span className="forms-eyebrow">FORM DETAILS</span>
-        <label>Title<input maxLength={200} value={definition.title} onChange={event => onChange({ ...definition, title: event.target.value })} /></label>
-        <label>Description<textarea rows={2} maxLength={4000} value={definition.description} onChange={event => onChange({ ...definition, description: event.target.value })} placeholder="Tell people what this form is for" /></label>
+    <div className="forms-page-workspace">
+      <FormPages pages={pages} activeId={activePage.id} definition={definition} onSelect={selectPage} onChange={savePages} />
+      <div key={activePage.id} className="forms-canvas" role="region" aria-label="Form canvas" tabIndex={0}>
+        <div className="forms-cover-editor"><span className="forms-eyebrow">FORM DETAILS</span>
+          <label>Title<input maxLength={200} value={definition.title} onChange={event => onChange({ ...definition, title: event.target.value })} /></label>
+          <label>Description<textarea rows={2} maxLength={4000} value={definition.description} onChange={event => onChange({ ...definition, description: event.target.value })} placeholder="Tell people what this form is for" /></label>
+        </div>
+        {renderList(activePage.nodes, null)}
+        <label className="forms-confirmation">Confirmation message<textarea rows={2} maxLength={2000} value={definition.confirmationMessage} onChange={event => onChange({ ...definition, confirmationMessage: event.target.value })} /></label>
       </div>
-      {renderList(definition.nodes, null)}
-      <label className="forms-confirmation">Confirmation message<textarea rows={2} maxLength={2000} value={definition.confirmationMessage} onChange={event => onChange({ ...definition, confirmationMessage: event.target.value })} /></label>
     </div>
     <aside className="forms-inspector"><h3>Block settings</h3>{!selected ? <p>Select a question or layout to edit its settings and conditional logic.</p> : <>
       <label>{['paragraph', 'code', 'markdown', 'html'].includes(selected.kind) ? 'Heading (optional)' : selected.kind === 'image' ? 'Alternative text' : selected.kind === 'link' ? 'Link label' : isQuestion(selected) ? 'Question' : 'Layout label'}<input maxLength={500} value={selected.label} onChange={event => patch({ label: event.target.value })} /></label>
@@ -176,11 +199,22 @@ export function FormBuilder({ definition, onChange }: { definition: FormDefiniti
         </div>)}
         <button type="button" disabled={beforeSelected.length === 0 || selected.conditions.length >= 20} onClick={() => patch({ conditions: [...selected.conditions, { questionId: beforeSelected[0]?.id ?? '', operator: 'equals', value: '' }] })}><GitBranchPlus size={15} aria-hidden="true" />Add condition</button>
       </div>
-      {!structuralColumn && <><label>Move into<select value={parent?.id ?? ''} onChange={event => {
+      {!structuralColumn && <><label>Move to page<select aria-label="Move to page" value={activePage.id} onChange={event => {
+        const target = pages.find(page => page.id === event.target.value);
+        if (!target) {
+          return;
+        }
+        const remaining = removeNode(definition.nodes, selected.id);
+        savePages(pages.map(page => ({ ...page, nodes: [
+          ...remaining.filter(node => (node.pageId ?? pages[0].id) === page.id),
+          ...(page.id === target.id ? [assignPage(selected, target.id)] : []),
+        ] })), target.id);
+        selectPage(target.id);
+      }}>{pages.map((page, index) => <option key={page.id} value={page.id}>{page.title || `Page ${index + 1}`}</option>)}</select></label><label>Move into<select value={parent?.id ?? ''} onChange={event => {
         const destination = event.target.value || null;
-        const length = destination ? all.find(node => node.id === destination)!.children.length : definition.nodes.length;
+        const length = destination ? all.find(node => node.id === destination)!.children.length : pageEnd;
         changeNodes(moveNode(definition.nodes, selected.id, destination, length));
-      }}><option value="">Form root</option>{all.filter(node => node.kind === 'section' && !forbiddenDestinations.has(node.id)).map(node => <option key={node.id} value={node.id}>{node.label}</option>)}</select></label>
+      }}><option value="">Page root</option>{pageBlocks.filter(node => node.kind === 'section' && !forbiddenDestinations.has(node.id)).map(node => <option key={node.id} value={node.id}>{node.label}</option>)}</select></label>
         <button type="button" className="forms-danger" onClick={() => {
           if (selected.children.length > 0 && !window.confirm('Remove this layout and all blocks inside it? You can undo this change.')) {
             return;

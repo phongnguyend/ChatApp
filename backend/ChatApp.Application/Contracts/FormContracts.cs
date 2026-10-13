@@ -1,10 +1,14 @@
 namespace ChatApp.Application.Contracts;
 
-public sealed record FormDefinition(string Title, string Description, string ConfirmationMessage, FormNode[] Nodes);
+public sealed record FormDefinition(string Title, string Description, string ConfirmationMessage, FormNode[] Nodes, FormPage[]? Pages = null);
+
+public sealed record FormPage(string Id, string Title, string Description);
 
 public sealed record FormNode
 {
     public string Id { get; init; } = "";
+
+    public string? PageId { get; init; }
 
     public string Kind { get; init; } = "text";
 

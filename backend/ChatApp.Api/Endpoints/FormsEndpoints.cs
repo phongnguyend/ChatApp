@@ -103,7 +103,7 @@ public static class FormsEndpoints
             {
                 return Results.BadRequest(new { error = "Check your form settings.", errors });
             }
-            var definition = FormHtmlSanitizer.Sanitize(request.Definition);
+            var definition = FormHtmlSanitizer.Sanitize(FormPages.Normalize(request.Definition));
             form.Title = definition.Title.Trim();
             form.DraftJson = JsonSerializer.Serialize(definition with { Title = form.Title }, Json);
             Touch(form);
@@ -494,7 +494,7 @@ public static class FormsEndpoints
         return db.Forms.SingleOrDefaultAsync(x => x.Id == id && x.OwnerId == ownerId, ct);
     }
 
-    private static FormDefinition ReadDefinition(string json) => FormHtmlSanitizer.Sanitize(JsonSerializer.Deserialize<FormDefinition>(json, Json)!);
+    private static FormDefinition ReadDefinition(string json) => FormHtmlSanitizer.Sanitize(FormPages.Normalize(JsonSerializer.Deserialize<FormDefinition>(json, Json)!));
 
     private static object Detail(UserForm form) => new { form.Id, form.Title, form.Revision, form.IsPublished, form.PublishedVersion, form.ShareToken, form.UpdatedAt, Definition = ReadDefinition(form.DraftJson) };
 

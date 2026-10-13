@@ -1,10 +1,11 @@
 import { FormCodeBlock } from './FormCodeBlock';
 import { FormMarkdownBlock } from './FormMarkdownBlock';
 import { FormHtmlBlock } from './FormHtmlBlock';
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { ExternalLink, FlaskConical, Link as LinkIcon, LoaderCircle, Send } from 'lucide-react';
 import type { FormEvent } from 'react';
-import { type Answers, type FormDefinition, type FormNode, isQuestion, visibleAnswers } from './formModel';
+import { type Answers, type FormDefinition, type FormNode, flatten, formPages, isQuestion, visibleAnswers } from './formModel';
 import './Forms.css';
 import { FormAttachmentInput } from './FormAttachmentInput';
 import { defaultAttachmentExtensions, isValidLinkUrl } from './formModel';
@@ -17,10 +18,30 @@ export function FormRenderer({ definition, onSubmit, onUploadFile, busy = false,
   const [uploadError, setUploadError] = useState('');
   const [uploading, setUploading] = useState(false);
   const prefix = useId();
-  const visible = visibleAnswers(definition.nodes, answers);
+  const visible = visibleAnswers(formPages(definition).flatMap(page => page.nodes), answers);
+  const [pageId, setPageId] = useState('__first_page');
+  const pageHeading = useRef<HTMLHeadingElement>(null);
+  const allPages = formPages(definition);
+  const nonemptyPages = allPages.filter(page => page.nodes.some(node => visible.ids.has(node.id)));
+  const pages = nonemptyPages.length > 0 ? nonemptyPages : [allPages[0]];
+  const pageIndex = Math.max(0, pages.findIndex(page => page.id === pageId));
+  const page = pages[pageIndex];
+  const multiplePages = allPages.length > 1;
+  const errorPageId = pages.find(item => flatten(item.nodes).some(node => visible.ids.has(node.id) && errors[node.id]))?.id;
+  useEffect(() => {
+    if (errorPageId) {
+      setPageId(errorPageId);
+    }
+  }, [errors, errorPageId]);
+  useEffect(() => {
+    if (multiplePages) {
+      pageHeading.current?.focus();
+      pageHeading.current?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [page.id, multiplePages]);
   const set = (id: string, values: string[], attachments?: File[]) => {
     setState(current => {
-      const clean = visibleAnswers(definition.nodes, { ...current.answers, [id]: values });
+      const clean = visibleAnswers(formPages(definition).flatMap(page => page.nodes), { ...current.answers, [id]: values });
       const nextFiles = attachments === undefined ? current.files : { ...current.files, [id]: attachments };
       return { answers: clean.answers, files: Object.fromEntries(Object.entries(nextFiles).filter(([key]) => clean.ids.has(key))) };
     });
@@ -135,6 +156,10 @@ export function FormRenderer({ definition, onSubmit, onUploadFile, busy = false,
     if (busy || uploading) {
       return;
     }
+    if (pageIndex < pages.length - 1) {
+      setPageId(pages[pageIndex + 1].id);
+      return;
+    }
     if (Object.values(files).flat().reduce((total, file) => total + file.size, 0) > 20 * 1024 * 1024) {
       setUploadError('Attachments must total at most 20 MiB. Remove some files before submitting.');
       return;
@@ -144,9 +169,19 @@ export function FormRenderer({ definition, onSubmit, onUploadFile, busy = false,
   }
   return <form className="form-renderer" onSubmit={submit}>
     <header className="form-cover"><span className="forms-eyebrow">{preview ? 'PREVIEW • NO RESPONSES SAVED' : 'FORM'}</span><h1>{definition.title}</h1><p>{definition.description}</p><small>Fields marked * are required.</small></header>
-    <div className="form-stack">{render(definition.nodes)}</div>
+    {multiplePages && <div className="form-page-heading">
+      <p role="status">Page {pageIndex + 1} of {pages.length}</p>
+      <progress aria-label="Form progress" value={pageIndex + 1} max={pages.length} />
+      <h2 ref={pageHeading} tabIndex={-1}>{page.title || `Page ${pageIndex + 1}`}</h2>
+      {page.description && <p>{page.description}</p>}
+    </div>}
+    <div className="form-stack">{render(page.nodes)}</div>
     {uploadError && <p className="forms-error" role="alert">{uploadError}</p>}
     {uploading && <p role="status">Uploading files… You can continue filling out the form.</p>}
-    <button className="forms-primary" type="submit" disabled={busy || uploading}>{busy || uploading ? <LoaderCircle size={16} className="forms-spin" aria-hidden="true" /> : preview ? <FlaskConical size={16} aria-hidden="true" /> : <Send size={16} aria-hidden="true" />}{uploading ? 'Uploading files…' : busy ? 'Submitting…' : preview ? 'Test submission' : 'Submit response'}</button>
+    <div className="form-page-navigation">
+      {pageIndex > 0 && <button type="button" disabled={busy || uploading} onClick={() => setPageId(pages[pageIndex - 1].id)}><ArrowLeft size={16} />Back</button>}
+      {pageIndex < pages.length - 1 ? <button className="forms-primary" type="submit" disabled={busy || uploading}>Next<ArrowRight size={16} /></button>
+        : <button className="forms-primary" type="submit" disabled={busy || uploading}>{busy || uploading ? <LoaderCircle size={16} className="forms-spin" aria-hidden="true" /> : preview ? <FlaskConical size={16} aria-hidden="true" /> : <Send size={16} aria-hidden="true" />}{uploading ? 'Uploading files…' : busy ? 'Submitting…' : preview ? 'Test submission' : 'Submit response'}</button>}
+    </div>
   </form>;
 }
