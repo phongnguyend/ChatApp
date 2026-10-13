@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { Modal } from '../Modal';
+import { useRef, useState } from 'react';
 import { Braces, Check, Copy, X } from 'lucide-react';
 import type { FormDefinition } from './formModel';
 import { JsonViewer } from '../JsonViewer';
@@ -11,13 +12,7 @@ export function FormSchemaDialog({ definition, onClose }: { definition: FormDefi
   const [error, setError] = useState('');
   const json = JSON.stringify(definition, null, 2);
 
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    dialog?.showModal();
-    return () => {
-      dialog?.close();
-    };
-  }, []);
+
 
   async function copy() {
     setError('');
@@ -31,15 +26,17 @@ export function FormSchemaDialog({ definition, onClose }: { definition: FormDefi
     }
   }
 
-  return <dialog ref={dialogRef} className="forms-schema-dialog" aria-labelledby="forms-schema-title" aria-describedby="forms-schema-description" onClose={() => {
+  return <Modal ref={dialogRef} className="forms-schema-dialog" aria-labelledby="forms-schema-title" aria-describedby="forms-schema-description" onClose={() => {
     if (!dialogRef.current?.open) {
       onClose();
     }
   }}>
-    <header><h2 id="forms-schema-title"><Braces size={20} aria-hidden="true" />JSON schema</h2><button type="button" aria-label="Close JSON schema" onClick={onClose}><X size={18} aria-hidden="true" /></button></header>
-    <p id="forms-schema-description">Current form definition, including unsaved changes, nested layouts, and conditional rules.</p>
-    <JsonViewer ref={textRef} label="Form JSON schema" json={json} />
-    {error && <p className="forms-error" role="alert">{error}</p>}
-    <footer><span role="status">{copied ? 'JSON copied to clipboard.' : ''}</span><button type="button" className="forms-primary" onClick={() => { void copy(); }}>{copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}Copy JSON</button></footer>
-  </dialog>;
+<Modal.Header as="header"><h2 id="forms-schema-title"><Braces size={20} aria-hidden="true" />JSON schema</h2><button type="button" aria-label="Close JSON schema" onClick={onClose}><X size={18} aria-hidden="true" /></button></Modal.Header>
+<Modal.Body>
+<p id="forms-schema-description">Current form definition, including unsaved changes, nested layouts, and conditional rules.</p>
+<JsonViewer ref={textRef} label="Form JSON schema" json={json} />
+{error && <p className="forms-error" role="alert">{error}</p>}
+</Modal.Body>
+<Modal.Footer as="footer"><span role="status">{copied ? 'JSON copied to clipboard.' : ''}</span><button type="button" className="forms-primary" onClick={() => { void copy(); }}>{copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}Copy JSON</button></Modal.Footer>
+</Modal>;
 }

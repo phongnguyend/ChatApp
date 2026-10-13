@@ -1,3 +1,4 @@
+import { Modal } from './components/Modal';
 import { Users as AccountUsersIcon, History as AccountHistoryIcon, Settings as AccountSettingsIcon } from "lucide-react";
 import { ActivityLogPage } from "./pages/ActivityLogPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -6530,14 +6531,14 @@ function ChatApp({
       </aside>
 
       {viewedProfile && (
-        <div className="modal-backdrop" role="presentation">
+        <Modal layout="backdrop"  role="presentation">
           <div
             className="modal-card online-profile-dialog"
             role="dialog"
             aria-modal="true"
             aria-labelledby="online-profile-title"
           >
-            <div className="modal-header">
+<Modal.Header as="div" className="modal-header">
               <div>
                 <p className="eyebrow">User profile</p>
                 <h2 id="online-profile-title">{viewedProfile.displayName}</h2>
@@ -6550,8 +6551,9 @@ function ChatApp({
               >
                 <X size={20} />
               </button>
-            </div>
-            <div className="online-profile-content">
+            </Modal.Header>
+<Modal.Body>
+<div className="online-profile-content">
               <span
                 className="online-profile-avatar"
                 style={
@@ -6574,14 +6576,16 @@ function ChatApp({
                 {viewedProfile.isOnline ? "Online now" : "Offline"}
               </small>
             </div>
-          </div>
-        </div>
+</Modal.Body>
+
+</div>
+        </Modal>
       )}
 
       {conversationDialog && (
-        <div className="modal-backdrop" role="presentation">
+        <Modal layout="backdrop"  role="presentation">
           <div className="modal-card">
-            <div className="modal-header">
+<Modal.Header as="div" className="modal-header">
               <div>
                 <p className="eyebrow">New conversation</p>
                 <h2>
@@ -6606,8 +6610,9 @@ function ChatApp({
               >
                 <X size={20} />
               </button>
-            </div>
-            {conversationDialog !== "add-members" && (
+            </Modal.Header>
+<Modal.Body>
+{conversationDialog !== "add-members" && (
               <div
                 className="dialog-tabs"
                 role="tablist"
@@ -6645,8 +6650,7 @@ function ChatApp({
                 </button>
               </div>
             )}
-
-            {conversationDialog === "direct" ? (
+{conversationDialog === "direct" ? (
               <div className="direct-picker">
                 <label htmlFor="user-search">Find a person</label>
                 <div className="search-field">
@@ -6887,24 +6891,26 @@ function ChatApp({
                 </button>
               </form>
             )}
-            {dialogError && (
+{dialogError && (
               <p className="form-error" role="alert">
                 {dialogError}
               </p>
             )}
-          </div>
-        </div>
+</Modal.Body>
+
+</div>
+        </Modal>
       )}
 
       {sharedConversation && (
-        <div className="modal-backdrop" role="presentation">
+        <Modal layout="backdrop"  role="presentation">
           <div
             className="modal-card join-link-dialog"
             role="dialog"
             aria-modal="true"
             aria-labelledby="join-link-dialog-title"
           >
-            <div className="modal-header">
+<Modal.Header as="div" className="modal-header">
               <div>
                 <p className="eyebrow">Invite people</p>
                 <h2 id="join-link-dialog-title">Join this conversation</h2>
@@ -6917,14 +6923,13 @@ function ChatApp({
               >
                 <X size={20} />
               </button>
-            </div>
-
-            <InvitationQrCode
+            </Modal.Header>
+<Modal.Body>
+<InvitationQrCode
               src={joinQrCodeUrl}
               alt={`QR code to join ${conversationDisplayTitle(sharedConversation, "conversation")}`}
             />
-
-            <div className="join-link-field">
+<div className="join-link-field">
               <a href={joinConversationUrl} target="_blank" rel="noreferrer">
                 {joinConversationUrl}
               </a>
@@ -6944,14 +6949,16 @@ function ChatApp({
                 {isJoinLinkCopied ? "Copied" : "Copy link"}
               </button>
             </div>
-          </div>
-        </div>
+</Modal.Body>
+
+</div>
+        </Modal>
       )}
 
       {isRenameDialogOpen && activeConversation?.type === "group" && (
-        <div className="modal-backdrop" role="presentation">
+        <Modal layout="backdrop"  role="presentation">
           <form className="modal-card rename-group-form" onSubmit={renameGroup}>
-            <div className="modal-header">
+<Modal.Header as="div" className="modal-header">
               <div>
                 <p className="eyebrow">Group settings</p>
                 <h2>Rename conversation</h2>
@@ -6964,10 +6971,10 @@ function ChatApp({
               >
                 <X size={20} />
               </button>
-            </div>
-
-            <label htmlFor="rename-group-title">Group name</label>
-            <input
+            </Modal.Header>
+<Modal.Body>
+<label htmlFor="rename-group-title">Group name</label>
+<input
               id="rename-group-title"
               autoFocus
               maxLength={200}
@@ -6977,17 +6984,15 @@ function ChatApp({
                 setRenameError("");
               }}
             />
-            <p className="rename-note">
+<p className="rename-note">
               Everyone in the group will see a message about this change.
             </p>
-
-            {renameError && (
+{renameError && (
               <p className="form-error" role="alert">
                 {renameError}
               </p>
             )}
-
-            <button
+<button
               className="primary-button"
               disabled={
                 isRenaming ||
@@ -7002,14 +7007,16 @@ function ChatApp({
                 "Save new name"
               )}
             </button>
-          </form>
-        </div>
+</Modal.Body>
+
+</form>
+        </Modal>
       )}
 
       {conversationToLeave?.type === "group" && (
-        <div className="modal-backdrop" role="presentation">
+        <Modal layout="backdrop"  role="presentation">
           <div className="modal-card leave-group-dialog">
-            <div className="modal-header">
+<Modal.Header as="div" className="modal-header">
               <div>
                 <p className="eyebrow">Group settings</p>
                 <h2>Leave {conversationToLeave.title}?</h2>
@@ -7022,20 +7029,19 @@ function ChatApp({
               >
                 <X size={20} />
               </button>
-            </div>
-
-            <p>
+            </Modal.Header>
+<Modal.Body>
+<p>
               This conversation will be removed from your list. Everyone
               remaining in the group will see that you left.
             </p>
-
-            {leaveError && (
+{leaveError && (
               <p className="form-error" role="alert">
                 {leaveError}
               </p>
             )}
-
-            <div className="modal-actions">
+</Modal.Body>
+<Modal.Footer as="div" className="modal-actions">
               <button
                 className="secondary-button"
                 type="button"
@@ -7056,15 +7062,15 @@ function ChatApp({
                   "Leave conversation"
                 )}
               </button>
-            </div>
-          </div>
-        </div>
+            </Modal.Footer>
+</div>
+        </Modal>
       )}
 
       {isLogoutDialogOpen && (
-        <div className="modal-backdrop" role="presentation">
+        <Modal layout="backdrop"  role="presentation">
           <div role="dialog" aria-modal="true" aria-label="Sign out" className="modal-card confirmation-dialog">
-            <div className="modal-header">
+<Modal.Header as="div" className="modal-header">
               <div>
                 <p className="eyebrow">Account</p>
                 <h2>Sign out of Huddle?</h2>
@@ -7077,11 +7083,11 @@ function ChatApp({
               >
                 <X size={20} />
               </button>
-            </div>
-
-            <p>You’ll return to the sign-in screen.</p>
-
-            <div className="modal-actions">
+            </Modal.Header>
+<Modal.Body>
+<p>You’ll return to the sign-in screen.</p>
+</Modal.Body>
+<Modal.Footer as="div" className="modal-actions">
               <button
                 className="secondary-button"
                 type="button"
@@ -7099,15 +7105,15 @@ function ChatApp({
               >
                 Sign out
               </button>
-            </div>
-          </div>
-        </div>
+            </Modal.Footer>
+</div>
+        </Modal>
       )}
 
       {avatarDialog === "group" && activeConversation?.type === "group" && (
-        <div className="modal-backdrop" role="presentation">
+        <Modal layout="backdrop"  role="presentation">
           <div className="modal-card avatar-dialog">
-            <div className="modal-header">
+<Modal.Header as="div" className="modal-header">
               <div>
                 <p className="eyebrow">Group settings</p>
                 <h2>Update group avatar</h2>
@@ -7115,26 +7121,29 @@ function ChatApp({
               <button className="icon-button" type="button" aria-label="Close" onClick={() => setAvatarDialog(null)}>
                 <X size={20} />
               </button>
-            </div>
-            <AvatarPicker
+            </Modal.Header>
+<Modal.Body>
+<AvatarPicker
               imageUrl={avatarSource(activeConversation.avatarUrl)}
               fallback={initials(activeConversation.title ?? "Group")}
               label={activeConversation.title ?? "Group"}
               capture="environment"
               onSelect={uploadGroupAvatar}
             />
-          </div>
-        </div>
+</Modal.Body>
+
+</div>
+        </Modal>
       )}
 
       {isPollDialogOpen && (
-        <div className="modal-backdrop" role="presentation">
+        <Modal layout="backdrop"  role="presentation">
           <form
             className="modal-card poll-dialog"
             aria-label="Create a poll"
             onSubmit={createPoll}
           >
-            <div className="modal-header">
+<Modal.Header as="div" className="modal-header">
               <div>
                 <p className="eyebrow">Conversation poll</p>
                 <h2>Create a poll</h2>
@@ -7148,9 +7157,14 @@ function ChatApp({
               >
                 <X size={20} />
               </button>
-            </div>
-            <label htmlFor="poll-question">Question</label>
-            <input
+            </Modal.Header>
+<Modal.Header as="div" className="poll-dialog-options-heading">
+              <strong>Options</strong>
+              <span>Drag to reorder · {pollOptions.length}/10</span>
+            </Modal.Header>
+<Modal.Body>
+<label htmlFor="poll-question">Question</label>
+<input
               id="poll-question"
               maxLength={300}
               autoFocus
@@ -7158,7 +7172,7 @@ function ChatApp({
               onChange={(event) => setPollQuestion(event.target.value)}
               placeholder="What would you like to ask?"
             />
-            <fieldset className="poll-mode-picker">
+<fieldset className="poll-mode-picker">
               <legend>Response type</legend>
               <label className={pollMode === "single" ? "selected" : ""}>
                 <input
@@ -7183,7 +7197,7 @@ function ChatApp({
                 <span><strong>Multiple choice</strong><small>Choose several options</small></span>
               </label>
             </fieldset>
-            <label className="poll-expiration-field" htmlFor="poll-expires-at">
+<label className="poll-expiration-field" htmlFor="poll-expires-at">
               <span>Expiration <small>Optional</small></span>
               <input
                 id="poll-expires-at"
@@ -7192,11 +7206,7 @@ function ChatApp({
                 onChange={(event) => setPollExpiresAt(event.target.value)}
               />
             </label>
-            <div className="poll-dialog-options-heading">
-              <strong>Options</strong>
-              <span>Drag to reorder · {pollOptions.length}/10</span>
-            </div>
-            <div className="poll-dialog-options">
+<div className="poll-dialog-options">
               {pollOptions.map((option, index) => (
                 <div
                   className={`poll-dialog-option ${
@@ -7282,7 +7292,7 @@ function ChatApp({
                 </div>
               ))}
             </div>
-            {pollOptions.length < 10 && (
+{pollOptions.length < 10 && (
               <button
                 className="poll-add-option"
                 type="button"
@@ -7296,7 +7306,8 @@ function ChatApp({
                 <Plus size={15} /> Add option
               </button>
             )}
-            <div className="modal-actions">
+</Modal.Body>
+<Modal.Footer as="div" className="modal-actions">
               <button
                 className="secondary-button"
                 type="button"
@@ -7320,20 +7331,20 @@ function ChatApp({
                   <><BarChart3 size={16} /> Create poll</>
                 )}
               </button>
-            </div>
-          </form>
-        </div>
+            </Modal.Footer>
+</form>
+        </Modal>
       )}
 
       {deletingMessage && (
-        <div className="modal-backdrop" role="presentation">
+        <Modal layout="backdrop"  role="presentation">
           <div
             className="modal-card confirmation-dialog"
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="delete-message-title"
           >
-            <div className="modal-header">
+<Modal.Header as="div" className="modal-header">
               <div>
                 <p className="eyebrow">Delete message</p>
                 <h2 id="delete-message-title">Delete this message?</h2>
@@ -7346,9 +7357,11 @@ function ChatApp({
               >
                 <X size={20} />
               </button>
-            </div>
-            <p>This removes the message for everyone in the conversation.</p>
-            <div className="modal-actions">
+            </Modal.Header>
+<Modal.Body>
+<p>This removes the message for everyone in the conversation.</p>
+</Modal.Body>
+<Modal.Footer as="div" className="modal-actions">
               <button
                 className="secondary-button"
                 type="button"
@@ -7364,13 +7377,13 @@ function ChatApp({
               >
                 {isDeletingMessage ? "Deleting..." : "Delete message"}
               </button>
-            </div>
-          </div>
-        </div>
+            </Modal.Footer>
+</div>
+        </Modal>
       )}
 
       {recordingToDelete && (
-        <div className="modal-backdrop" role="presentation">
+        <Modal layout="backdrop"  role="presentation">
           <div
             className="modal-card confirmation-dialog"
             role="alertdialog"
@@ -7378,7 +7391,7 @@ function ChatApp({
             aria-labelledby="delete-recording-title"
             aria-describedby="delete-recording-description"
           >
-            <div className="modal-header">
+<Modal.Header as="div" className="modal-header">
               <div>
                 <p className="eyebrow">Delete recording</p>
                 <h2 id="delete-recording-title">
@@ -7394,14 +7407,16 @@ function ChatApp({
               >
                 <X size={20} />
               </button>
-            </div>
-            <p id="delete-recording-description">
+            </Modal.Header>
+<Modal.Body>
+<p id="delete-recording-description">
               This removes the{" "}
               {recordingToDelete.sessionType.replaceAll("_", " ")} recording
               session. An active Azure recording will be stopped first. This
               action cannot be undone.
             </p>
-            <div className="modal-actions">
+</Modal.Body>
+<Modal.Footer as="div" className="modal-actions">
               <button
                 className="secondary-button"
                 type="button"
@@ -7423,20 +7438,20 @@ function ChatApp({
                   "Delete recording"
                 )}
               </button>
-            </div>
-          </div>
-        </div>
+            </Modal.Footer>
+</div>
+        </Modal>
       )}
 
       {memberToRemove && (
-        <div className="modal-backdrop" role="presentation">
+        <Modal layout="backdrop"  role="presentation">
           <div
             className="modal-card confirmation-dialog"
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="remove-member-title"
           >
-            <div className="modal-header">
+<Modal.Header as="div" className="modal-header">
               <div>
                 <p className="eyebrow">Remove member</p>
                 <h2 id="remove-member-title">
@@ -7451,12 +7466,14 @@ function ChatApp({
               >
                 <X size={20} />
               </button>
-            </div>
-            <p>
+            </Modal.Header>
+<Modal.Body>
+<p>
               They will lose access to this group and its messages until someone
               adds them again.
             </p>
-            <div className="modal-actions">
+</Modal.Body>
+<Modal.Footer as="div" className="modal-actions">
               <button
                 className="secondary-button"
                 type="button"
@@ -7474,9 +7491,9 @@ function ChatApp({
                   ? "Removing..."
                   : "Remove member"}
               </button>
-            </div>
-          </div>
-        </div>
+            </Modal.Footer>
+</div>
+        </Modal>
       )}
       {meetingInvite ? (
         <aside

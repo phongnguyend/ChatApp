@@ -650,27 +650,9 @@ html[data-theme='dark'] .calendar-month-grid button.active {
 .calendar-load-state.error { color: #c84b3d; }
 .calendar-load-state button { margin-left: 10px; border: 0; color: var(--coral); background: transparent; cursor: pointer; }
 
-.calendar-dialog-backdrop {
-  position: fixed;
-  z-index: 45;
-  inset: 0;
-  padding: 20px;
-  display: grid;
-  place-items: center;
-  background: rgba(8, 21, 25, 0.64);
-  backdrop-filter: blur(4px);
-}
-
 .calendar-dialog {
   width: min(490px, 100%);
   max-height: calc(100vh - 40px);
-  padding: 26px;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  overflow-y: auto;
-  color: var(--ink);
-  background: var(--paper);
-  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.28);
 }
 
 .calendar-dialog-heading {

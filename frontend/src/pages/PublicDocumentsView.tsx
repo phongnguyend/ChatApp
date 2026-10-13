@@ -1,3 +1,4 @@
+import { Modal } from '../components/Modal';
 import { authFetch as fetch } from "../services/auth";
 import { ArrowLeft, ChevronRight, Download, FileImage, FileText, Folder, Link2, LoaderCircle } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -57,6 +58,13 @@ export function PublicDocumentsView({ apiUrl, token }: { apiUrl: string; token: 
           </div>}
         </>}
     </section>
-    {preview && <div className="public-documents-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreview(null); }}><div className="public-documents-preview" role="dialog" aria-modal="true" aria-label={preview.name}><div className="public-documents-preview-heading"><strong>{preview.name}</strong><button type="button" onClick={() => setPreview(null)} aria-label="Close preview">×</button></div>{previewable(preview) ? preview.contentType.startsWith("image/") ? <img src={contentUrl(preview, false)} alt={preview.name} /> : <iframe src={contentUrl(preview, false)} title={preview.name} /> : <p>Preview is unavailable for this file type.</p>}<a href={contentUrl(preview, true)} download={preview.name}><Download size={16} /> Download</a></div></div>}
+    {preview && <Modal layout="backdrop"  onMouseDown={(event) => { if (event.target === event.currentTarget) setPreview(null); }}><div className="public-documents-preview" role="dialog" aria-modal="true" aria-label={preview.name}>
+<Modal.Header as="div" className="public-documents-preview-heading"><strong>{preview.name}</strong><button type="button" onClick={() => setPreview(null)} aria-label="Close preview">×</button></Modal.Header>
+<Modal.Body>
+{previewable(preview) ? preview.contentType.startsWith("image/") ? <img src={contentUrl(preview, false)} alt={preview.name} /> : <iframe src={contentUrl(preview, false)} title={preview.name} /> : <p>Preview is unavailable for this file type.</p>}
+<a href={contentUrl(preview, true)} download={preview.name}><Download size={16} /> Download</a>
+</Modal.Body>
+
+</div></Modal>}
   </main>;
 }

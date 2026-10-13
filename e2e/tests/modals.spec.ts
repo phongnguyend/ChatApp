@@ -1,0 +1,47 @@
+import { expect, test } from '@playwright/test';
+import { createUser, login } from './helpers.js';
+
+test('Application confirmation and input modals replace browser dialogs and restore focus', async ({ page, request }) => {
+  const user = await createUser(request, 'modals');
+  const browserDialogs: string[] = [];
+  page.on('dialog', async dialog => {
+    browserDialogs.push(dialog.type());
+    await dialog.dismiss();
+  });
+  await login(page, user.username);
+  const navigation = page.getByRole('navigation', { name: 'Main sections' });
+  await navigation.getByRole('button', { name: 'Forms', exact: true }).click();
+  await page.getByRole('button', { name: 'New form', exact: true }).click();
+  await page.getByLabel('Title', { exact: true }).fill('Unsaved modal test');
+  await page.getByRole('button', { name: 'Add page', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete page', exact: true }).click();
+  const deletingPage = page.getByRole('dialog', { name: 'Delete page?' });
+  await expect(deletingPage.locator(':scope > .app-modal-header')).toHaveCSS('border-bottom-width', '1px');
+  await expect(deletingPage.locator(':scope > .app-modal-body')).toBeVisible();
+  await expect(deletingPage.locator(':scope > .app-modal-footer')).toHaveCSS('border-top-width', '1px');
+  await deletingPage.screenshot({ path: 'test-results/shared-delete-page-modal.png' });
+  await deletingPage.getByRole('button', { name: 'Cancel', exact: true }).click();
+  const back = page.getByRole('button', { name: 'Back to forms', exact: true });
+  await back.click();
+  const confirm = page.getByRole('dialog', { name: 'Confirm action' });
+  await expect(confirm).toBeVisible();
+  await expect(confirm.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(confirm.getByRole('button', { name: 'Confirm', exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(confirm).toHaveCount(0);
+  await expect(back).toBeFocused();
+  await expect(page.getByLabel('Title', { exact: true })).toHaveValue('Unsaved modal test');
+  await back.click();
+  await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'New form', exact: true })).toBeVisible();
+  await navigation.getByRole('button', { name: 'Whiteboards', exact: true }).click();
+  await page.getByRole('button', { name: 'New whiteboard', exact: true }).click();
+  await page.getByRole('button', { name: 'Rename', exact: true }).click();
+  const input = page.getByRole('dialog', { name: 'Enter details' });
+  await expect(input.getByRole('textbox', { name: 'Board title' })).toBeFocused();
+  await input.getByRole('textbox', { name: 'Board title' }).fill('Named through application modal');
+  await input.getByRole('textbox').press('Enter');
+  await expect(page.getByRole('heading', { name: 'Named through application modal', exact: true })).toBeVisible();
+  expect(browserDialogs).toEqual([]);
+});

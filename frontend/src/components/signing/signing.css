@@ -3,14 +3,10 @@
   --signing-danger: #c62828;
   --bg: var(--paper); --panel: var(--paper); --border: var(--line); --text: var(--ink);
   --accent: var(--coral); --critical: var(--coral); --surface: var(--cream); --surface-1: var(--paper); --surface-2: var(--cream); --text-muted: var(--muted); --accent-text: var(--coral); --radius: 8px; --accent-soft: color-mix(in srgb, var(--coral) 12%, var(--paper));
-  color: var(--ink); background: var(--paper); border: 1px solid var(--line);
-  border-radius: 16px; padding: 0; width: min(850px, calc(100vw - 32px));
-  max-height: calc(100dvh - 32px); overflow: auto;
+  color: var(--ink); width: min(850px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
 }
-.signing-modal::backdrop { background: #0008; }
-.signing-modal .modal-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 24px; border-bottom: 1px solid var(--line); }
 .signing-modal h2 { font-size: 20px; margin: 0; }
-.signing-modal .modal-body { padding: 20px 24px; }
 .signing-modal button, .signing-modal .button-link { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--paper); cursor: pointer; text-decoration: none; }
 .signing-modal button:disabled { opacity: .5; cursor: not-allowed; }
 .signing-modal button.danger { color: var(--signing-danger); border-color: currentColor; background: color-mix(in srgb, var(--signing-danger) 8%, var(--paper)); }

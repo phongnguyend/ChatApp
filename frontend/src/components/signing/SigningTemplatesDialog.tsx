@@ -59,11 +59,12 @@ export function SigningTemplatesDialog({ fields, pageCount, onLoad, onClose }: {
       onClose()
     }
   }}>
-    <LoadingBar active={busy || templates.loading} />
-    {(error || templates.error) && <ErrorBanner message={error || templates.error || ''} />}
-    {notice && <p className="signing-notice" role="status">{notice}</p>}
 
-    <form className="signing-template-save" onSubmit={event => {
+<Modal.Body className="modal-body">
+<LoadingBar active={busy || templates.loading} />
+{(error || templates.error) && <ErrorBanner message={error || templates.error || ''} />}
+{notice && <p className="signing-notice" role="status">{notice}</p>}
+<form className="signing-template-save" onSubmit={event => {
       event.preventDefault()
       void run(async () => {
         const saved = await createSigningTemplate({ name, fields, pageCount })
@@ -83,8 +84,7 @@ export function SigningTemplatesDialog({ fields, pageCount, onLoad, onClose }: {
       </div>
       {!hasFields && <p className="signing-template-hint">Place at least one field to save a template.</p>}
     </form>
-
-    <section className="signing-template-list" aria-label="Your templates">
+<section className="signing-template-list" aria-label="Your templates">
       <div className="row signing-template-list-head">
         <h3>Your templates</h3>
         <button type="button" className="ghost" disabled={busy} onClick={() => setRevision(value => value + 1)}><RefreshCw size={14} />Reload</button>
@@ -163,5 +163,7 @@ export function SigningTemplatesDialog({ fields, pageCount, onLoad, onClose }: {
         </div>
       })}
     </section>
-  </Modal>
+</Modal.Body>
+
+</Modal>
 }

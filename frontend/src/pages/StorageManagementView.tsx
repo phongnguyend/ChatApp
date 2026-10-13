@@ -1,3 +1,4 @@
+import { Modal } from '../components/Modal';
 import { authFetch as fetch } from "../services/auth";
 import { ArrowLeft, HardDrive, LoaderCircle, Pencil, Search, Users, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -169,14 +170,16 @@ export function StorageManagementView({ apiUrl, currentUsername, onBack, hidden 
       })}
     </div>
     {page?.hasMore && !loading && <button className="storage-management-more" type="button" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? "Loading…" : "Load more users"}</button>}
-    {editing && <div className="storage-management-backdrop"><form className="storage-management-dialog" role="dialog" aria-modal="true" aria-labelledby="storage-limit-title" onSubmit={(event) => { event.preventDefault(); void saveLimit(); }}>
-      <div className="storage-management-dialog-heading"><h2 id="storage-limit-title">Storage limit for {editing.displayName}</h2><button type="button" aria-label="Close" onClick={() => setEditing(null)} disabled={saving}><X size={18} /></button></div>
-      <p>Current usage: {formatBytes(editing.usedBytes)}. The default limit is {formatBytes(page?.defaultLimitBytes ?? editing.limitBytes)}.</p>
-      <label htmlFor="storage-limit-gib">Limit (GB)</label>
-      <input id="storage-limit-gib" type="number" min="0.01" max="102400" step="0.01" value={limitGiB} onChange={(event) => setLimitGiB(event.target.value)} required autoFocus />
-      {limitGiB && Number(limitGiB) * gib < editing.usedBytes && <p className="storage-management-warning">This is below current usage. New uploads will be blocked until usage falls below the limit.</p>}
-      {editError && <p className="storage-management-error" role="alert">{editError}</p>}
-      <div className="storage-management-dialog-actions">{editing.customLimitBytes !== null && <button type="button" onClick={() => void saveLimit(true)} disabled={saving}>Use default</button>}<button type="button" onClick={() => setEditing(null)} disabled={saving}>Cancel</button><button type="submit" disabled={saving}>{saving ? "Saving…" : "Save limit"}</button></div>
-    </form></div>}
+    {editing && <Modal layout="backdrop" ><form className="storage-management-dialog" role="dialog" aria-modal="true" aria-labelledby="storage-limit-title" onSubmit={(event) => { event.preventDefault(); void saveLimit(); }}>
+<Modal.Header as="div" className="storage-management-dialog-heading"><h2 id="storage-limit-title">Storage limit for {editing.displayName}</h2><button type="button" aria-label="Close" onClick={() => setEditing(null)} disabled={saving}><X size={18} /></button></Modal.Header>
+<Modal.Body>
+<p>Current usage: {formatBytes(editing.usedBytes)}. The default limit is {formatBytes(page?.defaultLimitBytes ?? editing.limitBytes)}.</p>
+<label htmlFor="storage-limit-gib">Limit (GB)</label>
+<input id="storage-limit-gib" type="number" min="0.01" max="102400" step="0.01" value={limitGiB} onChange={(event) => setLimitGiB(event.target.value)} required autoFocus />
+{limitGiB && Number(limitGiB) * gib < editing.usedBytes && <p className="storage-management-warning">This is below current usage. New uploads will be blocked until usage falls below the limit.</p>}
+{editError && <p className="storage-management-error" role="alert">{editError}</p>}
+</Modal.Body>
+<Modal.Footer as="div" className="storage-management-dialog-actions">{editing.customLimitBytes !== null && <button type="button" onClick={() => void saveLimit(true)} disabled={saving}>Use default</button>}<button type="button" onClick={() => setEditing(null)} disabled={saving}>Cancel</button><button type="submit" disabled={saving}>{saving ? "Saving…" : "Save limit"}</button></Modal.Footer>
+</form></Modal>}
   </section>;
 }

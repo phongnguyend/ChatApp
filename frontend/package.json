@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test:live-location": "node scripts/live-location-test.mjs",
+    "test:modals": "node scripts/modal-test.mjs",
     "test:smoke": "node scripts/smoke-test.mjs"
   },
   "dependencies": {

@@ -1,3 +1,4 @@
+import { Modal } from '../Modal';
 import { useEffect, useEffectEvent, type ReactNode, useRef, useState } from 'react';
 import { Download, X } from 'lucide-react';
 import { ErrorBanner, MaximizeButton } from '../signing/ui';
@@ -16,12 +17,7 @@ export function ImageViewer({ name, sourceKey, load, onClose, footer }: {
     const loadDocument = useEffectEvent((signal: AbortSignal) => load(signal));
     const [url, setUrl] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
-    useEffect(() => {
-        const dialog = dialogRef.current;
-        dialog?.showModal();
-        closeRef.current?.focus();
-        return () => dialog?.close();
-    }, []);
+
     useEffect(() => {
         const controller = new AbortController();
         let objectUrl: string | undefined;
@@ -45,23 +41,26 @@ export function ImageViewer({ name, sourceKey, load, onClose, footer }: {
         };
         // sourceKey identifies the image; capture the loader for this request.
     }, [sourceKey]);
-    return <dialog ref={dialogRef} className={maximized ? 'office-dialog is-maximized' : 'office-dialog'} aria-label={`Preview ${name}`} onCancel={event => {
+    return <Modal ref={dialogRef} className={maximized ? 'office-dialog is-maximized' : 'office-dialog'} aria-label={`Preview ${name}`} onCancel={event => {
             if (event.target !== event.currentTarget) {
                 return;
             }
             event.preventDefault();
             onClose();
         }}>
-    <div className="office-toolbar">
+<Modal.Header as="div" className="office-toolbar">
       <strong title={name}>{name}</strong>
       <div className="row">
         {url ? <a className="button-link" href={url} download={name}><Download size={14}/>Download</a> : null}
         <MaximizeButton maximized={maximized} onToggle={toggleMaximized}/>
         <button className="ghost" ref={closeRef} onClick={onClose}><X size={15}/>Close</button>
       </div>
-    </div>
-    <div className="office-content image-preview-content">
+    </Modal.Header>
+<Modal.Body>
+<div className="office-content image-preview-content">
       {error ? <ErrorBanner message={error}/> : !url ? <div className="office-message" role="status">Downloading image…</div> : (<img src={url} alt={name} onError={() => setError('This image could not be displayed. Download the original file to open it.')}/>)}
     </div>
-  {footer && <div className="office-footer">{footer}</div>}</dialog>;
+</Modal.Body>{footer && <Modal.Footer className="office-footer">{footer}</Modal.Footer>}
+
+</Modal>;
 }

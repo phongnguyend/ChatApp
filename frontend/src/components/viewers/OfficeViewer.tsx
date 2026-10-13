@@ -1,3 +1,4 @@
+import { Modal } from '../Modal';
 import { useEffect, useEffectEvent, type ReactNode, useId, useMemo, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import type { Workbook } from 'exceljs';
@@ -28,12 +29,7 @@ export function OfficeViewer({ name, sourceKey, load, onClose, footer, }: {
     const closeRef = useRef<HTMLButtonElement>(null);
     const [maximized, toggleMaximized] = useViewerMaximized();
     const kind = officeKind(name);
-    useEffect(() => {
-        const dialog = dialogRef.current;
-        dialog?.showModal();
-        closeRef.current?.focus();
-        return () => dialog?.close();
-    }, []);
+
     useEffect(() => {
         const controller = new AbortController();
         setBlob(null);
@@ -63,29 +59,32 @@ export function OfficeViewer({ name, sourceKey, load, onClose, footer, }: {
             setUrl(null);
         };
     }, [blob]);
-    return (<dialog ref={dialogRef} className={`office-dialog office-dialog--${kind}${maximized ? ' is-maximized' : ''}`} aria-label={`Preview ${name}`} onCancel={(event) => {
+    return (<Modal ref={dialogRef} className={`office-dialog office-dialog--${kind}${maximized ? ' is-maximized' : ''}`} aria-label={`Preview ${name}`} onCancel={(event) => {
         if (event.target !== event.currentTarget) {
             return;
         }
         event.preventDefault();
         onClose();
     }}>
-        <div className="office-toolbar">
+<Modal.Header as="div" className="office-toolbar">
           <strong title={name}>{name}</strong>
           <div className="row">
             {url ? <a className="button-link" href={url} download={name}><Download size={14}/>Download</a> : null}
             <MaximizeButton maximized={maximized} onToggle={toggleMaximized}/>
             <button className="ghost" ref={closeRef} onClick={onClose}><X size={15}/>Close</button>
           </div>
-        </div>
-        <div className="office-content">
+        </Modal.Header>
+<Modal.Body>
+<div className="office-content">
           {error ? <ErrorBanner message={error}/> : null}
           {!blob && !error ? <div className="office-message">Downloading file…</div> : null}
           {blob && kind === 'docx' ? <WordViewer blob={blob}/> : null}
           {blob && kind === 'xlsx' ? <ExcelViewer blob={blob}/> : null}
           {blob && kind === 'pptx' ? <PowerPointViewer blob={blob}/> : null}
         </div>
-      {footer && <div className="office-footer">{footer}</div>}</dialog>);
+</Modal.Body>{footer && <Modal.Footer className="office-footer">{footer}</Modal.Footer>}
+
+</Modal>);
 }
 function WordViewer({ blob }: {
     blob: Blob;

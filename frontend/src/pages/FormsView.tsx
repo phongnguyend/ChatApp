@@ -1,3 +1,4 @@
+import { confirmDialog } from '../services/dialogs';
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, ClipboardList, Copy, Download, ExternalLink, Eye, ListChecks, LoaderCircle, PencilRuler, Plus, Redo2, RefreshCw, Save, Search, Send, Share2, Square, Trash2, Undo2, X } from 'lucide-react';
 import { FormBuilder } from '../components/forms/FormBuilder';
@@ -59,14 +60,7 @@ export function FormsView({ hidden, onBack }: { hidden: boolean; onBack: () => v
     return () => { active = false; };
   }, [hidden]);
 
-  useEffect(() => {
-    if (!dirty) {
-      return;
-    }
-    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); };
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [dirty]);
+
 
   function report(reason: unknown) {
     const message = reason instanceof Error ? reason.message : 'Something went wrong. Please try again.';
@@ -157,7 +151,7 @@ export function FormsView({ hidden, onBack }: { hidden: boolean; onBack: () => v
     setNotice(`Exported ${count} responses.`);
   }
   async function backToList() {
-    if (dirty && !window.confirm('Discard unsaved changes and return to your forms?')) {
+    if (dirty && !await confirmDialog('Discard unsaved changes and return to your forms?')) {
       return;
     }
     setForm(null);
@@ -198,8 +192,8 @@ export function FormsView({ hidden, onBack }: { hidden: boolean; onBack: () => v
         : <button className="forms-primary" type="button" disabled={busy} onClick={() => { void run(async () => open(await formsApi<FormDetail>('forms/', 'POST'))); }}><Plus size={17} />New form</button>}
       {form && draft && <button type="button" disabled={busy} title="View JSON schema" aria-label="View JSON schema" onClick={() => setSchemaOpen(true)}><Braces size={16} aria-hidden="true" />JSON</button>}
     </header>
-    {error && <div role="alert" className="forms-banner forms-error">{error}<button type="button" onClick={() => setError('')}><X size={16} aria-hidden="true" />Dismiss</button>{form && <button type="button" disabled={busy} onClick={() => {
-      if (!dirty || window.confirm('Reload this form and discard unsaved changes?')) {
+    {error && <div role="alert" className="forms-banner forms-error">{error}<button type="button" onClick={() => setError('')}><X size={16} aria-hidden="true" />Dismiss</button>{form && <button type="button" disabled={busy} onClick={async () => {
+      if (!dirty || await confirmDialog('Reload this form and discard unsaved changes?')) {
         void run(async () => open(await formsApi<FormDetail>(`forms/${form.id}`)));
       }
     }}><RefreshCw size={16} aria-hidden="true" />Reload saved form</button>}</div>}
@@ -207,8 +201,8 @@ export function FormsView({ hidden, onBack }: { hidden: boolean; onBack: () => v
     {!form ? <div className="forms-library"><div className="forms-library-toolbar"><label className="forms-search"><Search size={17} /><input aria-label="Search forms" placeholder="Search forms…" value={query} onChange={event => setQuery(event.target.value)} /></label><select aria-label="Filter forms" value={filter} onChange={event => setFilter(event.target.value)}><option value="all">All forms</option><option value="live">Published</option><option value="draft">Drafts</option><option value="closed">Closed</option></select><button type="button" disabled={busy} onClick={() => { void run(async () => setForms(await formsApi<FormSummary[]>('forms/'))); }}><RefreshCw size={16} aria-hidden="true" />Refresh</button></div>
       {loading && <p role="status">Loading your forms…</p>}
       {!loading && forms.length === 0 && <div className="forms-empty"><ClipboardList size={44} /><h2>A place for every question</h2><p>Create a survey, registration form, or feedback questionnaire. Arrange it your way and share a link.</p></div>}
-      <div className="forms-grid">{forms.filter(item => item.title.toLowerCase().includes(query.toLowerCase()) && (filter === 'all' || filter === 'live' && item.isPublished || filter === 'draft' && item.publishedVersion === 0 || filter === 'closed' && !item.isPublished && item.publishedVersion > 0)).map(item => <article className="forms-card" key={item.id}><div className="forms-card-art"><ClipboardList size={32} /><span className={`forms-badge ${item.isPublished ? 'live' : ''}`}>{item.isPublished ? 'Published' : item.publishedVersion ? 'Closed' : 'Draft'}</span></div><button type="button" className="forms-card-title" disabled={busy} onClick={() => { void run(async () => open(await formsApi<FormDetail>(`forms/${item.id}`))); }}><h2>{item.title}</h2><p>{item.responseCount} responses · Updated {new Date(item.updatedAt).toLocaleDateString()}</p></button><div className="forms-card-actions"><button type="button" disabled={busy} onClick={() => { void run(async () => open(await formsApi<FormDetail>(`forms/${item.id}/duplicate`, 'POST'))); }}><Copy size={14} />Duplicate</button><button type="button" className="forms-danger" disabled={busy} onClick={() => {
-        if (window.confirm(`Permanently delete “${item.title}” and all ${item.responseCount} responses?`)) {
+      <div className="forms-grid">{forms.filter(item => item.title.toLowerCase().includes(query.toLowerCase()) && (filter === 'all' || filter === 'live' && item.isPublished || filter === 'draft' && item.publishedVersion === 0 || filter === 'closed' && !item.isPublished && item.publishedVersion > 0)).map(item => <article className="forms-card" key={item.id}><div className="forms-card-art"><ClipboardList size={32} /><span className={`forms-badge ${item.isPublished ? 'live' : ''}`}>{item.isPublished ? 'Published' : item.publishedVersion ? 'Closed' : 'Draft'}</span></div><button type="button" className="forms-card-title" disabled={busy} onClick={() => { void run(async () => open(await formsApi<FormDetail>(`forms/${item.id}`))); }}><h2>{item.title}</h2><p>{item.responseCount} responses · Updated {new Date(item.updatedAt).toLocaleDateString()}</p></button><div className="forms-card-actions"><button type="button" disabled={busy} onClick={() => { void run(async () => open(await formsApi<FormDetail>(`forms/${item.id}/duplicate`, 'POST'))); }}><Copy size={14} />Duplicate</button><button type="button" className="forms-danger" disabled={busy} onClick={async () => {
+        if (await confirmDialog(`Permanently delete “${item.title}” and all ${item.responseCount} responses?`)) {
           void run(async () => { await formsApi(`forms/${item.id}?revision=${item.revision}`, 'DELETE'); setForms(current => current.filter(value => value.id !== item.id)); });
         }
       }}><Trash2 size={14} aria-hidden="true" />Delete</button></div></article>)}</div>

@@ -1,3 +1,4 @@
+import { confirmDialog } from '../../services/dialogs';
 import { useState } from 'react';
 import { Code2 } from 'lucide-react';
 import { FormPages } from './FormPages';
@@ -215,8 +216,8 @@ export function FormBuilder({ definition, onChange }: { definition: FormDefiniti
         const length = destination ? all.find(node => node.id === destination)!.children.length : pageEnd;
         changeNodes(moveNode(definition.nodes, selected.id, destination, length));
       }}><option value="">Page root</option>{pageBlocks.filter(node => node.kind === 'section' && !forbiddenDestinations.has(node.id)).map(node => <option key={node.id} value={node.id}>{node.label}</option>)}</select></label>
-        <button type="button" className="forms-danger" onClick={() => {
-          if (selected.children.length > 0 && !window.confirm('Remove this layout and all blocks inside it? You can undo this change.')) {
+        <button type="button" className="forms-danger" onClick={async () => {
+          if (selected.children.length > 0 && !await confirmDialog('Remove this layout and all blocks inside it? You can undo this change.')) {
             return;
           }
           changeNodes(removeNode(definition.nodes, selected.id));

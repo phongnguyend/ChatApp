@@ -1,3 +1,4 @@
+import { Modal } from './Modal';
 /* oxlint-disable react/only-export-components -- call UI and its lifecycle hook share private event types */
 import {
   Maximize2,
@@ -753,7 +754,7 @@ export function DirectCallOverlay({
   const isSharing = isScreenSharing || isPeerScreenSharing;
 
   return (
-    <div className="direct-call-backdrop">
+    <Modal layout="backdrop" >
       <section
         ref={callStageRef}
         className={`direct-call-stage ${isConnected ? "video-call" : "audio-call"}`}
@@ -761,11 +762,26 @@ export function DirectCallOverlay({
         aria-modal="true"
         aria-label={`${call.hasVideo ? "Video" : "Audio"} call with ${call.peer.displayName}`}
       >
-        <CallRecordingControls
+<Modal.Header><div className="direct-call-copy">
+          <strong>{call.peer.displayName}</strong>
+          <span>
+            {call.status === "incoming"
+              ? `Incoming ${call.hasVideo ? "video" : "audio"} call`
+              : call.status === "outgoing"
+                ? "Calling..."
+                : call.status === "connecting"
+                  ? "Connecting..."
+                  : isPeerScreenSharing
+                    ? `${call.peer.displayName} is sharing their screen`
+                  : "Connected"}
+          </span>
+        </div></Modal.Header>
+<Modal.Body>
+<CallRecordingControls
           controller={recordingController}
           showWhenIdle={false}
         />
-        <button
+<button
           className="maximize-call-stage"
           type="button"
           aria-label={
@@ -787,23 +803,7 @@ export function DirectCallOverlay({
             <Maximize2 size={18} />
           )}
         </button>
-
-        <div className="direct-call-copy">
-          <strong>{call.peer.displayName}</strong>
-          <span>
-            {call.status === "incoming"
-              ? `Incoming ${call.hasVideo ? "video" : "audio"} call`
-              : call.status === "outgoing"
-                ? "Calling..."
-                : call.status === "connecting"
-                  ? "Connecting..."
-                  : isPeerScreenSharing
-                    ? `${call.peer.displayName} is sharing their screen`
-                  : "Connected"}
-          </span>
-        </div>
-
-        {isConnected ? (
+{isConnected ? (
           <div
             className={`direct-call-media ${isSharing ? "is-sharing" : ""}`}
           >
@@ -913,8 +913,8 @@ export function DirectCallOverlay({
             <audio ref={remoteAudioRef} autoPlay />
           </>
         )}
-
-        <div className="direct-call-controls">
+</Modal.Body>
+<Modal.Footer><div className="direct-call-controls">
           {isIncoming ? (
             <>
               <button
@@ -1036,9 +1036,9 @@ export function DirectCallOverlay({
               </button>
             </>
           )}
-        </div>
-      </section>
+        </div></Modal.Footer>
+</section>
       <RecordingConsentDialog controller={recordingController} />
-    </div>
+    </Modal>
   );
 }

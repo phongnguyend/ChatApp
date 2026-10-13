@@ -37,8 +37,7 @@
 .storage-management-more { margin: 12px auto 0; }
 .storage-management-state { padding: 28px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--muted); font-size: 12px; }
 .storage-management-error { margin: 0 0 12px; color: #c84b3d; font-size: 12px; }
-.storage-management-backdrop { position: fixed; z-index: 55; inset: 0; padding: 20px; display: grid; place-items: center; background: rgba(8, 21, 25, .64); backdrop-filter: blur(4px); }
-.storage-management-dialog { width: min(450px, 100%); max-height: calc(100vh - 40px); padding: 24px; border: 1px solid var(--line); border-radius: 16px; overflow: auto; color: var(--ink); background: var(--paper); box-shadow: 0 25px 80px rgba(0,0,0,.28); }
+.storage-management-dialog { width: min(450px, 100%); max-height: calc(100vh - 40px); }
 .storage-management-dialog-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .storage-management-dialog-heading h2 { margin: 0; font: 800 20px 'Manrope', sans-serif; }
 .storage-management-dialog-heading button { width: 30px; height: 30px; flex: 0 0 auto; padding: 0; border: 0; border-radius: 7px; display: grid; place-items: center; color: var(--muted); background: var(--cream); cursor: pointer; }

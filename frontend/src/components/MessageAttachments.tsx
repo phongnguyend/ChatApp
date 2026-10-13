@@ -1,3 +1,4 @@
+import { Modal } from './Modal';
 import {
   Camera,
   Download,
@@ -492,7 +493,7 @@ export function MessageAttachmentPicker({
       </button>
 
       {captureMode && (
-        <div className="attachment-camera-backdrop" role="presentation">
+        <Modal layout="backdrop"  role="presentation">
           <div
             className="attachment-camera-card"
             role="dialog"
@@ -507,7 +508,7 @@ export function MessageAttachmentPicker({
                     : 'Record a video'
             }
           >
-            <div className="attachment-camera-heading">
+<Modal.Header as="div" className="attachment-camera-heading">
               <div>
                 <p className="eyebrow">
                   {captureMode === 'photo'
@@ -536,9 +537,9 @@ export function MessageAttachmentPicker({
               >
                 <X size={20} />
               </button>
-            </div>
-
-            <div
+            </Modal.Header>
+<Modal.Body>
+<div
               className={`camera-viewfinder ${
                 captureMode === 'audio' ? 'voice-recorder-view' : ''
               }`}
@@ -581,8 +582,8 @@ export function MessageAttachmentPicker({
                 </span>
               )}
             </div>
-
-            <div className="camera-actions">
+</Modal.Body>
+<Modal.Footer as="div" className="camera-actions">
               <button
                 className="secondary-button"
                 type="button"
@@ -626,9 +627,9 @@ export function MessageAttachmentPicker({
                         : 'Start recording'}
                 </button>
               )}
-            </div>
-          </div>
-        </div>
+            </Modal.Footer>
+</div>
+        </Modal>
       )}
     </>
   )

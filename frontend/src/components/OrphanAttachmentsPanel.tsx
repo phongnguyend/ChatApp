@@ -1,3 +1,4 @@
+import { confirmDialog } from '../services/dialogs';
 import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, FileText, RefreshCw, Trash2 } from 'lucide-react';
 import { authFetch } from '../services/auth';
@@ -44,7 +45,7 @@ export function OrphanAttachmentsPanel({ apiUrl, username, hidden }: { apiUrl: s
     return () => controller.abort();
   }, [apiUrl, query, page, revision, hidden]);
   async function remove(item: Item) {
-    if (!window.confirm(`Permanently delete ${item.fileName}? This expired file can no longer be submitted.`)) {
+    if (!await confirmDialog(`Permanently delete ${item.fileName}? This expired file can no longer be submitted.`)) {
       return;
     }
     setBusy(true);

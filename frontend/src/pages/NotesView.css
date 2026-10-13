@@ -40,16 +40,13 @@
 .notes-spin { animation: notes-spin 1s linear infinite; }
 @keyframes notes-spin { to { transform: rotate(360deg); } }
 .notes-error { color: #cf5847; font-size: 12px; }
-.notes-modal-backdrop { position: fixed; z-index: 100; inset: 0; padding: 16px; display: grid; place-items: center; background: rgba(6, 19, 22, .7); }
-.notes-dialog { width: min(650px, 100%); max-height: min(90vh, 850px); padding: 24px; border: 1px solid var(--line); border-radius: 17px; display: flex; flex-direction: column; overflow-y: auto; color: var(--ink); background: var(--paper); box-shadow: 0 20px 55px rgba(0, 0, 0, .22); }
-.notes-dialog header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.notes-dialog { width: min(650px, 100%); max-height: min(90vh, 850px); }
 .notes-dialog h2 { margin: 0; font-size: 20px; overflow-wrap: anywhere; }
 .notes-dialog header button { width: 30px; height: 30px; padding: 0; border: 0; border-radius: 7px; display: grid; place-items: center; flex: none; color: var(--muted); background: var(--cream); cursor: pointer; }
 .notes-dialog label { display: flex; flex-direction: column; gap: 7px; margin-bottom: 16px; font-size: 12px; font-weight: 700; }
 .notes-dialog input, .notes-dialog textarea, .notes-dialog select { width: 100%; padding: 10px 11px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--paper); font: inherit; font-size: 13px; }
 .notes-dialog textarea { min-height: 220px; resize: vertical; line-height: 1.5; }
 .notes-editor > small { align-self: flex-end; color: var(--muted); font-size: 10px; }
-.notes-dialog footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 7px; margin-top: 22px; }
 .notes-dialog footer .notes-danger { border-color: #c85e4b; color: white; background: #c85e4b; }
 .notes-detail .eyebrow { margin: 0 0 4px; }
 .notes-detail-meta { margin-bottom: 16px; }

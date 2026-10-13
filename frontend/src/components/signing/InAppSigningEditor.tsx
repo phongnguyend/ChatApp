@@ -423,11 +423,13 @@ export default function InAppSigningEditor({ attachmentId, requestId, name, onCl
         {editable && <button className="primary" disabled={busy || !original} onClick={finish}><CheckCheck size={14} />Finish</button>}
         <button className="ghost" disabled={busy} onClick={requestClose}><X size={15} />Close</button>
       </div>}>
-      <LoadingBar active={busy || loading} />
-      {error && <ErrorBanner message={error} />}
-      {notice && <p className="signing-notice" role="status">{notice}</p>}
-      {status && !editable && <p className="signing-notice" role="status">This request has been finished. Preview or download the signed PDF from the signing requests list.</p>}
-      <div className="in-app-signing-layout">
+
+<Modal.Body className="modal-body">
+<LoadingBar active={busy || loading} />
+{error && <ErrorBanner message={error} />}
+{notice && <p className="signing-notice" role="status">{notice}</p>}
+{status && !editable && <p className="signing-notice" role="status">This request has been finished. Preview or download the signed PDF from the signing requests list.</p>}
+<div className="in-app-signing-layout">
         {showPalette && <aside className="signing-palette" aria-label="Fields">
           {mode === 'place' ? <>
             <p>Drag a field onto the document, or click to add it to page {activePage}.</p>
@@ -491,7 +493,9 @@ export default function InAppSigningEditor({ attachmentId, requestId, name, onCl
           </Suspense>
         </div>
       </div>
-    </Modal>
+</Modal.Body>
+
+</Modal>
     {showTemplates && <SigningTemplatesDialog fields={fields} pageCount={pageSizes.length}
       onLoad={loadTemplate} onClose={() => setShowTemplates(false)} />}
     {padField && <SignaturePad
@@ -507,16 +511,19 @@ export default function InAppSigningEditor({ attachmentId, requestId, name, onCl
     {preview && <PdfViewer key={preview.key} name={`preview-${name}`} sourceKey={String(preview.key)}
       load={async () => preview.pdf} onClose={() => setPreview(null)} />}
     {confirmClose && <Modal open title="Unsaved changes" onClose={() => setConfirmClose(false)}>
-      <p>You have changes that are not saved. Save them before closing?</p>
-      <div className="row signature-list-toolbar">
+
+<Modal.Body className="modal-body">
+<p>You have changes that are not saved. Save them before closing?</p>
+{error && <ErrorBanner message={error} />}
+</Modal.Body>
+<Modal.Footer><div className="row signature-list-toolbar">
         <button disabled={busy} onClick={() => setConfirmClose(false)}>Keep editing</button>
         <button className="danger" disabled={busy} onClick={onClose}><Trash2 size={14} />Discard changes</button>
         <button className="primary" disabled={busy} onClick={() => void run(async () => {
           await save()
           onClose()
         })}><Save size={14} />Save and close</button>
-      </div>
-      {error && <ErrorBanner message={error} />}
-    </Modal>}
+      </div></Modal.Footer>
+</Modal>}
   </>
 }

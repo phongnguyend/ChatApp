@@ -100,8 +100,10 @@ export function SignatureRequests({ id, name, readOnly, onClose }: {
   }
 
   return <><Modal open title={`Signatures — ${name}`} className="signature-requests-modal" onClose={onClose}>
-    <LoadingBar active={busy || requests.loading || providers.loading} />
-    <div className="attachment-tabs" role="tablist" aria-label="Signatures" onKeyDown={event => {
+
+<Modal.Body className="modal-body">
+<LoadingBar active={busy || requests.loading || providers.loading} />
+<div className="attachment-tabs" role="tablist" aria-label="Signatures" onKeyDown={event => {
       if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
         return
       }
@@ -117,11 +119,11 @@ export function SignatureRequests({ id, name, readOnly, onClose }: {
         aria-selected={activeTab === 'requests'} aria-controls={`${tabId}-requests-panel`} tabIndex={activeTab === 'requests' ? 0 : -1}
         onClick={() => setTab('requests')}><List size={14} aria-hidden="true" />Signing requests</button>
     </div>
-    {(error || requests.error || providers.error) && <ErrorBanner message={error || requests.error || providers.error || ''} />}
-    {preparationUrl && <p><a className="button-link" href={preparationUrl} target="_blank" rel="noopener noreferrer">
+{(error || requests.error || providers.error) && <ErrorBanner message={error || requests.error || providers.error || ''} />}
+{preparationUrl && <p><a className="button-link" href={preparationUrl} target="_blank" rel="noopener noreferrer">
       <ExternalLink size={14} />Open preparation screen
     </a> Place fields and send there, then return here and refresh the request status.</p>}
-    {!readOnly && <div role="tabpanel" id={`${tabId}-new-panel`} aria-labelledby={`${tabId}-new`} hidden={activeTab !== 'new'}>
+{!readOnly && <div role="tabpanel" id={`${tabId}-new-panel`} aria-labelledby={`${tabId}-new`} hidden={activeTab !== 'new'}>
     <form onSubmit={event => {
       event.preventDefault()
       void run(async () => {
@@ -182,7 +184,7 @@ export function SignatureRequests({ id, name, readOnly, onClose }: {
       }}><Plus size={14} />Start another signing request</button>}
       {providers.data?.length === 0 && <p>No signing providers are enabled. Ask an administrator to configure the shared organization connection.</p>}
     </form></div>}
-    <div role="tabpanel" id={`${tabId}-requests-panel`} aria-labelledby={`${tabId}-requests`} hidden={activeTab !== 'requests'}>
+<div role="tabpanel" id={`${tabId}-requests-panel`} aria-labelledby={`${tabId}-requests`} hidden={activeTab !== 'requests'}>
     <div className="row signature-list-toolbar"><button disabled={busy} onClick={() => setRevision(value => value + 1)}><RefreshCw size={14} />Reload list</button></div>
     {requests.data?.length === 0 && <p>No signing requests yet.</p>}
     {requests.data?.map(row => <section className="signature-request" key={row.id}>
@@ -211,25 +213,30 @@ export function SignatureRequests({ id, name, readOnly, onClose }: {
       </div>
     </section>)}
     </div>
-  </Modal>
+</Modal.Body>
+
+</Modal>
     {deleteId && <Modal open title="Delete signing record" onClose={() => {
       if (!busy) {
         setDeleteId(null)
       }
     }}>
-      {requests.data?.find(row => row.id === deleteId)?.provider === IN_APP
+
+<Modal.Body className="modal-body">
+{requests.data?.find(row => row.id === deleteId)?.provider === IN_APP
         ? <p>Discard this in-app signing draft? Its placed fields and any drawn signatures are deleted. The original PDF is not changed.</p>
         : <p>Delete this NeedsReview record? This removes the local record only. It does not cancel or delete an agreement in DocuSign or Adobe. Check the provider account before creating a replacement.</p>}
-      <div className="row signature-list-toolbar">
+{error && <ErrorBanner message={error} />}
+</Modal.Body>
+<Modal.Footer><div className="row signature-list-toolbar">
         <button disabled={busy} onClick={() => setDeleteId(null)}>Cancel</button>
         <button className="danger" disabled={busy} onClick={() => void run(async () => {
           await deleteSignatureRequest(id, deleteId)
           setDeleteId(null)
           clientRequestId.current = crypto.randomUUID()
         })}><Trash2 size={14} />Delete record</button>
-      </div>
-      {error && <ErrorBanner message={error} />}
-    </Modal>}
+      </div></Modal.Footer>
+</Modal>}
     {editorId && <Suspense fallback={null}>
       <InAppSigningEditor attachmentId={id} requestId={editorId} name={name}
         onClose={() => {

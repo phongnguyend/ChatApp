@@ -1,4 +1,5 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { Modal as SharedModal } from '../Modal';
+import { type ReactNode } from 'react'
 import { Maximize2, Minimize2, X } from 'lucide-react'
 
 /**
@@ -24,24 +25,11 @@ export function Modal({
   footer?: ReactNode
   headerActions?: ReactNode
 }) {
-  const ref = useRef<HTMLDialogElement>(null)
 
-  useEffect(() => {
-    const dialog = ref.current
-    if (!dialog) {
-      return
-    }
 
-    if (open && !dialog.open) {
-      dialog.showModal()
-    } else if (!open && dialog.open) {
-      dialog.close()
-    }
-  }, [open])
 
   return (
-    <dialog
-      ref={ref}
+    <SharedModal open={open}
       aria-label={title}
       className={className ? `modal signing-modal ${className}` : 'modal signing-modal'}
       onDragEnter={(event) => event.stopPropagation()}
@@ -67,7 +55,7 @@ export function Modal({
         onClose()
       }}
     >
-      <div className="modal-head">
+      <SharedModal.Header as="div" className="modal-head">
         <h2>
           {icon}
           {title}
@@ -75,12 +63,16 @@ export function Modal({
         {headerActions ?? <button className="ghost icon-only" onClick={onClose} aria-label="Close">
           <X size={15} />
         </button>}
-      </div>
-      <div className="modal-body">{children}</div>
-      {footer ? <div className="modal-foot">{footer}</div> : null}
-    </dialog>
+      </SharedModal.Header>
+      {children}
+      {footer ? <SharedModal.Footer as="div" className="modal-foot">{footer}</SharedModal.Footer> : null}
+    </SharedModal>
   )
 }
+
+Modal.Header = SharedModal.Header;
+Modal.Body = SharedModal.Body;
+Modal.Footer = SharedModal.Footer;
 
 export function MaximizeButton({ maximized, onToggle }: { maximized: boolean; onToggle: () => void }) {
   const label = maximized ? 'Restore size' : 'Full screen'

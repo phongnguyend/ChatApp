@@ -1,3 +1,4 @@
+import { promptDialog, confirmDialog } from '../../services/dialogs';
 import { useEffect, useRef, useState } from 'react';
 import { HubConnectionBuilder, HubConnectionState } from '@microsoft/signalr';
 import { ArrowLeft, MousePointer2, Hand, Pencil, Square, Circle, Minus, Type, StickyNote, Eraser, ImagePlus, Undo2, Redo2, Copy, ClipboardPaste, Trash2, Share2, History, Download } from 'lucide-react';
@@ -77,14 +78,7 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
   function report(reason: unknown) {
     setError(reason instanceof Error ? reason.message : 'Unable to update the whiteboard.');
   }
-  useEffect(() => {
-    if (!pending && !uploading && !moveDraft) {
-      return;
-    }
-    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [pending, uploading, moveDraft]);
+
   useEffect(() => () => {
     if (moveTimer.current) {
       clearTimeout(moveTimer.current);
@@ -439,8 +433,8 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
     }
   }}>
     <header><button onClick={onBack} disabled={!!pending || busy || uploading || !!moveDraft}><ArrowLeft size={18} /> Boards</button><h2>{board.title}</h2><span role="status">{uploading ? 'Uploading…' : moveDraft ? 'Moving…' : busy ? 'Saving…' : pending ? 'Not saved' : `Saved · ${online ? 'Live' : 'Reconnecting…'}`}{!board.canEdit && ' · View only'}</span>
-      {board.isOwner && <button onClick={() => {
-        const title = window.prompt('Board title', board.title);
+      {board.isOwner && <button onClick={async () => {
+        const title = await promptDialog('Board title', board.title);
         if (title?.trim()) {
           void boardsApi(`/${board.id}`, 'PUT', { title }).then(reload).catch(report);
         }
@@ -489,8 +483,8 @@ export function WhiteboardWorkspace({ initial, onBack }: { initial: Board; onBac
             void boardsApi(`/${board.id}/members`, 'POST', { username: data.get('username'), canEdit: data.get('role') === 'editor' }).then(async () => setMembers(await boardsApi<Member[]>(`/${board.id}/members`))).catch(report);
           }}><label>Username<input name="username" required /></label><label>Role<select name="role"><option value="editor">Editor</option><option value="viewer">Viewer</option></select></label><button type="submit">Grant access</button></form>
           {members.map(member => <div key={member.userId}><p>{member.username} · {member.canEdit ? 'Editor' : 'Viewer'}</p><button onClick={() => void boardsApi(`/${board.id}/members/${member.userId}`, 'DELETE').then(() => setMembers(items => items.filter(x => x.userId !== member.userId))).catch(report)}>Remove access</button></div>)}</>}
-        {panel === 'history' && <><h3>Version history</h3><p>Latest 50 saved changes.</p>{versions.map(version => <div key={version.revision}><p>Revision {version.revision} · {new Date(version.createdAt).toLocaleString()}</p>{board.isOwner && <button disabled={disabled || version.revision === board.revision} onClick={() => {
-          if (window.confirm('Restore this version for everyone?')) {
+        {panel === 'history' && <><h3>Version history</h3><p>Latest 50 saved changes.</p>{versions.map(version => <div key={version.revision}><p>Revision {version.revision} · {new Date(version.createdAt).toLocaleString()}</p>{board.isOwner && <button disabled={disabled || version.revision === board.revision} onClick={async () => {
+          if (await confirmDialog('Restore this version for everyone?')) {
             void boardsApi<Board>(`/${board.id}/versions/${version.revision}/restore`, 'POST', { expectedRevision: board.revision }).then(fresh => { undo.current = []; redo.current = []; update(fresh); setPanel(null); }).catch(report);
           }
         }}>Restore revision {version.revision}</button>}</div>)}</>}

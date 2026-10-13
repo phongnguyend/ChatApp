@@ -1,3 +1,4 @@
+import { Modal } from './Modal';
 import { authFetch as fetch } from "../services/auth";
 import {
   AzureCommunicationTokenCredential,
@@ -175,16 +176,17 @@ export function LiveStreams({
   return (
     <>
       {isOpen && (
-        <div className="live-streams-backdrop" role="presentation">
+        <Modal layout="backdrop"  role="presentation">
           <section className="live-streams-browser" aria-label="Live streams">
-            <header>
+<Modal.Header as="header">
               <div><p>Broadcasts</p><h2>Live streams</h2></div>
               <button className="icon-button" onClick={onClose} aria-label="Close live streams"><X size={20} /></button>
-            </header>
-            <div className="live-stream-tabs">
+            </Modal.Header>
+<Modal.Body>
+<div className="live-stream-tabs">
               <span><Radio size={15} /> Active ({active.length})</span>
             </div>
-            <div className="live-stream-list">
+<div className="live-stream-list">
               {loading ? <div className="live-stream-empty"><LoaderCircle className="spin" /> Loading streams…</div> :
                 active.length === 0 ?
                   <div className="live-stream-empty">No one is live right now.</div> :
@@ -201,8 +203,10 @@ export function LiveStreams({
                     </article>
                   ))}
             </div>
-          </section>
-        </div>
+</Modal.Body>
+
+</section>
+        </Modal>
       )}
       {watching?.isActive && watching.providerCallId && (
         <LiveStreamStage

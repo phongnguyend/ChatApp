@@ -1,3 +1,4 @@
+import { Modal } from '../Modal';
 import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, Check, X } from 'lucide-react';
 import type { BoardSheet } from './boardModel';
@@ -11,13 +12,7 @@ export function WhiteboardSheets({ sheets, activeId, disabled, switchingDisabled
   const [error, setError] = useState('');
   const [deleting, setDeleting] = useState<BoardSheet | null>(null);
   const deleteDialog = useRef<HTMLDialogElement | null>(null);
-  useEffect(() => {
-    const dialog = deleteDialog.current;
-    if (deleting) {
-      dialog?.showModal();
-    }
-    return () => dialog?.close();
-  }, [deleting]);
+
   const tabs = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     tabs.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -61,14 +56,16 @@ export function WhiteboardSheets({ sheets, activeId, disabled, switchingDisabled
     <button type="button" aria-label="Move sheet left" title="Move sheet left" disabled={disabled || index === 0} onClick={() => reorder(-1)}><ChevronLeft size={16} /></button>
     <button type="button" aria-label="Move sheet right" title="Move sheet right" disabled={disabled || index === sheets.length - 1} onClick={() => reorder(1)}><ChevronRight size={16} /></button>
     <button type="button" aria-label="Delete sheet" title="Delete sheet" disabled={disabled || sheets.length <= 1} onClick={() => setDeleting(sheets[index])}><Trash2 size={16} /></button>
-    <dialog ref={deleteDialog} className="whiteboard-confirm-dialog" aria-labelledby="delete-sheet-title" aria-describedby="delete-sheet-description" onKeyDown={event => event.stopPropagation()} onCancel={() => setDeleting(null)} onClose={() => {
+    <Modal open={!!deleting} ref={deleteDialog} className="whiteboard-confirm-dialog" aria-labelledby="delete-sheet-title" aria-describedby="delete-sheet-description" onKeyDown={event => event.stopPropagation()} onCancel={() => setDeleting(null)} onClose={() => {
       if (!deleteDialog.current?.open) {
         setDeleting(null);
       }
     }}>
-      <h2 id="delete-sheet-title">Delete sheet?</h2>
-      <p id="delete-sheet-description">Delete “{deleting?.name}” and all its objects? The owner can recover this sheet from version history.</p>
-      <div className="whiteboard-confirm-actions">
+<Modal.Header><h2 id="delete-sheet-title">Delete sheet?</h2></Modal.Header>
+<Modal.Body>
+<p id="delete-sheet-description">Delete “{deleting?.name}” and all its objects? The owner can recover this sheet from version history.</p>
+</Modal.Body>
+<Modal.Footer as="div" className="whiteboard-confirm-actions">
         <button type="button" autoFocus onClick={() => setDeleting(null)}>Cancel</button>
         <button type="button" className="whiteboard-danger" disabled={disabled || sheets.length <= 1 || !sheets.some(sheet => sheet.id === deleting?.id)} onClick={() => {
           if (!deleting || disabled || sheets.length <= 1) {
@@ -82,8 +79,8 @@ export function WhiteboardSheets({ sheets, activeId, disabled, switchingDisabled
           setDeleting(null);
           void onSave(next, next[Math.min(position, next.length - 1)].id);
         }}><Trash2 size={16} />Delete sheet</button>
-      </div>
-    </dialog>
+      </Modal.Footer>
+</Modal>
     {renaming && <form className="whiteboard-sheet-rename" onSubmit={event => {
       event.preventDefault();
       if (!name.trim() || sheets.some(sheet => sheet.id !== renaming && sheet.name.toLowerCase() === name.trim().toLowerCase())) {

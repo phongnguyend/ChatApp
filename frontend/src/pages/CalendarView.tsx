@@ -1,3 +1,4 @@
+import { Modal } from '../components/Modal';
 import { authFetch as fetch } from "../services/auth";
 import { AlarmClock, CalendarDays, CalendarX2, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Clock3, HelpCircle, LoaderCircle, MessageCircle, Pencil, Plus, RefreshCw, UserRound, Video, X, XCircle } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
@@ -805,38 +806,41 @@ export function CalendarView({
       </div>
 
       {reminderForm && (
-        <div className="calendar-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !isSavingReminder) setReminderForm(null); }}>
+        <Modal layout="backdrop"  onMouseDown={(event) => { if (event.target === event.currentTarget && !isSavingReminder) setReminderForm(null); }}>
           <form className="calendar-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-reminder-form-title" onSubmit={(event) => void saveReminder(event)}>
-            <div className="calendar-dialog-heading"><div><p className="eyebrow">Your schedule</p><h2 id="calendar-reminder-form-title">New reminder</h2></div><button type="button" aria-label="Close reminder form" disabled={isSavingReminder} onClick={() => setReminderForm(null)}><X size={19} /></button></div>
-            <label htmlFor="calendar-reminder-title">Title</label>
-            <input id="calendar-reminder-title" autoFocus required maxLength={200} placeholder="What do you need to remember?" value={reminderForm.title} onChange={(event) => setReminderForm({ ...reminderForm, title: event.target.value })} />
-            <div className="calendar-reminder-fields">
+<Modal.Header as="div" className="calendar-dialog-heading"><div><p className="eyebrow">Your schedule</p><h2 id="calendar-reminder-form-title">New reminder</h2></div><button type="button" aria-label="Close reminder form" disabled={isSavingReminder} onClick={() => setReminderForm(null)}><X size={19} /></button></Modal.Header>
+<Modal.Body>
+<label htmlFor="calendar-reminder-title">Title</label>
+<input id="calendar-reminder-title" autoFocus required maxLength={200} placeholder="What do you need to remember?" value={reminderForm.title} onChange={(event) => setReminderForm({ ...reminderForm, title: event.target.value })} />
+<div className="calendar-reminder-fields">
               <div><label htmlFor="calendar-reminder-date">Date</label><input id="calendar-reminder-date" type="date" required value={reminderForm.reminderDate} onChange={(event) => setReminderForm({ ...reminderForm, reminderDate: event.target.value })} /></div>
               <div><label htmlFor="calendar-reminder-time">Time</label><input id="calendar-reminder-time" type="time" required={!reminderForm.allDay} disabled={reminderForm.allDay} value={reminderForm.reminderTime} onChange={(event) => setReminderForm({ ...reminderForm, reminderTime: event.target.value })} /></div>
             </div>
-            <label className="calendar-all-day-toggle"><input type="checkbox" checked={reminderForm.allDay} onChange={(event) => setReminderForm({ ...reminderForm, allDay: event.target.checked })} /><span>All day</span></label>
-            <label htmlFor="calendar-reminder-description">Description <span className="calendar-optional">Optional</span></label>
-            <textarea id="calendar-reminder-description" rows={4} maxLength={4000} placeholder="Add details about this reminder" value={reminderForm.description} onChange={(event) => setReminderForm({ ...reminderForm, description: event.target.value })} />
-            {reminderFormError && <p className="calendar-form-error" role="alert">{reminderFormError}</p>}
-            <div className="calendar-dialog-actions"><button type="button" disabled={isSavingReminder} onClick={() => setReminderForm(null)}>Cancel</button><button type="submit" disabled={isSavingReminder}>{isSavingReminder ? <LoaderCircle className="spin" size={16} /> : <AlarmClock size={16} />} {isSavingReminder ? "Creating..." : "Create reminder"}</button></div>
-          </form>
-        </div>
+<label className="calendar-all-day-toggle"><input type="checkbox" checked={reminderForm.allDay} onChange={(event) => setReminderForm({ ...reminderForm, allDay: event.target.checked })} /><span>All day</span></label>
+<label htmlFor="calendar-reminder-description">Description <span className="calendar-optional">Optional</span></label>
+<textarea id="calendar-reminder-description" rows={4} maxLength={4000} placeholder="Add details about this reminder" value={reminderForm.description} onChange={(event) => setReminderForm({ ...reminderForm, description: event.target.value })} />
+{reminderFormError && <p className="calendar-form-error" role="alert">{reminderFormError}</p>}
+</Modal.Body>
+<Modal.Footer as="div" className="calendar-dialog-actions"><button type="button" disabled={isSavingReminder} onClick={() => setReminderForm(null)}>Cancel</button><button type="submit" disabled={isSavingReminder}>{isSavingReminder ? <LoaderCircle className="spin" size={16} /> : <AlarmClock size={16} />} {isSavingReminder ? "Creating..." : "Create reminder"}</button></Modal.Footer>
+</form>
+        </Modal>
       )}
 
       {form && (
-        <div className="calendar-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !isSaving) setForm(null); }}>
+        <Modal layout="backdrop"  onMouseDown={(event) => { if (event.target === event.currentTarget && !isSaving) setForm(null); }}>
           <form className="calendar-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-dialog-title" onSubmit={(event) => void saveMeeting(event)}>
-            <div className="calendar-dialog-heading">
+<Modal.Header as="div" className="calendar-dialog-heading">
               <div><p className="eyebrow">Schedule together</p><h2 id="calendar-dialog-title">{editingId ? "Edit meeting" : "New meeting"}</h2></div>
               <button type="button" aria-label="Close meeting form" disabled={isSaving} onClick={() => setForm(null)}><X size={19} /></button>
-            </div>
-            <label htmlFor="calendar-title">Title</label>
-            <input id="calendar-title" ref={titleInputRef} placeholder="What are you meeting about?" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} />
-            <label className="calendar-all-day-toggle">
+            </Modal.Header>
+<Modal.Body>
+<label htmlFor="calendar-title">Title</label>
+<input id="calendar-title" ref={titleInputRef} placeholder="What are you meeting about?" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} />
+<label className="calendar-all-day-toggle">
               <input type="checkbox" checked={form.allDay} onChange={(event) => setForm({ ...form, allDay: event.target.checked })} />
               <span>All day</span>
             </label>
-            <div className="calendar-date-range">
+<div className="calendar-date-range">
               <div>
                 <label htmlFor="calendar-start-date">Start date</label>
                 <input id="calendar-start-date" type="date" required value={form.startDate} onChange={(event) => {
@@ -849,14 +853,14 @@ export function CalendarView({
                 <input id="calendar-end-date" type="date" required min={form.startDate} value={form.endDate} onChange={(event) => setForm({ ...form, endDate: event.target.value })} />
               </div>
             </div>
-            {!form.allDay && (
+{!form.allDay && (
               <div className="calendar-time-range">
                 <div><label htmlFor="calendar-start">Start time</label><input id="calendar-start" type="time" required value={form.start} onChange={(event) => setForm({ ...form, start: event.target.value })} /></div>
                 <div><label htmlFor="calendar-end">End time</label><input id="calendar-end" type="time" required value={form.end} onChange={(event) => setForm({ ...form, end: event.target.value })} /></div>
               </div>
             )}
-            <label htmlFor="calendar-person">People</label>
-            <div className="calendar-people-picker" ref={peoplePickerRef}>
+<label htmlFor="calendar-person">People</label>
+<div className="calendar-people-picker" ref={peoplePickerRef}>
               <div className="calendar-people-input">
                 {form.people.map((person) => (
                   <span className="calendar-person-chip" key={person.id} title={`@${person.username}`}>
@@ -929,42 +933,45 @@ export function CalendarView({
                 </div>
               )}
             </div>
-            <label className="calendar-description-label" htmlFor="calendar-description">Description <span className="calendar-optional">Optional</span></label>
-            <textarea
+<label className="calendar-description-label" htmlFor="calendar-description">Description <span className="calendar-optional">Optional</span></label>
+<textarea
               id="calendar-description"
               rows={4}
               placeholder="Add an agenda or a few details for this meeting"
               value={form.description}
               onChange={(event) => setForm({ ...form, description: event.target.value })}
             />
-            <p className="calendar-form-note"><Clock3 size={15} /> Participants can see this meeting in their calendar. No email invitations are sent.</p>
-            {formError && <p className="calendar-form-error" role="alert">{formError}</p>}
-            <div className="calendar-dialog-actions">
+<p className="calendar-form-note"><Clock3 size={15} /> Participants can see this meeting in their calendar. No email invitations are sent.</p>
+{formError && <p className="calendar-form-error" role="alert">{formError}</p>}
+</Modal.Body>
+<Modal.Footer as="div" className="calendar-dialog-actions">
               <button type="button" disabled={isSaving} onClick={() => setForm(null)}>Close</button>
               <button type="submit" disabled={isSaving}>{isSaving ? <LoaderCircle className="spin" size={16} /> : <Check size={16} />} {editingId ? "Save changes" : "Create meeting"}</button>
-            </div>
-          </form>
-        </div>
+            </Modal.Footer>
+</form>
+        </Modal>
       )}
 
       {selectedMeeting && !form && (
-        <div className="calendar-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !isCancelling && !isOpeningConversation && !isResponding) closeDetails(); }}>
+        <Modal layout="backdrop"  onMouseDown={(event) => { if (event.target === event.currentTarget && !isCancelling && !isOpeningConversation && !isResponding) closeDetails(); }}>
           <div className="calendar-dialog calendar-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-detail-title">
-            <div className="calendar-dialog-heading">
+<Modal.Header as="div" className="calendar-dialog-heading">
               <div><p className="eyebrow">Meeting details</p><h2 id="calendar-detail-title">{selectedMeeting.title}</h2></div>
               <button type="button" aria-label="Close meeting details" disabled={isCancelling || isOpeningConversation || isResponding} onClick={closeDetails}><X size={19} /></button>
-            </div>
-            {selectedMeeting.status === "cancelled" && <p className="calendar-cancelled-badge">Cancelled</p>}
-            <p className="calendar-detail-line"><CalendarDays size={16} /> {new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(localDate(selectedMeeting.startDate))}{selectedMeeting.endDate !== selectedMeeting.startDate ? ` – ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(localDate(selectedMeeting.endDate))}` : ""}</p>
-            <p className="calendar-detail-line"><Clock3 size={16} /> {selectedMeeting.allDay ? "All day" : `${selectedMeeting.start} – ${selectedMeeting.end}`}</p>
-            <div className="calendar-detail-section"><strong>Organizer</strong><p>{selectedMeeting.organizerDisplayName} (@{selectedMeeting.organizerUsername})</p></div>
-            <div className="calendar-detail-section"><strong>People</strong>{selectedMeeting.people.length ? <ul className="calendar-response-list">{selectedMeeting.people.map((person) => <li key={person.id}><span>{person.displayName} <small>@{person.username}</small></span><span className={`calendar-response-status ${person.responseStatus ?? "pending"}`}>{responseLabel(person.responseStatus)}</span></li>)}</ul> : <p>Only the organizer</p>}</div>
-            {!selectedMeeting.canEdit && selectedMeeting.status !== "cancelled" && <div className="calendar-detail-section calendar-rsvp"><strong>Your response</strong><div role="group" aria-label="Respond to meeting invitation"><button type="button" className={selectedMeeting.viewerResponseStatus === "accepted" ? "active" : undefined} aria-pressed={selectedMeeting.viewerResponseStatus === "accepted"} disabled={isResponding || isLoadingDetail} onClick={() => void respondToMeeting("accepted")}><CheckCircle2 size={15} aria-hidden="true" /> Accept</button><button type="button" className={selectedMeeting.viewerResponseStatus === "tentative" ? "active" : undefined} aria-pressed={selectedMeeting.viewerResponseStatus === "tentative"} disabled={isResponding || isLoadingDetail} onClick={() => void respondToMeeting("tentative")}><HelpCircle size={15} aria-hidden="true" /> Maybe</button><button type="button" className={selectedMeeting.viewerResponseStatus === "declined" ? "active danger" : "danger"} aria-pressed={selectedMeeting.viewerResponseStatus === "declined"} disabled={isResponding || isLoadingDetail} onClick={() => void respondToMeeting("declined")}><XCircle size={15} aria-hidden="true" /> Decline</button></div>{isResponding && <p className="calendar-form-note" role="status"><LoaderCircle className="spin" size={15} /> Saving response…</p>}</div>}
-            {selectedMeeting.description && <div className="calendar-detail-section"><strong>Description</strong><p className="calendar-detail-description">{selectedMeeting.description}</p></div>}
-            {isLoadingDetail && <p role="status" className="calendar-form-note"><LoaderCircle className="spin" size={15} /> Loading current details…</p>}
-            {detailError && <p role="alert" className="calendar-form-error">{detailError}</p>}
-            {confirmCancel && <p className="calendar-cancel-confirm">Cancel this meeting for everyone? It will remain visible as cancelled.</p>}
-            <div className="calendar-dialog-actions">
+            </Modal.Header>
+<Modal.Body>
+{selectedMeeting.status === "cancelled" && <p className="calendar-cancelled-badge">Cancelled</p>}
+<p className="calendar-detail-line"><CalendarDays size={16} /> {new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(localDate(selectedMeeting.startDate))}{selectedMeeting.endDate !== selectedMeeting.startDate ? ` – ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(localDate(selectedMeeting.endDate))}` : ""}</p>
+<p className="calendar-detail-line"><Clock3 size={16} /> {selectedMeeting.allDay ? "All day" : `${selectedMeeting.start} – ${selectedMeeting.end}`}</p>
+<div className="calendar-detail-section"><strong>Organizer</strong><p>{selectedMeeting.organizerDisplayName} (@{selectedMeeting.organizerUsername})</p></div>
+<div className="calendar-detail-section"><strong>People</strong>{selectedMeeting.people.length ? <ul className="calendar-response-list">{selectedMeeting.people.map((person) => <li key={person.id}><span>{person.displayName} <small>@{person.username}</small></span><span className={`calendar-response-status ${person.responseStatus ?? "pending"}`}>{responseLabel(person.responseStatus)}</span></li>)}</ul> : <p>Only the organizer</p>}</div>
+{!selectedMeeting.canEdit && selectedMeeting.status !== "cancelled" && <div className="calendar-detail-section calendar-rsvp"><strong>Your response</strong><div role="group" aria-label="Respond to meeting invitation"><button type="button" className={selectedMeeting.viewerResponseStatus === "accepted" ? "active" : undefined} aria-pressed={selectedMeeting.viewerResponseStatus === "accepted"} disabled={isResponding || isLoadingDetail} onClick={() => void respondToMeeting("accepted")}><CheckCircle2 size={15} aria-hidden="true" /> Accept</button><button type="button" className={selectedMeeting.viewerResponseStatus === "tentative" ? "active" : undefined} aria-pressed={selectedMeeting.viewerResponseStatus === "tentative"} disabled={isResponding || isLoadingDetail} onClick={() => void respondToMeeting("tentative")}><HelpCircle size={15} aria-hidden="true" /> Maybe</button><button type="button" className={selectedMeeting.viewerResponseStatus === "declined" ? "active danger" : "danger"} aria-pressed={selectedMeeting.viewerResponseStatus === "declined"} disabled={isResponding || isLoadingDetail} onClick={() => void respondToMeeting("declined")}><XCircle size={15} aria-hidden="true" /> Decline</button></div>{isResponding && <p className="calendar-form-note" role="status"><LoaderCircle className="spin" size={15} /> Saving response…</p>}</div>}
+{selectedMeeting.description && <div className="calendar-detail-section"><strong>Description</strong><p className="calendar-detail-description">{selectedMeeting.description}</p></div>}
+{isLoadingDetail && <p role="status" className="calendar-form-note"><LoaderCircle className="spin" size={15} /> Loading current details…</p>}
+{detailError && <p role="alert" className="calendar-form-error">{detailError}</p>}
+{confirmCancel && <p className="calendar-cancel-confirm">Cancel this meeting for everyone? It will remain visible as cancelled.</p>}
+</Modal.Body>
+<Modal.Footer as="div" className="calendar-dialog-actions">
               {!confirmCancel && (
                 <>
                   <button type="button" disabled={isLoadingDetail || isOpeningConversation || isCancelling || isResponding} onClick={() => void openMeetingConversation("chat")}><MessageCircle size={14} aria-hidden="true" />{isOpeningConversation ? "Opening…" : "Chat"}</button>
@@ -979,41 +986,45 @@ export function CalendarView({
                 </>
               )}
               <button type="button" disabled={isCancelling || isOpeningConversation || isResponding} onClick={closeDetails}><X size={14} aria-hidden="true" />Close</button>
-            </div>
-          </div>
-        </div>
+            </Modal.Footer>
+</div>
+        </Modal>
       )}
       {selectedTask && !form && !selectedMeeting && (
-        <div className="calendar-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedTask(null); }}>
+        <Modal layout="backdrop"  onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedTask(null); }}>
           <div className="calendar-dialog calendar-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-task-detail-title">
-            <div className="calendar-dialog-heading">
+<Modal.Header as="div" className="calendar-dialog-heading">
               <div><p className="eyebrow">Task due</p><h2 id="calendar-task-detail-title">{selectedTask.title}</h2></div>
               <button type="button" aria-label="Close task details" onClick={() => setSelectedTask(null)}><X size={19} /></button>
-            </div>
-            {selectedTask.dueDate && <p className="calendar-detail-line"><CalendarDays size={16} /> {new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(localDate(selectedTask.dueDate))}</p>}
-            {selectedTask.permission !== "owner" && <div className="calendar-detail-section"><strong>Shared by</strong><p>{selectedTask.ownerDisplayName} · {selectedTask.permission === "editor" ? "Can edit" : "Can view"}</p></div>}
-            {selectedTask.assigneeDisplayName && <div className="calendar-detail-section"><strong>Assigned to</strong><p>{selectedTask.assigneeDisplayName}</p></div>}
-            <div className="calendar-detail-section"><strong>Status</strong><p>{selectedTask.isCompleted ? "Done" : "Undone"}</p></div>
-            <div className="calendar-detail-section"><strong>Priority</strong><p>{selectedTask.priority.charAt(0).toUpperCase() + selectedTask.priority.slice(1)}</p></div>
-            <div className="calendar-detail-section"><strong>Created</strong><p><time dateTime={selectedTask.createdAt}>{new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(selectedTask.createdAt))}</time></p></div>
-            <div className="calendar-detail-section"><strong>Updated</strong><p><time dateTime={selectedTask.updatedAt}>{new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(selectedTask.updatedAt))}</time></p></div>
-            {selectedTask.description && <div className="calendar-detail-section"><strong>Notes</strong><p className="calendar-detail-description">{selectedTask.description}</p></div>}
-            <div className="calendar-dialog-actions">
+            </Modal.Header>
+<Modal.Body>
+{selectedTask.dueDate && <p className="calendar-detail-line"><CalendarDays size={16} /> {new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(localDate(selectedTask.dueDate))}</p>}
+{selectedTask.permission !== "owner" && <div className="calendar-detail-section"><strong>Shared by</strong><p>{selectedTask.ownerDisplayName} · {selectedTask.permission === "editor" ? "Can edit" : "Can view"}</p></div>}
+{selectedTask.assigneeDisplayName && <div className="calendar-detail-section"><strong>Assigned to</strong><p>{selectedTask.assigneeDisplayName}</p></div>}
+<div className="calendar-detail-section"><strong>Status</strong><p>{selectedTask.isCompleted ? "Done" : "Undone"}</p></div>
+<div className="calendar-detail-section"><strong>Priority</strong><p>{selectedTask.priority.charAt(0).toUpperCase() + selectedTask.priority.slice(1)}</p></div>
+<div className="calendar-detail-section"><strong>Created</strong><p><time dateTime={selectedTask.createdAt}>{new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(selectedTask.createdAt))}</time></p></div>
+<div className="calendar-detail-section"><strong>Updated</strong><p><time dateTime={selectedTask.updatedAt}>{new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(selectedTask.updatedAt))}</time></p></div>
+{selectedTask.description && <div className="calendar-detail-section"><strong>Notes</strong><p className="calendar-detail-description">{selectedTask.description}</p></div>}
+</Modal.Body>
+<Modal.Footer as="div" className="calendar-dialog-actions">
               <button type="button" onClick={() => { setSelectedTask(null); onOpenTasks(); }}><ClipboardList size={14} aria-hidden="true" />Open tasks</button>
               <button type="button" onClick={() => setSelectedTask(null)}><X size={14} aria-hidden="true" />Close</button>
-            </div>
-          </div>
-        </div>
+            </Modal.Footer>
+</div>
+        </Modal>
       )}
       {selectedReminder && !form && !selectedMeeting && !selectedTask && (
-        <div className="calendar-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedReminder(null); }}>
+        <Modal layout="backdrop"  onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedReminder(null); }}>
           <div className="calendar-dialog calendar-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-reminder-detail-title">
-            <div className="calendar-dialog-heading"><div><p className="eyebrow">Reminder</p><h2 id="calendar-reminder-detail-title">{selectedReminder.title}</h2></div><button type="button" aria-label="Close reminder details" onClick={() => setSelectedReminder(null)}><X size={19} /></button></div>
-            <p className="calendar-detail-line"><CalendarDays size={16} /> {new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(localDate(selectedReminder.reminderDate))} <Clock3 size={16} /> {selectedReminder.reminderTime ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(2000, 0, 1, Number(selectedReminder.reminderTime.slice(0, 2)), Number(selectedReminder.reminderTime.slice(3, 5)))) : "All day"}</p>
-            {selectedReminder.description && <div className="calendar-detail-section"><strong>Description</strong><p className="calendar-detail-description">{selectedReminder.description}</p></div>}
-            <div className="calendar-dialog-actions"><button type="button" onClick={() => { setSelectedReminder(null); onOpenReminders(); }}><AlarmClock size={14} aria-hidden="true" />Open reminders</button><button type="button" onClick={() => setSelectedReminder(null)}><X size={14} aria-hidden="true" />Close</button></div>
-          </div>
-        </div>
+<Modal.Header as="div" className="calendar-dialog-heading"><div><p className="eyebrow">Reminder</p><h2 id="calendar-reminder-detail-title">{selectedReminder.title}</h2></div><button type="button" aria-label="Close reminder details" onClick={() => setSelectedReminder(null)}><X size={19} /></button></Modal.Header>
+<Modal.Body>
+<p className="calendar-detail-line"><CalendarDays size={16} /> {new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(localDate(selectedReminder.reminderDate))} <Clock3 size={16} /> {selectedReminder.reminderTime ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(2000, 0, 1, Number(selectedReminder.reminderTime.slice(0, 2)), Number(selectedReminder.reminderTime.slice(3, 5)))) : "All day"}</p>
+{selectedReminder.description && <div className="calendar-detail-section"><strong>Description</strong><p className="calendar-detail-description">{selectedReminder.description}</p></div>}
+</Modal.Body>
+<Modal.Footer as="div" className="calendar-dialog-actions"><button type="button" onClick={() => { setSelectedReminder(null); onOpenReminders(); }}><AlarmClock size={14} aria-hidden="true" />Open reminders</button><button type="button" onClick={() => setSelectedReminder(null)}><X size={14} aria-hidden="true" />Close</button></Modal.Footer>
+</div>
+        </Modal>
       )}
     </section>
   );

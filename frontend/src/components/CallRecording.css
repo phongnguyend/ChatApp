@@ -59,26 +59,8 @@
   animation: recording-spin 0.8s linear infinite;
 }
 
-.recording-consent-backdrop {
-  position: fixed;
-  z-index: 1000;
-  inset: 0;
-  padding: 24px;
-  display: grid;
-  place-items: center;
-  background: #071113;
-  contain: strict;
-  isolation: isolate;
-}
-
 .recording-consent-dialog {
   width: min(440px, 100%);
-  padding: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 22px;
-  color: #edf9f6;
-  background: #102326;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.4);
   contain: layout paint;
 }
 

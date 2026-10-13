@@ -1,3 +1,4 @@
+import { Modal } from '../components/Modal';
 import { authFetch as fetch } from "../services/auth";
 import { ArrowLeft, CalendarDays, Check, CircleCheck, ClipboardList, List, ListTodo, LoaderCircle, Pencil, Plus, RotateCcw, Share2, Trash2, UserRound, Users, X } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
@@ -365,40 +366,60 @@ export function TasksView({ apiUrl, currentUsername, onBack, openTarget, hidden 
           <div className="tasks-item-actions">{canComplete(task) && <><button type="button" aria-label={`Done: ${task.title}`} disabled={!!busyId || task.isCompleted} onClick={() => requestCompletion([task], true)}><Check size={16} /> Done</button><button type="button" aria-label={`Undone: ${task.title}`} disabled={!!busyId || !task.isCompleted} onClick={() => requestCompletion([task], false)}><RotateCcw size={16} /> Undone</button></>}{task.permission !== "viewer" && <button type="button" aria-label={`Edit ${task.title}`} disabled={!!busyId} onClick={() => openEdit(task)}><Pencil size={16} /> Edit</button>}{task.permission === "owner" && <><button type="button" aria-label={`Share ${task.title}`} disabled={!!busyId} onClick={() => openShare(task)}><Share2 size={16} /> Share</button><button type="button" aria-label={`Assign ${task.title}`} disabled={!!busyId} onClick={() => openAssign(task)}><UserRound size={16} /> Assign</button><button type="button" aria-label={`Delete ${task.title}`} disabled={!!busyId} onClick={() => { setDeleteTarget([task]); setDeleteError(""); }}><Trash2 size={16} /> Delete</button></>}</div>
         </article>)}
     </div>
-    {sharing && <div className="tasks-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !shareSaving) setSharing(null); }}>
+    {sharing && <Modal layout="backdrop"  onMouseDown={(event) => { if (event.target === event.currentTarget && !shareSaving) setSharing(null); }}>
       <div className="tasks-dialog tasks-share" role="dialog" aria-modal="true" aria-labelledby="tasks-share-title">
-        <header><h2 id="tasks-share-title">Share “{sharing.title}”</h2><button type="button" aria-label="Close sharing" disabled={shareSaving} onClick={() => setSharing(null)}><X size={19} /></button></header>
-        <label>Add a person<input value={peopleQuery} onChange={(event) => { setPeopleQuery(event.target.value); setRecipient(null); setShareError(""); }} placeholder="Search name or username" autoComplete="off" /></label>
-        {!recipient && peopleQuery.trim() && peopleResults.length > 0 && <div className="tasks-people-results" role="listbox" aria-label="People">
+<Modal.Header as="header"><h2 id="tasks-share-title">Share “{sharing.title}”</h2><button type="button" aria-label="Close sharing" disabled={shareSaving} onClick={() => setSharing(null)}><X size={19} /></button></Modal.Header>
+<Modal.Body>
+<label>Add a person<input value={peopleQuery} onChange={(event) => { setPeopleQuery(event.target.value); setRecipient(null); setShareError(""); }} placeholder="Search name or username" autoComplete="off" /></label>
+{!recipient && peopleQuery.trim() && peopleResults.length > 0 && <div className="tasks-people-results" role="listbox" aria-label="People">
           {peopleResults.map((person) => <button type="button" role="option" aria-selected={false} key={person.id} onClick={() => { setRecipient(person); setPeopleQuery(`${person.displayName} (@${person.username})`); setPeopleResults([]); }}>{person.displayName} <small>@{person.username}</small></button>)}
         </div>}
-        <div className="tasks-share-add"><label>Permission<select value={newPermission} onChange={(event) => setNewPermission(event.target.value as "viewer" | "editor")}><option value="viewer">Viewer — can view</option><option value="editor">Editor — can view and edit</option></select></label><button className="tasks-primary" type="button" disabled={!recipient || shareLoading || shareSaving} onClick={() => { if (recipient) void putShare(recipient.username, newPermission); }}>{shareSaving ? "Saving..." : "Share"}</button></div>
-        <div className="tasks-share-list"><strong>People with access</strong>
+<div className="tasks-share-add"><label>Permission<select value={newPermission} onChange={(event) => setNewPermission(event.target.value as "viewer" | "editor")}><option value="viewer">Viewer — can view</option><option value="editor">Editor — can view and edit</option></select></label><button className="tasks-primary" type="button" disabled={!recipient || shareLoading || shareSaving} onClick={() => { if (recipient) void putShare(recipient.username, newPermission); }}>{shareSaving ? "Saving..." : "Share"}</button></div>
+<div className="tasks-share-list"><strong>People with access</strong>
           {shareLoading ? <p>Loading access...</p> : shares.length === 0 ? <p>Only you have access.</p> : shares.map((share) => <div className="tasks-share-person" key={share.id}><span>{share.displayName}<small>@{share.username}</small></span><select aria-label={`Permission for ${share.displayName}`} value={share.permission} disabled={shareSaving} onChange={(event) => void putShare(share.username, event.target.value as "viewer" | "editor")}><option value="viewer">Viewer</option><option value="editor">Editor</option></select><button type="button" disabled={shareSaving} onClick={() => void removeShare(share)}>Remove</button></div>)}
         </div>
-        {shareError && <p className="tasks-error" role="alert">{shareError}</p>}
-        <footer><button type="button" disabled={shareSaving} onClick={() => setSharing(null)}>Close</button></footer>
-      </div>
-    </div>}
-    {assigning && <div className="tasks-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !assignSaving) setAssigning(null); }}>
+{shareError && <p className="tasks-error" role="alert">{shareError}</p>}
+</Modal.Body>
+<Modal.Footer as="footer"><button type="button" disabled={shareSaving} onClick={() => setSharing(null)}>Close</button></Modal.Footer>
+</div>
+    </Modal>}
+    {assigning && <Modal layout="backdrop"  onMouseDown={(event) => { if (event.target === event.currentTarget && !assignSaving) setAssigning(null); }}>
       <div className="tasks-dialog tasks-assignment-dialog" role="dialog" aria-modal="true" aria-labelledby="tasks-assignment-title">
-        <header><h2 id="tasks-assignment-title">Assign “{assigning.title}”</h2><button type="button" aria-label="Close assignment" disabled={assignSaving} onClick={() => setAssigning(null)}><X size={19} /></button></header>
-        <label>Assigned to<select value={assigneeId} disabled={assignLoading || assignSaving} onChange={(event) => setAssigneeId(event.target.value)}><option value="">Unassigned</option>{assignees.map((candidate) => <option key={candidate.userId} value={candidate.userId}>{candidate.userId === assigning.ownerUserId ? "Assign to me" : `${candidate.displayName} (@${candidate.username})`}</option>)}</select></label>
-        {assignLoading && <p className="tasks-assignment-help">Loading people...</p>}
-        {!assignLoading && assignees.length === 1 && <p className="tasks-assignment-help">Share this task to assign it to someone else.</p>}
-        {assignError && <p className="tasks-error" role="alert">{assignError}</p>}
-        <footer><button type="button" disabled={assignSaving} onClick={() => setAssigning(null)}>Cancel</button><button className="tasks-primary" type="button" disabled={assignLoading || assignSaving || assigneeId === (assigning.assigneeUserId ?? "")} onClick={() => void saveAssignee()}>{assignSaving ? "Saving..." : "Save assignment"}</button></footer>
-      </div>
-    </div>}
-    {draft && <div className="tasks-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setDraft(null); }}><form className="tasks-dialog" onSubmit={(event) => void save(event)} aria-label={editing ? "Edit task" : "New task"}>
-      <header><h2>{editing ? "Edit task" : "New task"}</h2><button type="button" aria-label="Close" onClick={() => setDraft(null)} disabled={saving}><X size={19} /></button></header>
-      <label>Title<input autoFocus maxLength={200} required value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="What needs to be done?" /></label>
-      <div className="tasks-form-row"><label>Due date<input type="date" value={draft.dueDate} onChange={(event) => setDraft({ ...draft, dueDate: event.target.value })} /></label><label>Priority<select value={draft.priority} onChange={(event) => setDraft({ ...draft, priority: event.target.value as TaskDraft["priority"] })}><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option></select></label></div>
-      <label>Notes<textarea maxLength={4000} rows={4} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Add details (optional)" /></label>
-      {dialogError && <p className="tasks-error" role="alert">{dialogError}</p>}
-      <footer><button type="button" onClick={() => setDraft(null)} disabled={saving}>Cancel</button><button className="tasks-primary" type="submit" disabled={saving}>{saving ? "Saving..." : editing ? "Save changes" : "Add task"}</button></footer>
-    </form></div>}
-    {completionTarget && <div className="tasks-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busyId) setCompletionTarget(null); }}><div className="tasks-dialog tasks-confirm" role="alertdialog" aria-modal="true" aria-label="Confirm task status"><header><h2>Mark {completionTarget.tasks.length === 1 ? "task" : `${completionTarget.tasks.length} tasks`} as {completionTarget.isCompleted ? "done" : "undone"}?</h2><button type="button" aria-label="Close" onClick={() => setCompletionTarget(null)} disabled={!!busyId}><X size={19} /></button></header>{completionTarget.tasks.length === 1 && <p>{completionTarget.tasks[0].title}</p>}{completionError && <p className="tasks-error" role="alert">{completionError}</p>}<footer><button type="button" onClick={() => setCompletionTarget(null)} disabled={!!busyId}>Cancel</button><button className="tasks-primary" type="button" onClick={() => void setCompletion()} disabled={!!busyId}>{busyId ? "Saving..." : completionTarget.isCompleted ? "Done" : "Undone"}</button></footer></div></div>}
-    {deleteTarget && <div className="tasks-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busyId) setDeleteTarget(null); }}><div className="tasks-dialog tasks-confirm" role="alertdialog" aria-modal="true" aria-label="Delete task"><header><h2>Delete {deleteTarget.length === 1 ? "task" : `${deleteTarget.length} tasks`}?</h2><button type="button" aria-label="Close" onClick={() => setDeleteTarget(null)} disabled={!!busyId}><X size={19} /></button></header>{deleteTarget.length === 1 && <p>Delete “{deleteTarget[0].title}”?</p>}{deleteError && <p className="tasks-error" role="alert">{deleteError}</p>}<footer><button type="button" onClick={() => setDeleteTarget(null)} disabled={!!busyId}>Cancel</button><button className="tasks-danger" type="button" onClick={() => void remove()} disabled={!!busyId}>{busyId ? "Deleting..." : "Delete"}</button></footer></div></div>}
+<Modal.Header as="header"><h2 id="tasks-assignment-title">Assign “{assigning.title}”</h2><button type="button" aria-label="Close assignment" disabled={assignSaving} onClick={() => setAssigning(null)}><X size={19} /></button></Modal.Header>
+<Modal.Body>
+<label>Assigned to<select value={assigneeId} disabled={assignLoading || assignSaving} onChange={(event) => setAssigneeId(event.target.value)}><option value="">Unassigned</option>{assignees.map((candidate) => <option key={candidate.userId} value={candidate.userId}>{candidate.userId === assigning.ownerUserId ? "Assign to me" : `${candidate.displayName} (@${candidate.username})`}</option>)}</select></label>
+{assignLoading && <p className="tasks-assignment-help">Loading people...</p>}
+{!assignLoading && assignees.length === 1 && <p className="tasks-assignment-help">Share this task to assign it to someone else.</p>}
+{assignError && <p className="tasks-error" role="alert">{assignError}</p>}
+</Modal.Body>
+<Modal.Footer as="footer"><button type="button" disabled={assignSaving} onClick={() => setAssigning(null)}>Cancel</button><button className="tasks-primary" type="button" disabled={assignLoading || assignSaving || assigneeId === (assigning.assigneeUserId ?? "")} onClick={() => void saveAssignee()}>{assignSaving ? "Saving..." : "Save assignment"}</button></Modal.Footer>
+</div>
+    </Modal>}
+    {draft && <Modal layout="backdrop"  onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setDraft(null); }}><form className="tasks-dialog" onSubmit={(event) => void save(event)} aria-label={editing ? "Edit task" : "New task"}>
+<Modal.Header as="header"><h2>{editing ? "Edit task" : "New task"}</h2><button type="button" aria-label="Close" onClick={() => setDraft(null)} disabled={saving}><X size={19} /></button></Modal.Header>
+<Modal.Body>
+<label>Title<input autoFocus maxLength={200} required value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="What needs to be done?" /></label>
+<div className="tasks-form-row"><label>Due date<input type="date" value={draft.dueDate} onChange={(event) => setDraft({ ...draft, dueDate: event.target.value })} /></label><label>Priority<select value={draft.priority} onChange={(event) => setDraft({ ...draft, priority: event.target.value as TaskDraft["priority"] })}><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option></select></label></div>
+<label>Notes<textarea maxLength={4000} rows={4} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Add details (optional)" /></label>
+{dialogError && <p className="tasks-error" role="alert">{dialogError}</p>}
+</Modal.Body>
+<Modal.Footer as="footer"><button type="button" onClick={() => setDraft(null)} disabled={saving}>Cancel</button><button className="tasks-primary" type="submit" disabled={saving}>{saving ? "Saving..." : editing ? "Save changes" : "Add task"}</button></Modal.Footer>
+</form></Modal>}
+    {completionTarget && <Modal layout="backdrop"  onMouseDown={(event) => { if (event.target === event.currentTarget && !busyId) setCompletionTarget(null); }}><div className="tasks-dialog tasks-confirm" role="alertdialog" aria-modal="true" aria-label="Confirm task status">
+<Modal.Header as="header"><h2>Mark {completionTarget.tasks.length === 1 ? "task" : `${completionTarget.tasks.length} tasks`} as {completionTarget.isCompleted ? "done" : "undone"}?</h2><button type="button" aria-label="Close" onClick={() => setCompletionTarget(null)} disabled={!!busyId}><X size={19} /></button></Modal.Header>
+<Modal.Body>
+{completionTarget.tasks.length === 1 && <p>{completionTarget.tasks[0].title}</p>}
+{completionError && <p className="tasks-error" role="alert">{completionError}</p>}
+</Modal.Body>
+<Modal.Footer as="footer"><button type="button" onClick={() => setCompletionTarget(null)} disabled={!!busyId}>Cancel</button><button className="tasks-primary" type="button" onClick={() => void setCompletion()} disabled={!!busyId}>{busyId ? "Saving..." : completionTarget.isCompleted ? "Done" : "Undone"}</button></Modal.Footer>
+</div></Modal>}
+    {deleteTarget && <Modal layout="backdrop"  onMouseDown={(event) => { if (event.target === event.currentTarget && !busyId) setDeleteTarget(null); }}><div className="tasks-dialog tasks-confirm" role="alertdialog" aria-modal="true" aria-label="Delete task">
+<Modal.Header as="header"><h2>Delete {deleteTarget.length === 1 ? "task" : `${deleteTarget.length} tasks`}?</h2><button type="button" aria-label="Close" onClick={() => setDeleteTarget(null)} disabled={!!busyId}><X size={19} /></button></Modal.Header>
+<Modal.Body>
+{deleteTarget.length === 1 && <p>Delete “{deleteTarget[0].title}”?</p>}
+{deleteError && <p className="tasks-error" role="alert">{deleteError}</p>}
+</Modal.Body>
+<Modal.Footer as="footer"><button type="button" onClick={() => setDeleteTarget(null)} disabled={!!busyId}>Cancel</button><button className="tasks-danger" type="button" onClick={() => void remove()} disabled={!!busyId}>{busyId ? "Deleting..." : "Delete"}</button></Modal.Footer>
+</div></Modal>}
   </section>;
 }

@@ -299,8 +299,8 @@ test('orphan attachments charge their creator and can be cleaned manually', asyn
   await expect(page.getByText('orphan.txt', { exact: true })).toBeVisible();
   await expect(page.getByText(/Deleted form/)).toBeVisible();
   await page.screenshot({ path: 'test-results/orphan-attachments.png', fullPage: true });
-  page.once('dialog', dialog => { void dialog.accept(); });
   await page.getByRole('button', { name: 'Delete orphan.txt', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Confirm action' }).getByRole('button', { name: 'Confirm', exact: true }).click();
   await expect(page.getByText('No orphan attachments.')).toBeVisible();
   expect(await usage(uploader.username)).toBe(0);
 });

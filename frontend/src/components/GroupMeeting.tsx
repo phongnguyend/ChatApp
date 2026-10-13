@@ -1,3 +1,4 @@
+import { Modal } from './Modal';
 import {
   Maximize2,
   Mic,
@@ -407,7 +408,7 @@ export function GroupMeetingOverlay({
   }, [activeScreenStream]);
 
   return (
-    <div className="group-meeting-backdrop">
+    <Modal layout="backdrop" >
       <section
         ref={meetingStageRef}
         className="group-meeting-stage"
@@ -415,11 +416,22 @@ export function GroupMeetingOverlay({
         aria-modal="true"
         aria-label={`Meeting in ${groupTitle}`}
       >
-        <CallRecordingControls
+<Modal.Header as="header">
+          <div>
+            <strong>{groupTitle}</strong>
+            <span>
+              {meeting.participants.length} participant
+              {meeting.participants.length === 1 ? "" : "s"} · Started by{" "}
+              {meeting.startedByDisplayName}
+            </span>
+          </div>
+        </Modal.Header>
+<Modal.Body>
+<CallRecordingControls
           controller={recordingController}
           showWhenIdle={false}
         />
-        <button
+<button
           type="button"
           className="maximize-meeting-stage"
           aria-label={
@@ -441,19 +453,7 @@ export function GroupMeetingOverlay({
             <Maximize2 size={18} />
           )}
         </button>
-
-        <header>
-          <div>
-            <strong>{groupTitle}</strong>
-            <span>
-              {meeting.participants.length} participant
-              {meeting.participants.length === 1 ? "" : "s"} · Started by{" "}
-              {meeting.startedByDisplayName}
-            </span>
-          </div>
-        </header>
-
-        <div
+<div
           className={`group-meeting-media ${meeting.screenSharingUserId ? "is-sharing" : ""}`}
         >
           <div className="group-meeting-grid">
@@ -537,8 +537,8 @@ export function GroupMeetingOverlay({
             </div>
           ) : null}
         </div>
-
-        <div className="group-meeting-controls">
+</Modal.Body>
+<Modal.Footer><div className="group-meeting-controls">
           <button
             type="button"
             className={isMuted ? "inactive" : ""}
@@ -611,10 +611,10 @@ export function GroupMeetingOverlay({
               <Square size={18} />
             </button>
           ) : null}
-        </div>
-      </section>
+        </div></Modal.Footer>
+</section>
       <RecordingConsentDialog controller={recordingController} />
-    </div>
+    </Modal>
   );
 }
 

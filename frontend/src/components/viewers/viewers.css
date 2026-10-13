@@ -1,24 +1,12 @@
 /* ---------- Office file preview ---------- */
 
-.office-dialog::backdrop {
-  background: rgb(0 0 0 / 65%);
-}
-
 .office-dialog[open] {
-  display: flex;
-  flex-direction: column;
   width: min(1200px, calc(100vw - 40px));
   height: min(900px, calc(100vh - 40px));
   min-width: min(360px, calc(100vw - 24px));
   min-height: min(260px, calc(100vh - 24px));
   max-width: calc(100vw - 24px);
   max-height: calc(100vh - 24px);
-  padding: 0;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: 0 20px 70px rgb(0 0 0 / 25%);
-  overflow: auto;
   resize: both;
 }
 
@@ -101,13 +89,13 @@
 .office-grid tr > th:first-child { position: sticky; left: 0; z-index: 2; width: 50px; }
 
 
-.office-dialog { --surface-1: var(--paper); --surface-2: var(--cream); --border: var(--line); --radius: 16px; --text-secondary: var(--muted); --accent: var(--coral); --accent-text: var(--coral); --accent-soft: color-mix(in srgb, var(--coral) 12%, var(--paper)); color: var(--ink); }
+.office-dialog { --surface-1: var(--paper); --surface-2: var(--cream); --border: var(--line); --radius: 16px; --text-secondary: var(--muted); --accent: var(--coral); --accent-text: var(--coral); --accent-soft: color-mix(in srgb, var(--coral) 12%, var(--paper)); }
 .office-dialog .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .office-dialog button, .office-dialog .button-link { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--paper); text-decoration: none; cursor: pointer; }
 .office-dialog button:disabled { opacity: .5; cursor: not-allowed; }
 .office-dialog .office-toolbar { flex: none; flex-wrap: wrap; }
 .office-dialog .office-toolbar strong { flex: 1; }
-.office-dialog.is-maximized[open] { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; border-radius: 0; resize: none; }
+.office-dialog.is-maximized[open] { width: 100vw; height: 100dvh; max-width: none; max-height: none; resize: none; }
 .office-footer { flex: none; border-top: 1px solid var(--line); padding: 10px 14px; }
 .office-dialog .image-preview-content { overflow: hidden; }
 .office-dialog .image-preview-content > img { width: 100%; height: 100%; min-height: 0; max-height: 100%; }

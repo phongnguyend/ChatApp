@@ -1,3 +1,4 @@
+import { Modal } from './Modal';
 import { authFetch as fetch } from "../services/auth";
 /* oxlint-disable react/only-export-components -- recording UI and its reusable lifecycle hook share private event types */
 import { Circle, CircleStop, LoaderCircle } from "lucide-react";
@@ -1254,25 +1255,27 @@ export function RecordingConsentDialog({
   const { consentRequest, respondToConsent } = controller;
   if (!consentRequest) return null;
   return createPortal(
-    <div className="recording-consent-backdrop">
+    <Modal layout="backdrop" >
       <section
         className="recording-consent-dialog"
         role="alertdialog"
         aria-modal="true"
         aria-label="Recording consent"
       >
-        <span className="recording-consent-icon">
+<Modal.Header><h2>Allow call recording?</h2></Modal.Header>
+<Modal.Body>
+<span className="recording-consent-icon">
           <Circle size={24} />
         </span>
-        <h2>Allow call recording?</h2>
-        <p>
+<p>
           {consentRequest.recording.startedByDisplayName} wants to record
           this call. Your camera, shared screen, and audio may be included.
         </p>
-        {consentRequest.isNewParticipant ? (
+{consentRequest.isNewParticipant ? (
           <p>You must accept before call media can be connected.</p>
         ) : null}
-        <div>
+</Modal.Body>
+<Modal.Footer><div>
           <button
             type="button"
             className="decline-recording"
@@ -1287,9 +1290,9 @@ export function RecordingConsentDialog({
           >
             Accept
           </button>
-        </div>
-      </section>
-    </div>,
+        </div></Modal.Footer>
+</section>
+    </Modal>,
     document.body,
   );
 }

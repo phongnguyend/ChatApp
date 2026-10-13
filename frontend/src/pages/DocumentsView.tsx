@@ -1,3 +1,4 @@
+import { Modal } from '../components/Modal';
 import { authFetch as fetch } from "../services/auth";
 import { ArrowLeft, Signature, CheckSquare2, ChevronRight, Copy, Download, FileImage, FileText, Folder, FolderInput, FolderOpen, FolderPlus, Globe2, History, Info, Link2, LoaderCircle, Pencil, QrCode, RotateCcw, Search, Send, Share2, Trash2, Upload, Users, X } from "lucide-react";
 import { lazy, Suspense, type ChangeEvent, type DragEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
@@ -716,47 +717,47 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, onOpenConversat
       {dragging && <div className="documents-drop-hint">Drop files to upload to {listing?.currentFolder?.name ?? "My Documents"}</div>}
       </>}
 
-      {destinationAction && <div className="documents-modal-backdrop"><div className="documents-modal documents-destination" role="dialog" aria-modal="true" aria-labelledby="documents-destination-title">
-        <div className="documents-modal-heading"><h2 id="documents-destination-title">{destinationAction === "move" ? "Move" : "Copy"} {selected.length} {selected.length === 1 ? "item" : "items"}</h2><button type="button" aria-label="Close destination picker" onClick={() => setDestinationAction(null)} disabled={busy}><X size={18} /></button></div>
-        <p>Choose a folder in My Documents.</p>
-        <nav className="documents-destination-path" aria-label="Destination path"><button type="button" onClick={() => setDestinationId(null)}>My Documents</button>{destinationListing?.breadcrumbs.map((folder) => <span key={folder.id}><ChevronRight size={13} /><button type="button" onClick={() => setDestinationId(folder.id)}>{folder.name}</button></span>)}</nav>
-        <div className="documents-destination-list">{destinationLoading ? <p className="documents-state"><LoaderCircle className="spin" size={16} /> Loading folders…</p> : destinationListing?.folders.length ? destinationListing.folders.map((folder) => <button type="button" key={folder.id} onClick={() => setDestinationId(folder.id)}><Folder size={17} /> {folder.name}<ChevronRight size={15} /></button>) : <p>No folders here.</p>}</div>
-        {error && <p className="documents-modal-error" role="alert">{error}</p>}
-        <div className="documents-modal-actions"><button type="button" onClick={() => setDestinationAction(null)} disabled={busy}>Cancel</button><button type="button" onClick={() => void runBulk(destinationAction, destinationId)} disabled={busy || destinationLoading || !destinationListing}>{destinationAction === "move" ? "Move here" : "Copy here"}</button></div>
-      </div></div>}
-      {bulkTrashOpen && <div className="documents-modal-backdrop"><div className="documents-modal" role="dialog" aria-modal="true" aria-labelledby="documents-bulk-trash-title">
-        <div className="documents-modal-heading"><h2 id="documents-bulk-trash-title">Move {selected.length} {selected.length === 1 ? "item" : "items"} to Trash?</h2><button type="button" aria-label="Close" onClick={() => setBulkTrashOpen(false)} disabled={busy}><X size={18} /></button></div>
-        <p>Selected folders will move with everything inside. You can restore them later.</p>
-        {error && <p className="documents-modal-error" role="alert">{error}</p>}
-        <div className="documents-modal-actions"><button type="button" onClick={() => setBulkTrashOpen(false)} disabled={busy}>Cancel</button><button type="button" className="danger" onClick={() => void runBulk("trash")} disabled={busy}>Move to Trash</button></div>
-      </div></div>}
+      {destinationAction && <Modal layout="backdrop" ><div className="documents-modal documents-destination" role="dialog" aria-modal="true" aria-labelledby="documents-destination-title">
+<Modal.Header as="div" className="documents-modal-heading"><h2 id="documents-destination-title">{destinationAction === "move" ? "Move" : "Copy"} {selected.length} {selected.length === 1 ? "item" : "items"}</h2><button type="button" aria-label="Close destination picker" onClick={() => setDestinationAction(null)} disabled={busy}><X size={18} /></button></Modal.Header>
+<Modal.Body>
+<p>Choose a folder in My Documents.</p>
+<nav className="documents-destination-path" aria-label="Destination path"><button type="button" onClick={() => setDestinationId(null)}>My Documents</button>{destinationListing?.breadcrumbs.map((folder) => <span key={folder.id}><ChevronRight size={13} /><button type="button" onClick={() => setDestinationId(folder.id)}>{folder.name}</button></span>)}</nav>
+<div className="documents-destination-list">{destinationLoading ? <p className="documents-state"><LoaderCircle className="spin" size={16} /> Loading folders…</p> : destinationListing?.folders.length ? destinationListing.folders.map((folder) => <button type="button" key={folder.id} onClick={() => setDestinationId(folder.id)}><Folder size={17} /> {folder.name}<ChevronRight size={15} /></button>) : <p>No folders here.</p>}</div>
+{error && <p className="documents-modal-error" role="alert">{error}</p>}
+</Modal.Body>
+<Modal.Footer as="div" className="documents-modal-actions"><button type="button" onClick={() => setDestinationAction(null)} disabled={busy}>Cancel</button><button type="button" onClick={() => void runBulk(destinationAction, destinationId)} disabled={busy || destinationLoading || !destinationListing}>{destinationAction === "move" ? "Move here" : "Copy here"}</button></Modal.Footer>
+</div></Modal>}
+      {bulkTrashOpen && <Modal layout="backdrop" ><div className="documents-modal" role="dialog" aria-modal="true" aria-labelledby="documents-bulk-trash-title">
+<Modal.Header as="div" className="documents-modal-heading"><h2 id="documents-bulk-trash-title">Move {selected.length} {selected.length === 1 ? "item" : "items"} to Trash?</h2><button type="button" aria-label="Close" onClick={() => setBulkTrashOpen(false)} disabled={busy}><X size={18} /></button></Modal.Header>
+<Modal.Body>
+<p>Selected folders will move with everything inside. You can restore them later.</p>
+{error && <p className="documents-modal-error" role="alert">{error}</p>}
+</Modal.Body>
+<Modal.Footer as="div" className="documents-modal-actions"><button type="button" onClick={() => setBulkTrashOpen(false)} disabled={busy}>Cancel</button><button type="button" className="danger" onClick={() => void runBulk("trash")} disabled={busy}>Move to Trash</button></Modal.Footer>
+</div></Modal>}
 
-      {nameDialog && <div className="documents-modal-backdrop"><form className="documents-modal" role="dialog" aria-modal="true" aria-labelledby="documents-name-title" onSubmit={(event) => void saveName(event)}>
-        <div className="documents-modal-heading"><h2 id="documents-name-title">{nameDialog.kind === "create" ? "New folder" : `Rename ${nameDialog.kind}`}</h2><button type="button" aria-label="Close" onClick={() => setNameDialog(null)} disabled={busy}><X size={18} /></button></div>
-        <label htmlFor="documents-name-input">Name</label><input id="documents-name-input" ref={nameInput} value={nameDialog.name} maxLength={255} onChange={(event) => setNameDialog({ ...nameDialog, name: event.target.value })} required />
-        {error && <p className="documents-modal-error" role="alert">{error}</p>}
-        <div className="documents-modal-actions"><button type="button" onClick={() => setNameDialog(null)} disabled={busy}>Cancel</button><button type="submit" disabled={busy || !nameDialog.name.trim()}>{nameDialog.kind === "create" ? "Create folder" : "Save name"}</button></div>
-      </form></div>}
-      {purgeDialog && <div className="documents-modal-backdrop"><div className="documents-modal" role="dialog" aria-modal="true" aria-labelledby="documents-purge-title">
-        <div className="documents-modal-heading"><h2 id="documents-purge-title">Delete permanently?</h2><button type="button" aria-label="Close" onClick={() => setPurgeDialog(null)} disabled={busy}><X size={18} /></button></div>
-        <p>“{purgeDialog.name}”{purgeDialog.kind === "folder" ? " and everything inside it" : ""} cannot be restored after this.</p>
-        {error && <p className="documents-modal-error" role="alert">{error}</p>}
-        <div className="documents-modal-actions"><button type="button" onClick={() => setPurgeDialog(null)} disabled={busy}>Cancel</button><button className="danger" type="button" onClick={() => void purgeItem()} disabled={busy}>Delete permanently</button></div>
-      </div></div>}
-      {shareDialog && <div className="documents-modal-backdrop"><div className="documents-modal documents-share-modal" role="dialog" aria-modal="true" aria-labelledby="documents-share-title">
-        <div className="documents-modal-heading"><h2 id="documents-share-title">Share “{shareDialog.name}”</h2><button type="button" aria-label="Close sharing" onClick={() => { setShareDialog(null); setRecipient(null); setPeopleQuery(""); setError(""); }} disabled={busy}><X size={18} /></button></div>
-        <div className="documents-share-tabs" role="tablist" aria-label="Share type" onKeyDown={(event) => {
-          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-          event.preventDefault();
-          const next = shareTab === "internal" ? "public" : "internal";
-          setShareTab(next);
-          document.getElementById(`documents-${next}-share-tab`)?.focus();
-        }}>
-          <button id="documents-internal-share-tab" type="button" role="tab" aria-controls="documents-internal-share-panel" aria-selected={shareTab === "internal"} tabIndex={shareTab === "internal" ? 0 : -1} onClick={() => setShareTab("internal")}><Users size={15} aria-hidden="true" /> Internal share</button>
-          <button id="documents-public-share-tab" type="button" role="tab" aria-controls="documents-public-share-panel" aria-selected={shareTab === "public"} tabIndex={shareTab === "public" ? 0 : -1} onClick={() => setShareTab("public")}><Globe2 size={15} aria-hidden="true" /> Public share</button>
-        </div>
-        {error && <p className="documents-modal-error" role="alert">{error}</p>}
-        <div id="documents-internal-share-panel" role="tabpanel" aria-labelledby="documents-internal-share-tab" hidden={shareTab !== "internal"}>
+      {nameDialog && <Modal layout="backdrop" ><form className="documents-modal" role="dialog" aria-modal="true" aria-labelledby="documents-name-title" onSubmit={(event) => void saveName(event)}>
+<Modal.Header as="div" className="documents-modal-heading"><h2 id="documents-name-title">{nameDialog.kind === "create" ? "New folder" : `Rename ${nameDialog.kind}`}</h2><button type="button" aria-label="Close" onClick={() => setNameDialog(null)} disabled={busy}><X size={18} /></button></Modal.Header>
+<Modal.Body>
+<label htmlFor="documents-name-input">Name</label>
+<input id="documents-name-input" ref={nameInput} value={nameDialog.name} maxLength={255} onChange={(event) => setNameDialog({ ...nameDialog, name: event.target.value })} required />
+{error && <p className="documents-modal-error" role="alert">{error}</p>}
+</Modal.Body>
+<Modal.Footer as="div" className="documents-modal-actions"><button type="button" onClick={() => setNameDialog(null)} disabled={busy}>Cancel</button><button type="submit" disabled={busy || !nameDialog.name.trim()}>{nameDialog.kind === "create" ? "Create folder" : "Save name"}</button></Modal.Footer>
+</form></Modal>}
+      {purgeDialog && <Modal layout="backdrop" ><div className="documents-modal" role="dialog" aria-modal="true" aria-labelledby="documents-purge-title">
+<Modal.Header as="div" className="documents-modal-heading"><h2 id="documents-purge-title">Delete permanently?</h2><button type="button" aria-label="Close" onClick={() => setPurgeDialog(null)} disabled={busy}><X size={18} /></button></Modal.Header>
+<Modal.Body>
+<p>“{purgeDialog.name}”{purgeDialog.kind === "folder" ? " and everything inside it" : ""} cannot be restored after this.</p>
+{error && <p className="documents-modal-error" role="alert">{error}</p>}
+</Modal.Body>
+<Modal.Footer as="div" className="documents-modal-actions"><button type="button" onClick={() => setPurgeDialog(null)} disabled={busy}>Cancel</button><button className="danger" type="button" onClick={() => void purgeItem()} disabled={busy}>Delete permanently</button></Modal.Footer>
+</div></Modal>}
+      {shareDialog && <Modal layout="backdrop" ><div className="documents-modal documents-share-modal" role="dialog" aria-modal="true" aria-labelledby="documents-share-title">
+<Modal.Header as="div" className="documents-modal-heading"><h2 id="documents-share-title">Share “{shareDialog.name}”</h2><button type="button" aria-label="Close sharing" onClick={() => { setShareDialog(null); setRecipient(null); setPeopleQuery(""); setError(""); }} disabled={busy}><X size={18} /></button></Modal.Header>
+<Modal.Body>
+{error && <p className="documents-modal-error" role="alert">{error}</p>}
+<div id="documents-internal-share-panel" role="tabpanel" aria-labelledby="documents-internal-share-tab" hidden={shareTab !== "internal"}>
         <form onSubmit={(event) => void saveShare(event)}>
           <label htmlFor="documents-person-search">Add a person</label>
           <input id="documents-person-search" autoComplete="off" value={peopleQuery} onChange={(event) => { setPeopleQuery(event.target.value); setRecipient(null); }} placeholder="Search name or username" />
@@ -768,7 +769,7 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, onOpenConversat
         </form>
         <div className="documents-share-list"><strong>People with access</strong>{shares.length === 0 ? <p>Only you have access.</p> : shares.map((share) => <div className="documents-share-person" key={share.id}><span>{share.displayName}<small>@{share.username} · {share.permission}</small></span><button type="button" onClick={() => void removeShare(share.id)} disabled={busy} aria-label={`Remove ${share.displayName}`}>Remove</button></div>)}</div>
         </div>
-        <div id="documents-public-share-panel" className="documents-public-sharing" role="tabpanel" aria-labelledby="documents-public-share-tab" hidden={shareTab !== "public"}>
+<div id="documents-public-share-panel" className="documents-public-sharing" role="tabpanel" aria-labelledby="documents-public-share-tab" hidden={shareTab !== "public"}>
           <strong><Link2 size={15} /> Anyone with the link</strong>
           <p>People with this link can view and download {shareDialog.kind === "folder" ? "this folder and its contents" : "this file"} without signing in.</p>
           <label htmlFor="documents-public-expiry">Expiry date (optional)</label>
@@ -782,18 +783,32 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, onOpenConversat
             <div className="documents-public-actions"><button type="button" onClick={() => void copyPublicLink()} disabled={publicLinkExpired}><Copy size={14} /> Copy link</button><button type="button" onClick={() => void setPublicAccess(true)} disabled={busy || expiryDate === expiryDateValue(publicLink.expiresAt)}>Save expiry</button><button type="button" disabled={busy} onClick={() => void setPublicAccess(false)}>Remove link</button></div>
           </> : <div className="documents-public-actions"><button type="button" disabled={busy} onClick={() => void setPublicAccess(true)}><Link2 size={14} /> Create public link</button></div>}
         </div>
-      </div></div>}
-      {conflict && <div className="documents-modal-backdrop"><div className="documents-modal" role="dialog" aria-modal="true" aria-labelledby="documents-conflict-title">
-        <div className="documents-modal-heading"><h2 id="documents-conflict-title">File already exists</h2></div>
-        <p>“{conflict.file.name}” is already in this folder. What would you like to do?</p>
-        {error && <p className="documents-modal-error" role="alert">{error}</p>}
-        <div className="documents-conflict-actions"><button type="button" disabled={busy} onClick={() => void resolveConflict("replace")}>Replace existing</button><button type="button" disabled={busy} onClick={() => void resolveConflict("keepBoth")}>Keep both</button><button type="button" disabled={busy} onClick={() => void resolveConflict("skip")}>Skip this file</button></div>
-      </div></div>}
-      {propertiesTarget && <div className="documents-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setPropertiesTarget(null); }}><div className="documents-modal documents-properties" role="dialog" aria-modal="true" aria-labelledby="documents-properties-title">
-        <div className="documents-modal-heading"><h2 id="documents-properties-title">Properties</h2><button type="button" aria-label="Close properties" onClick={() => setPropertiesTarget(null)}><X size={18} /></button></div>
-        {propertiesLoading && <p className="documents-state"><LoaderCircle className="spin" size={16} /> Loading properties…</p>}
-        {propertiesError && <p className="documents-modal-error" role="alert">{propertiesError}</p>}
-        {properties && <>
+</Modal.Body>
+<Modal.Footer><div className="documents-share-tabs" role="tablist" aria-label="Share type" onKeyDown={(event) => {
+          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+          event.preventDefault();
+          const next = shareTab === "internal" ? "public" : "internal";
+          setShareTab(next);
+          document.getElementById(`documents-${next}-share-tab`)?.focus();
+        }}>
+          <button id="documents-internal-share-tab" type="button" role="tab" aria-controls="documents-internal-share-panel" aria-selected={shareTab === "internal"} tabIndex={shareTab === "internal" ? 0 : -1} onClick={() => setShareTab("internal")}><Users size={15} aria-hidden="true" /> Internal share</button>
+          <button id="documents-public-share-tab" type="button" role="tab" aria-controls="documents-public-share-panel" aria-selected={shareTab === "public"} tabIndex={shareTab === "public" ? 0 : -1} onClick={() => setShareTab("public")}><Globe2 size={15} aria-hidden="true" /> Public share</button>
+        </div></Modal.Footer>
+</div></Modal>}
+      {conflict && <Modal layout="backdrop" ><div className="documents-modal" role="dialog" aria-modal="true" aria-labelledby="documents-conflict-title">
+<Modal.Header as="div" className="documents-modal-heading"><h2 id="documents-conflict-title">File already exists</h2></Modal.Header>
+<Modal.Body>
+<p>“{conflict.file.name}” is already in this folder. What would you like to do?</p>
+{error && <p className="documents-modal-error" role="alert">{error}</p>}
+</Modal.Body>
+<Modal.Footer as="div" className="documents-conflict-actions"><button type="button" disabled={busy} onClick={() => void resolveConflict("replace")}>Replace existing</button><button type="button" disabled={busy} onClick={() => void resolveConflict("keepBoth")}>Keep both</button><button type="button" disabled={busy} onClick={() => void resolveConflict("skip")}>Skip this file</button></Modal.Footer>
+</div></Modal>}
+      {propertiesTarget && <Modal layout="backdrop"  onMouseDown={(event) => { if (event.target === event.currentTarget) setPropertiesTarget(null); }}><div className="documents-modal documents-properties" role="dialog" aria-modal="true" aria-labelledby="documents-properties-title">
+<Modal.Header as="div" className="documents-modal-heading"><h2 id="documents-properties-title">Properties</h2><button type="button" aria-label="Close properties" onClick={() => setPropertiesTarget(null)}><X size={18} /></button></Modal.Header>
+<Modal.Body>
+{propertiesLoading && <p className="documents-state"><LoaderCircle className="spin" size={16} /> Loading properties…</p>}
+{propertiesError && <p className="documents-modal-error" role="alert">{propertiesError}</p>}
+{properties && <>
           <div className="documents-properties-item"><span className={`documents-item-icon ${properties.kind}`}>{properties.kind === "folder" ? <Folder size={22} /> : <FileText size={22} />}</span><div><strong>{properties.name}</strong><small>{properties.kind === "folder" ? "Folder" : properties.contentType || "File"}</small></div></div>
           <dl className="documents-properties-list">
             <div><dt>Location</dt><dd>{properties.location}</dd></div>
@@ -806,19 +821,24 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, onOpenConversat
             {properties.deletedAt && <div><dt>Moved to Trash</dt><dd>{formatDateTime(properties.deletedAt)}</dd></div>}
           </dl>
         </>}
-      </div></div>}
-      {versionFile && <div className="documents-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setVersionFile(null); }}><div className="documents-modal documents-versions" role="dialog" aria-modal="true" aria-labelledby="documents-versions-title">
-        <div className="documents-modal-heading"><h2 id="documents-versions-title">Version history</h2><button type="button" aria-label="Close version history" onClick={() => setVersionFile(null)} disabled={busy}><X size={18} /></button></div>
-        <p className="documents-versions-name">{versionFile.name}</p>
-        <p className="documents-versions-note">Older versions use storage until deleted. Restoring creates a new current version and keeps the selected version in history.</p>
-        {versionsLoading && <p className="documents-state"><LoaderCircle className="spin" size={16} /> Loading versions…</p>}
-        {error && <p className="documents-modal-error" role="alert">{error}</p>}
-        {!versionsLoading && <div className="documents-versions-list">{versions.map((item) => <div className="documents-version" key={item.id ?? "current"}>
+</Modal.Body>
+
+</div></Modal>}
+      {versionFile && <Modal layout="backdrop"  onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setVersionFile(null); }}><div className="documents-modal documents-versions" role="dialog" aria-modal="true" aria-labelledby="documents-versions-title">
+<Modal.Header as="div" className="documents-modal-heading"><h2 id="documents-versions-title">Version history</h2><button type="button" aria-label="Close version history" onClick={() => setVersionFile(null)} disabled={busy}><X size={18} /></button></Modal.Header>
+<Modal.Body>
+<p className="documents-versions-name">{versionFile.name}</p>
+<p className="documents-versions-note">Older versions use storage until deleted. Restoring creates a new current version and keeps the selected version in history.</p>
+{versionsLoading && <p className="documents-state"><LoaderCircle className="spin" size={16} /> Loading versions…</p>}
+{error && <p className="documents-modal-error" role="alert">{error}</p>}
+{!versionsLoading && <div className="documents-versions-list">{versions.map((item) => <div className="documents-version" key={item.id ?? "current"}>
           <div className="documents-version-info"><strong>Version {item.number} {item.isCurrent && <span>Current</span>}</strong><small>{formatDateTime(item.createdAt)} · {formatSize(item.sizeBytes)}</small></div>
           <div className="documents-version-actions"><button type="button" onClick={() => void downloadVersion(item)} disabled={busy} title={`Download version ${item.number}`}><Download size={15} /> Download</button>{!item.isCurrent && versionFile.permission !== "viewer" && <><button type="button" onClick={() => void restoreVersion(item)} disabled={busy} title={`Restore version ${item.number}`}><RotateCcw size={15} /> Restore</button><button type="button" className="danger" onClick={() => setVersionToDelete(item)} disabled={busy} title={`Delete version ${item.number}`}><Trash2 size={15} /> Delete</button></>}</div>
         </div>)}</div>}
-        {versionToDelete && <div className="documents-version-confirm"><p>Delete version {versionToDelete.number} permanently? This frees {formatSize(versionToDelete.sizeBytes)} and cannot be undone.</p><div><button type="button" onClick={() => setVersionToDelete(null)} disabled={busy}>Cancel</button><button type="button" className="danger" onClick={() => void deleteVersion()} disabled={busy}>Delete version</button></div></div>}
-      </div></div>}
+{versionToDelete && <div className="documents-version-confirm"><p>Delete version {versionToDelete.number} permanently? This frees {formatSize(versionToDelete.sizeBytes)} and cannot be undone.</p><div><button type="button" onClick={() => setVersionToDelete(null)} disabled={busy}>Cancel</button><button type="button" className="danger" onClick={() => void deleteVersion()} disabled={busy}>Delete version</button></div></div>}
+</Modal.Body>
+
+</div></Modal>}
       {signingFile && !hidden && <Suspense fallback={null}><SignatureRequests id={signingFile.id} name={signingFile.name} readOnly={false} onClose={() => { setSigningFile(null); refresh(); }} /></Suspense>}
       {preview && !hidden && preview.contentType === "application/pdf" && <Suspense fallback={<p role="status">Loading preview?</p>}>
         <PdfViewer key={preview.id} name={preview.name} sourceKey={preview.id + preview.updatedAt} load={loadPreview} onClose={() => setPreview(null)} footer={previewFooter} />
@@ -828,16 +848,19 @@ export function DocumentsView({ apiUrl, currentUsername, onBack, onOpenConversat
           ? <ImageViewer key={preview.id} name={preview.name} sourceKey={preview.id + preview.updatedAt} load={loadPreview} onClose={() => setPreview(null)} footer={previewFooter} />
           : <OfficeViewer key={preview.id} name={preview.name} sourceKey={preview.id + preview.updatedAt} load={loadPreview} onClose={() => setPreview(null)} footer={previewFooter} />}
       </Suspense>}
-      {preview && !hidden && preview.contentType !== "application/pdf" && !preview.contentType.startsWith("image/") && !/\.(docx|xlsx|pptx)$/i.test(preview.name) && <div className="documents-modal-backdrop" onMouseDown={(event) => {
+      {preview && !hidden && preview.contentType !== "application/pdf" && !preview.contentType.startsWith("image/") && !/\.(docx|xlsx|pptx)$/i.test(preview.name) && <Modal layout="backdrop"  onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           setPreview(null);
         }
       }}><div className="documents-modal documents-preview" role="dialog" aria-modal="true" aria-labelledby="documents-preview-title">
-        <div className="documents-modal-heading"><h2 id="documents-preview-title">{preview.name}</h2><button type="button" aria-label="Close preview" onClick={() => setPreview(null)}><X size={18} /></button></div>
-        <div className="documents-preview-fallback"><FileText size={40} /><p>Preview is not available for this file type.</p></div>
-        {error && <p className="documents-modal-error" role="alert">{error}</p>}
-        {previewFooter}
-      </div></div>}
+<Modal.Header as="div" className="documents-modal-heading"><h2 id="documents-preview-title">{preview.name}</h2><button type="button" aria-label="Close preview" onClick={() => setPreview(null)}><X size={18} /></button></Modal.Header>
+<Modal.Body>
+<div className="documents-preview-fallback"><FileText size={40} /><p>Preview is not available for this file type.</p></div>
+{error && <p className="documents-modal-error" role="alert">{error}</p>}
+{previewFooter}
+</Modal.Body>
+
+</div></Modal>}
     </section>
   );
 }

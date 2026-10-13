@@ -2983,23 +2983,8 @@
   background: #f9e9e4;
 }
 
-.location-preview-backdrop {
-  position: fixed;
-  z-index: 45;
-  inset: 0;
-  padding: 24px;
-  display: grid;
-  place-items: center;
-  background: rgba(12, 27, 30, 0.58);
-  backdrop-filter: blur(4px);
-}
-
 .location-preview-card {
   width: min(520px, 100%);
-  padding: 24px;
-  border-radius: 20px;
-  background: var(--paper);
-  box-shadow: 0 30px 80px rgba(7, 17, 19, 0.3);
 }
 
 .location-preview-heading {
@@ -3130,23 +3115,8 @@
   opacity: 0.45;
 }
 
-.attachment-camera-backdrop {
-  position: fixed;
-  z-index: 40;
-  inset: 0;
-  padding: 24px;
-  display: grid;
-  place-items: center;
-  background: rgba(12, 27, 30, 0.58);
-  backdrop-filter: blur(4px);
-}
-
 .attachment-camera-card {
   width: min(520px, 100%);
-  padding: 26px;
-  border-radius: 20px;
-  background: var(--paper);
-  box-shadow: 0 30px 80px rgba(7, 17, 19, 0.3);
 }
 
 .attachment-camera-heading {
@@ -3834,25 +3804,9 @@
   display: none;
 }
 
-.modal-backdrop {
-  position: fixed;
-  z-index: 20;
-  inset: 0;
-  padding: 24px;
-  display: grid;
-  place-items: center;
-  background: rgba(12, 27, 30, 0.58);
-  backdrop-filter: blur(4px);
-}
-
 .modal-card {
   width: min(420px, 100%);
   max-height: min(680px, calc(100vh - 48px));
-  padding: 30px;
-  border-radius: 20px;
-  background: var(--paper);
-  box-shadow: 0 30px 80px rgba(7, 17, 19, 0.3);
-  overflow-y: auto;
 }
 
 .modal-header {
@@ -4621,14 +4575,6 @@ input.visually-hidden {
   .poll-button,
   .send-button {
     bottom: 10px;
-  }
-
-  .location-preview-backdrop {
-    padding: 14px;
-  }
-
-  .location-preview-card {
-    padding: 18px;
   }
 
   .location-preview-map {

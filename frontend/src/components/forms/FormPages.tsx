@@ -1,3 +1,4 @@
+import { Modal } from '../Modal';
 import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Copy, Plus, Settings2, Trash2 } from 'lucide-react';
 import { definitionIssues, duplicateFormPage, flatten, isQuestion, type FormDefinition, type FormPage } from './formModel';
@@ -18,13 +19,7 @@ export function FormPages({ pages, activeId, definition, onSelect, onChange }: {
   useEffect(() => {
     tabs.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [activeId]);
-  useEffect(() => {
-    const element = dialog.current;
-    if (deleting) {
-      element?.showModal();
-    }
-    return () => element?.close();
-  }, [deleting]);
+
   function reorder(offset: number) {
     const next = [...pages];
     [next[index], next[index + offset]] = [next[index + offset], next[index]];
@@ -76,10 +71,12 @@ export function FormPages({ pages, activeId, definition, onSelect, onChange }: {
         <button type="button" className="forms-danger" disabled={pages.length <= 1} onClick={() => setDeleting(active)}><Trash2 size={16} />Delete page</button>
       </div>
     </div>}
-    <dialog ref={dialog} className="forms-page-delete" aria-labelledby="forms-page-delete-title" onCancel={() => setDeleting(null)}>
-      <h2 id="forms-page-delete-title">Delete page?</h2>
-      <p>Delete “{deleting?.title || 'Page'}” and all its blocks? You can undo this change.</p>
-      <div className="forms-page-actions">
+    <Modal open={!!deleting} ref={dialog} className="forms-page-delete" aria-labelledby="forms-page-delete-title" onCancel={() => setDeleting(null)}>
+<Modal.Header><h2 id="forms-page-delete-title">Delete page?</h2></Modal.Header>
+<Modal.Body>
+<p>Delete “{deleting?.title || 'Page'}” and all its blocks? You can undo this change.</p>
+</Modal.Body>
+<Modal.Footer as="div" className="forms-page-actions">
         <button type="button" autoFocus onClick={() => setDeleting(null)}>Cancel</button>
         <button type="button" className="forms-danger" onClick={() => {
           const position = pages.findIndex(page => page.id === deleting?.id);
@@ -91,7 +88,7 @@ export function FormPages({ pages, activeId, definition, onSelect, onChange }: {
           onChange(next, next[Math.min(position, next.length - 1)].id);
           setDeleting(null);
         }}>Delete page</button>
-      </div>
-    </dialog>
+      </Modal.Footer>
+</Modal>
   </div>;
 }

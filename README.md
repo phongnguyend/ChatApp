@@ -1532,3 +1532,5 @@ dotnet test backend/ChatApp.Tests/ChatApp.Tests.csproj
 cd e2e
 npx playwright test tests/forms.spec.ts
 ```
+
+Frontend dialogs use the shared `Modal.Header`, `Modal.Body`, and `Modal.Footer` sections and styling in `frontend/src/components/Modal.tsx` and `Modal.css`. Simple confirmation/input dialogs use the asynchronous helpers in `frontend/src/services/dialogs.ts`, hosted by `AppDialogs`. Run `npm run test:modals` in `frontend` to catch browser popups, raw dialogs, duplicated modal lifecycle code, or missing shared sections. Browser tab-close/reload confirmation prompts are disabled; in-app discard confirmations use application dialogs.

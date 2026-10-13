@@ -1,3 +1,4 @@
+import { Modal } from './Modal';
 import { LoaderCircle, MapPin, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
@@ -116,14 +117,14 @@ export function LocationShareButton({
       </button>
 
       {location && (
-        <div className="location-preview-backdrop" role="presentation">
+        <Modal layout="backdrop"  role="presentation">
           <section
             className="location-preview-card"
             role="dialog"
             aria-modal="true"
             aria-labelledby="location-preview-title"
           >
-            <div className="location-preview-heading">
+<Modal.Header as="div" className="location-preview-heading">
               <div>
                 <p className="eyebrow">Current location</p>
                 <h2 id="location-preview-title">Share this location?</h2>
@@ -136,20 +137,20 @@ export function LocationShareButton({
               >
                 <X size={17} />
               </button>
-            </div>
-
-            <iframe
+            </Modal.Header>
+<Modal.Body>
+<iframe
               className="location-preview-map"
               src={locationPreviewUrl(location)}
               title="Current location preview"
               loading="eager"
             />
-            <p className="location-preview-coordinates">
+<p className="location-preview-coordinates">
               <MapPin size={15} />
               {location.latitude.toFixed(5)}, {location.longitude.toFixed(5)}
             </p>
-
-            <div className="location-preview-actions">
+</Modal.Body>
+<Modal.Footer as="div" className="location-preview-actions">
               <button
                 className="secondary-button"
                 type="button"
@@ -176,9 +177,9 @@ export function LocationShareButton({
                   </>
                 )}
               </button>
-            </div>
-          </section>
-        </div>
+            </Modal.Footer>
+</section>
+        </Modal>
       )}
     </>
   )

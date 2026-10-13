@@ -1,3 +1,4 @@
+import { promptDialog } from '../../services/dialogs';
 import { useEffect, useRef, useState } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -38,11 +39,11 @@ export function FormHtmlEditor({ value, onChange }: { value: string; onChange: (
       editor.commands.setContent(sanitizeFormHtml(value), { emitUpdate: false });
     }
   }, [editor, value]);
-  function url(kind: 'link' | 'image') {
+  async function url(kind: 'link' | 'image') {
     if (!editor) {
       return;
     }
-    const entered = window.prompt(kind === 'link' ? 'Link URL (https://...)' : 'Image URL (https://...)', kind === 'link' ? String(editor.getAttributes('link').href ?? '') : '');
+    const entered = await promptDialog(kind === 'link' ? 'Link URL (https://...)' : 'Image URL (https://...)', kind === 'link' ? String(editor.getAttributes('link').href ?? '') : '');
     if (entered === null) {
       return;
     }
@@ -54,7 +55,7 @@ export function FormHtmlEditor({ value, onChange }: { value: string; onChange: (
     if (kind === 'link') {
       editor.chain().focus().extendMarkRange('link').setLink({ href: entered.trim() }).run();
     } else {
-      const alt = window.prompt('Image description (alternative text)', '');
+      const alt = await promptDialog('Image description (alternative text)', '');
       if (alt !== null) {
         editor.chain().focus().setImage({ src: entered.trim(), alt }).run();
       }

@@ -1,3 +1,4 @@
+import { Modal } from '../components/Modal';
 import { authFetch as fetch } from "../services/auth";
 import { ArrowLeft, FileText, LoaderCircle, NotebookPen, Pencil, Pin, PinOff, Plus, Search, Share2, Trash2, Users, X } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
@@ -278,37 +279,57 @@ export function NotesView({ apiUrl, currentUsername, onBack, openTarget, hidden 
           <div className="notes-card-actions">{note.permission === "owner" && <button type="button" disabled={busy} onClick={() => void togglePin(note)}>{note.isPinned ? <PinOff size={15} /> : <Pin size={15} />}{note.isPinned ? "Unpin" : "Pin"}</button>}{note.permission !== "viewer" && <button type="button" disabled={busy} onClick={() => beginEdit(note)}><Pencil size={15} /> Edit</button>}{note.permission === "owner" && <><button type="button" disabled={busy} onClick={() => openShare(note)}><Share2 size={15} /> Share</button><button type="button" disabled={busy} onClick={() => { setDialogError(""); setDeleteTarget(note); }}><Trash2 size={15} /> Delete</button></>}</div>
         </article>)}
     </div>
-    {viewing && !draft && !deleteTarget && <div className="notes-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setViewing(null); }}>
+    {viewing && !draft && !deleteTarget && <Modal layout="backdrop"  onMouseDown={(event) => { if (event.target === event.currentTarget) setViewing(null); }}>
       <div className="notes-dialog notes-detail" role="dialog" aria-modal="true" aria-labelledby="notes-detail-title">
-        <header><div><p className="eyebrow">Note</p><h2 id="notes-detail-title">{viewing.title}</h2></div><button type="button" aria-label="Close note" onClick={() => setViewing(null)}><X size={19} /></button></header>
-        {viewing.permission !== "owner" && <p className="notes-card-access">Shared by {viewing.ownerDisplayName} · {viewing.permission === "editor" ? "Can edit" : "Can view"}</p>}
-        <div className="notes-detail-meta"><span>Created <time dateTime={viewing.createdAt}>{formatDateTime(viewing.createdAt)}</time></span><span>Updated <time dateTime={viewing.updatedAt}>{formatDateTime(viewing.updatedAt)}</time></span></div>
-        <div className="notes-detail-content">{viewing.content || <span className="notes-placeholder">No content</span>}</div>
-        {dialogError && <p className="notes-error" role="alert">{dialogError}</p>}
-        <footer>
+<Modal.Header as="header"><div><p className="eyebrow">Note</p><h2 id="notes-detail-title">{viewing.title}</h2></div><button type="button" aria-label="Close note" onClick={() => setViewing(null)}><X size={19} /></button></Modal.Header>
+<Modal.Body>
+{viewing.permission !== "owner" && <p className="notes-card-access">Shared by {viewing.ownerDisplayName} · {viewing.permission === "editor" ? "Can edit" : "Can view"}</p>}
+<div className="notes-detail-meta"><span>Created <time dateTime={viewing.createdAt}>{formatDateTime(viewing.createdAt)}</time></span><span>Updated <time dateTime={viewing.updatedAt}>{formatDateTime(viewing.updatedAt)}</time></span></div>
+<div className="notes-detail-content">{viewing.content || <span className="notes-placeholder">No content</span>}</div>
+{dialogError && <p className="notes-error" role="alert">{dialogError}</p>}
+</Modal.Body>
+<Modal.Footer as="footer">
           {viewing.permission === "owner" && <button type="button" disabled={busy} onClick={() => void togglePin(viewing)}>{viewing.isPinned ? <PinOff size={15} /> : <Pin size={15} />}{viewing.isPinned ? "Unpin" : "Pin"}</button>}
           {viewing.permission !== "viewer" && <button type="button" onClick={() => beginEdit(viewing)}><Pencil size={15} /> Edit</button>}
           {viewing.permission === "owner" && <><button type="button" onClick={() => openShare(viewing)}><Share2 size={15} /> Share</button><button type="button" onClick={() => { setDialogError(""); setDeleteTarget(viewing); }}><Trash2 size={15} /> Delete</button></>}
           <button type="button" onClick={() => setViewing(null)}>Close</button>
-        </footer>
-      </div>
-    </div>}
-    {sharing && <div className="notes-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !shareSaving) setSharing(null); }}>
+        </Modal.Footer>
+</div>
+    </Modal>}
+    {sharing && <Modal layout="backdrop"  onMouseDown={(event) => { if (event.target === event.currentTarget && !shareSaving) setSharing(null); }}>
       <div className="notes-dialog notes-share" role="dialog" aria-modal="true" aria-labelledby="notes-share-title">
-        <header><h2 id="notes-share-title">Share “{sharing.title}”</h2><button type="button" aria-label="Close sharing" disabled={shareSaving} onClick={() => setSharing(null)}><X size={19} /></button></header>
-        <label>Add a person<input value={peopleQuery} onChange={(event) => { setPeopleQuery(event.target.value); setRecipient(null); setShareError(""); }} placeholder="Search name or username" autoComplete="off" /></label>
-        {!recipient && peopleQuery.trim() && peopleResults.length > 0 && <div className="notes-people-results" role="listbox" aria-label="People">
+<Modal.Header as="header"><h2 id="notes-share-title">Share “{sharing.title}”</h2><button type="button" aria-label="Close sharing" disabled={shareSaving} onClick={() => setSharing(null)}><X size={19} /></button></Modal.Header>
+<Modal.Body>
+<label>Add a person<input value={peopleQuery} onChange={(event) => { setPeopleQuery(event.target.value); setRecipient(null); setShareError(""); }} placeholder="Search name or username" autoComplete="off" /></label>
+{!recipient && peopleQuery.trim() && peopleResults.length > 0 && <div className="notes-people-results" role="listbox" aria-label="People">
           {peopleResults.map((person) => <button type="button" role="option" aria-selected={false} key={person.id} onClick={() => { setRecipient(person); setPeopleQuery(`${person.displayName} (@${person.username})`); setPeopleResults([]); }}>{person.displayName} <small>@{person.username}</small></button>)}
         </div>}
-        <div className="notes-share-add"><label>Permission<select value={newPermission} onChange={(event) => setNewPermission(event.target.value as "viewer" | "editor")}><option value="viewer">Viewer — can view</option><option value="editor">Editor — can view and edit</option></select></label><button className="notes-primary" type="button" disabled={!recipient || shareLoading || shareSaving} onClick={() => { if (recipient) void putShare(recipient.username, newPermission); }}>{shareSaving ? "Saving..." : "Share"}</button></div>
-        <div className="notes-share-list"><strong>People with access</strong>
+<div className="notes-share-add"><label>Permission<select value={newPermission} onChange={(event) => setNewPermission(event.target.value as "viewer" | "editor")}><option value="viewer">Viewer — can view</option><option value="editor">Editor — can view and edit</option></select></label><button className="notes-primary" type="button" disabled={!recipient || shareLoading || shareSaving} onClick={() => { if (recipient) void putShare(recipient.username, newPermission); }}>{shareSaving ? "Saving..." : "Share"}</button></div>
+<div className="notes-share-list"><strong>People with access</strong>
           {shareLoading ? <p>Loading access...</p> : shares.length === 0 ? <p>Only you have access.</p> : shares.map((share) => <div className="notes-share-person" key={share.id}><span>{share.displayName}<small>@{share.username}</small></span><select aria-label={`Permission for ${share.displayName}`} value={share.permission} disabled={shareSaving} onChange={(event) => void putShare(share.username, event.target.value as "viewer" | "editor")}><option value="viewer">Viewer</option><option value="editor">Editor</option></select><button type="button" disabled={shareSaving} onClick={() => void removeShare(share)}>Remove</button></div>)}
         </div>
-        {shareError && <p className="notes-error" role="alert">{shareError}</p>}
-        <footer><button type="button" disabled={shareSaving} onClick={() => setSharing(null)}>Close</button></footer>
-      </div>
-    </div>}
-    {draft && <div className="notes-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setDraft(null); }}><form className="notes-dialog notes-editor" onSubmit={(event) => void save(event)} aria-label={editing ? "Edit note" : "New note"}><header><h2>{editing ? "Edit note" : "New note"}</h2><button type="button" aria-label="Close" disabled={busy} onClick={() => setDraft(null)}><X size={19} /></button></header><label>Title<input autoFocus required maxLength={200} value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="Note title" /></label><label>Content<textarea rows={12} maxLength={20000} value={draft.content} onChange={(event) => setDraft({ ...draft, content: event.target.value })} placeholder="Write your note..." /></label><small>{draft.content.length.toLocaleString()} / 20,000 characters</small>{dialogError && <p className="notes-error" role="alert">{dialogError}</p>}<footer><button type="button" disabled={busy} onClick={() => setDraft(null)}>Cancel</button><button className="notes-primary" type="submit" disabled={busy}>{busy ? "Saving..." : editing ? "Save changes" : "Create note"}</button></footer></form></div>}
-    {deleteTarget && <div className="notes-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setDeleteTarget(null); }}><div className="notes-dialog notes-confirm" role="alertdialog" aria-modal="true" aria-label="Delete note"><header><h2>Delete note?</h2><button type="button" aria-label="Close" disabled={busy} onClick={() => setDeleteTarget(null)}><X size={19} /></button></header><p>Delete “{deleteTarget.title}”?</p>{dialogError && <p className="notes-error" role="alert">{dialogError}</p>}<footer><button type="button" disabled={busy} onClick={() => setDeleteTarget(null)}>Cancel</button><button className="notes-danger" type="button" disabled={busy} onClick={() => void remove()}>{busy ? "Deleting..." : "Delete"}</button></footer></div></div>}
+{shareError && <p className="notes-error" role="alert">{shareError}</p>}
+</Modal.Body>
+<Modal.Footer as="footer"><button type="button" disabled={shareSaving} onClick={() => setSharing(null)}>Close</button></Modal.Footer>
+</div>
+    </Modal>}
+    {draft && <Modal layout="backdrop"  onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setDraft(null); }}><form className="notes-dialog notes-editor" onSubmit={(event) => void save(event)} aria-label={editing ? "Edit note" : "New note"}>
+<Modal.Header as="header"><h2>{editing ? "Edit note" : "New note"}</h2><button type="button" aria-label="Close" disabled={busy} onClick={() => setDraft(null)}><X size={19} /></button></Modal.Header>
+<Modal.Body>
+<label>Title<input autoFocus required maxLength={200} value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="Note title" /></label>
+<label>Content<textarea rows={12} maxLength={20000} value={draft.content} onChange={(event) => setDraft({ ...draft, content: event.target.value })} placeholder="Write your note..." /></label>
+<small>{draft.content.length.toLocaleString()} / 20,000 characters</small>
+{dialogError && <p className="notes-error" role="alert">{dialogError}</p>}
+</Modal.Body>
+<Modal.Footer as="footer"><button type="button" disabled={busy} onClick={() => setDraft(null)}>Cancel</button><button className="notes-primary" type="submit" disabled={busy}>{busy ? "Saving..." : editing ? "Save changes" : "Create note"}</button></Modal.Footer>
+</form></Modal>}
+    {deleteTarget && <Modal layout="backdrop"  onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setDeleteTarget(null); }}><div className="notes-dialog notes-confirm" role="alertdialog" aria-modal="true" aria-label="Delete note">
+<Modal.Header as="header"><h2>Delete note?</h2><button type="button" aria-label="Close" disabled={busy} onClick={() => setDeleteTarget(null)}><X size={19} /></button></Modal.Header>
+<Modal.Body>
+<p>Delete “{deleteTarget.title}”?</p>
+{dialogError && <p className="notes-error" role="alert">{dialogError}</p>}
+</Modal.Body>
+<Modal.Footer as="footer"><button type="button" disabled={busy} onClick={() => setDeleteTarget(null)}>Cancel</button><button className="notes-danger" type="button" disabled={busy} onClick={() => void remove()}>{busy ? "Deleting..." : "Delete"}</button></Modal.Footer>
+</div></Modal>}
   </section>;
 }

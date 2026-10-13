@@ -58,7 +58,9 @@ export function PdfViewer({ name, sourceKey, load, onClose, onSignatures, footer
       <MaximizeButton maximized={maximized} onToggle={toggleMaximized} />
       <button className="ghost" onClick={onClose}><X size={15} />Close</button>
     </div>}>
-    {error ? <ErrorBanner message={error} /> : !url ? <p role="status">Downloading PDF…</p> : viewer === 'in-app' ? (
+
+<Modal.Body className="modal-body">
+{error ? <ErrorBanner message={error} /> : !url ? <p role="status">Downloading PDF…</p> : viewer === 'in-app' ? (
       <Suspense fallback={<p role="status">Loading in-app viewer…</p>}>
         <PdfJsViewer key={url} url={url} />
       </Suspense>
@@ -67,5 +69,7 @@ export function PdfViewer({ name, sourceKey, load, onClose, onSignatures, footer
         <p>Your browser cannot display this PDF. <a href={url} download={name}>Download the PDF</a> to open it.</p>
       </object>
     )}
-  </Modal>
+</Modal.Body>
+
+</Modal>
 }
