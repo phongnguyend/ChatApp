@@ -1,6 +1,6 @@
 import { Modal } from '../Modal';
 import { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Copy, Plus, Settings2, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, FileText, Plus, Settings2, Trash2, X } from 'lucide-react';
 import { definitionIssues, duplicateFormPage, flatten, isQuestion, type FormDefinition, type FormPage } from './formModel';
 
 export function FormPages({ pages, activeId, definition, onSelect, onChange }: {
@@ -17,7 +17,7 @@ export function FormPages({ pages, activeId, definition, onSelect, onChange }: {
   const index = pages.findIndex(page => page.id === activeId);
   const active = pages[index];
   useEffect(() => {
-    tabs.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    tabs.current?.querySelector('[aria-selected="true"]')?.closest('.forms-page-tab')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [activeId]);
 
   function reorder(offset: number) {
@@ -36,7 +36,8 @@ export function FormPages({ pages, activeId, definition, onSelect, onChange }: {
   return <div className="forms-pages">
     <div className="forms-pages-toolbar">
       <div className="forms-page-tabs" role="tablist" aria-label="Form pages" ref={tabs}>
-        {pages.map((page, position) => <button key={page.id} type="button" role="tab" aria-selected={page.id === activeId}
+        {pages.map((page, position) => <div key={page.id} role="presentation" className={`forms-page-tab${page.id === activeId ? ' is-active' : ''}`}>
+          <button type="button" role="tab" aria-selected={page.id === activeId} title={page.title || `Page ${position + 1}`}
           tabIndex={page.id === activeId ? 0 : -1} onClick={() => onSelect(page.id)}
           onKeyDown={event => {
             if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
@@ -44,12 +45,15 @@ export function FormPages({ pages, activeId, definition, onSelect, onChange }: {
               event.stopPropagation();
               const next = event.key === 'Home' ? 0 : event.key === 'End' ? pages.length - 1 : (position + (event.key === 'ArrowLeft' ? -1 : 1) + pages.length) % pages.length;
               onSelect(pages[next].id);
-              (event.currentTarget.parentElement?.children[next] as HTMLButtonElement)?.focus();
+              tabs.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
             }
           }}>
-          {page.title || `Page ${position + 1}`} <small title="Question count">({flatten(page.nodes).filter(isQuestion).length})</small>
+          <FileText size={15} aria-hidden="true" />
+          <span className="forms-page-tab-title">{page.title || `Page ${position + 1}`}</span> <small title="Question count">({flatten(page.nodes).filter(isQuestion).length})</small>
           {issues[position] > 0 && <span className="forms-danger" title="Review this page's validation errors" aria-label={`${issues[position]} validation errors`}>!</span>}
-        </button>)}
+          </button>
+          <button className="forms-page-tab-close" type="button" aria-label={`Delete page: ${page.title || `Page ${position + 1}`}`} title="Delete page" disabled={pages.length <= 1} onClick={() => setDeleting(page)}><X size={14} aria-hidden="true" /></button>
+        </div>)}
       </div>
       <button type="button" aria-label="Add page" title="Add page" onClick={() => {
         const page: FormPage = { id: crypto.randomUUID(), title: `Page ${pages.length + 1}`, description: '', nodes: [] };
@@ -85,8 +89,11 @@ export function FormPages({ pages, activeId, definition, onSelect, onChange }: {
             return;
           }
           const next = pages.filter(page => page.id !== deleting?.id);
-          onChange(next, next[Math.min(position, next.length - 1)].id);
+          onChange(next, activeId === deleting?.id ? next[Math.min(position, next.length - 1)].id : activeId);
           setDeleting(null);
+          requestAnimationFrame(() => {
+            tabs.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus();
+          });
         }}>Delete page</button>
       </Modal.Footer>
 </Modal>

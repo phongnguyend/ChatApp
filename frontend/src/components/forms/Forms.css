@@ -268,12 +268,24 @@ html[data-theme='dark'] .form-code-block pre { --code-keyword: #d8b4fe; --code-s
 .forms-page-workspace { display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0; gap: 10px; }
 .forms-page-workspace > .forms-canvas { flex: 1; }
 .forms-pages { flex-shrink: 0; min-width: 0; background: var(--paper, white); border: 1px solid var(--line, #d6dfdc); border-radius: 8px; }
-.forms-pages-toolbar { display: flex; gap: 6px; padding: 6px; align-items: center; }
-.forms-pages-toolbar > button { flex-shrink: 0; padding: 7px; }
-.forms-page-tabs { display: flex; flex: 1; min-width: 0; gap: 4px; overflow-x: auto; }
-.forms-page-tabs button { flex-shrink: 0; max-width: 230px; overflow-wrap: anywhere; padding: 7px 10px; border-color: transparent; }
-.forms-page-tabs button[aria-selected=true] { border-color: var(--forms-accent); color: var(--forms-accent); background: color-mix(in srgb, var(--forms-accent) 10%, var(--paper, white)); font-weight: 650; }
-.forms-page-tabs small { white-space: nowrap; }
+.forms-pages-toolbar { display: flex; gap: 4px; padding: 0 8px; align-items: center; background: color-mix(in srgb, #8ab4f8 38%, var(--paper, white)); border-radius: 7px 7px 0 0; }
+.forms-pages-toolbar > button { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 6px; border: 0; background: transparent; }
+.forms-pages-toolbar > button:last-child { margin-inline-start: auto; }
+.forms-pages-toolbar > button:hover { background: color-mix(in srgb, var(--ink) 9%, transparent); }
+.forms-page-tabs { display: flex; flex: 0 1 auto; min-width: 0; gap: 8px; overflow-x: auto; padding: 7px 8px 0; scrollbar-width: thin; }
+.forms-page-tab { position: relative; display: flex; align-items: center; flex: 0 1 210px; width: 210px; max-width: 55vw; min-width: 110px; height: 36px; border-radius: 12px 12px 0 0; }
+.forms-page-tab:not(.is-active):hover { background: color-mix(in srgb, var(--paper, white) 45%, transparent); }
+.forms-page-tab.is-active { background: var(--paper, white); }
+.forms-page-tab.is-active::before, .forms-page-tab.is-active::after { content: ''; position: absolute; bottom: 0; width: 8px; height: 8px; pointer-events: none; }
+.forms-page-tab.is-active::before { left: -8px; border-radius: 0 0 8px 0; box-shadow: 3px 3px 0 3px var(--paper, white); }
+.forms-page-tab.is-active::after { right: -8px; border-radius: 0 0 0 8px; box-shadow: -3px 3px 0 3px var(--paper, white); }
+.forms-page-tabs [role=tab] { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; height: 100%; padding: 0 8px 0 10px; border: 0; border-radius: 12px 0 0 0; background: transparent; color: var(--ink); text-align: left; font-size: 12px; }
+.forms-page-tab-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.forms-page-tabs small { flex-shrink: 0; white-space: nowrap; color: var(--muted); }
+.forms-page-tabs svg { flex-shrink: 0; }
+.forms-page-tabs .forms-page-tab-close { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 24px; width: 24px; height: 24px; padding: 4px; margin-right: 6px; border: 0; border-radius: 50%; background: transparent; color: var(--ink); }
+.forms-page-tabs .forms-page-tab-close:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 12%, transparent); }
+.forms-page-tabs button:focus-visible { outline: 2px solid var(--forms-accent); outline-offset: -2px; }
 .forms-page-settings { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 10px; border-top: 1px solid var(--line, #d6dfdc); max-height: 240px; overflow-y: auto; }
 .forms-page-actions { display: flex; flex-wrap: wrap; gap: 6px; grid-column: 1 / -1; }
 .forms-page-delete { width: min(460px, calc(100vw - 32px)); }

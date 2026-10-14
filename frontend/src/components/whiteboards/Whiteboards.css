@@ -42,11 +42,21 @@
 .whiteboard-error { padding: 10px 16px; background: #fff1f2; color: #9f1239; }
 .whiteboard-error button { margin-left: 10px; }
 .whiteboard-workspace footer { padding: 6px 12px; border-top: 1px solid #dbe3e9; }
-.whiteboard-sheets { display: flex; align-items: center; gap: 4px; padding: 5px 10px; background: #f1f5f9; border-top: 1px solid #dbe3e9; flex-wrap: wrap; }
-.whiteboard-sheet-tabs { display: flex; flex: 1; min-width: 120px; overflow-x: auto; gap: 2px; }
-.whiteboard-sheet-tabs button { flex-shrink: 0; border-radius: 4px 4px 0 0; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
-.whiteboard-sheet-tabs [aria-selected=true] { border-bottom: 3px solid #0f766e; color: #0f766e; font-weight: 600; background: white; }
-.whiteboard-sheet-rename { display: flex; align-items: center; gap: 5px; flex-basis: 100%; }
+.whiteboard-sheets { flex-shrink: 0; min-width: 0; padding: 5px 10px; background: #f1f5f9; border-top: 1px solid #dbe3e9; }
+.whiteboard-sheets-toolbar { display: flex; align-items: center; gap: 4px; }
+.whiteboard-sheets-toolbar > button { flex-shrink: 0; }
+.whiteboard-sheet-tools { display: flex; gap: 4px; flex-shrink: 0; margin-inline-start: auto; }
+.whiteboard-sheet-tabs { display: flex; flex: 0 1 auto; min-width: 0; overflow-x: auto; gap: 2px; scrollbar-width: thin; }
+.whiteboard-sheet-tab { display: flex; align-items: center; flex-shrink: 0; max-width: 200px; border: 1px solid #dbe3e9; border-bottom: 3px solid transparent; border-radius: 4px 4px 0 0; background: white; }
+.whiteboard-sheet-tab.is-active { border-bottom-color: #0f766e; color: #0f766e; font-weight: 600; }
+.whiteboard-sheet-tabs [role=tab] { flex: 1; min-width: 0; padding: 7px 8px 7px 10px; border: 0; border-radius: 3px 0 0 0; background: transparent; font-weight: inherit; }
+.whiteboard-sheet-tabs [role=tab]:hover { background: #eff6ff; }
+.whiteboard-sheet-tab-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.whiteboard-sheet-tabs svg { flex-shrink: 0; }
+.whiteboard-sheet-tabs .whiteboard-sheet-tab-close { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 24px; width: 24px; height: 24px; padding: 4px; margin-right: 3px; border: 0; border-radius: 4px; background: transparent; color: inherit; }
+.whiteboard-sheet-tabs .whiteboard-sheet-tab-close:hover:not(:disabled) { background: #e2e8f0; }
+.whiteboard-sheet-tabs button:focus-visible { outline: 2px solid #0284c7; outline-offset: -2px; }
+.whiteboard-sheet-rename { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
 .whiteboard-sheet-rename input { padding: 6px; min-width: 0; }
 .whiteboard-confirm-dialog { width: min(420px, calc(100vw - 48px)); }
 .whiteboard-confirm-dialog h2 { margin: 0 0 12px; }
