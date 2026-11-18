@@ -1,3 +1,4 @@
+import { PublicEventView } from "./pages/PublicEventView";
 import { useToastMessage } from './components/useToastMessage';
 import { toast } from './services/toasts';
 import { Modal } from './components/Modal';
@@ -7703,6 +7704,10 @@ function App() {
   );
 
   const publicToken = new URLSearchParams(window.location.search).get("publicDocument");
+  const publicEventToken = new URLSearchParams(window.location.search).get("event");
+  if (publicEventToken) {
+    return <PublicEventView token={publicEventToken} />;
+  }
   const publicFormToken = new URLSearchParams(window.location.search).get("form");
   if (publicFormToken) {
     return <PublicFormView token={publicFormToken} />;

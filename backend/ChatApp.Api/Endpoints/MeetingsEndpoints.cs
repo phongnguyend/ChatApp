@@ -1,4 +1,5 @@
 using ChatApp.Api.Authentication;
+using ChatApp.Application.Calendars;
 using static Microsoft.AspNetCore.Http.Results;
 using ChatApp.Infrastructure.Caching;
 using System.Globalization;
@@ -334,6 +335,7 @@ public sealed class MeetingsEndpoints(
             IsAllDay = values.AllDay,
             StartTime = values.StartTime,
             EndTime = values.EndTime,
+            TimeZoneId = request.TimeZoneId,
         };
         await using var transaction = await db.Database.BeginTransactionAsync(
             cancellationToken);
@@ -395,6 +397,7 @@ public sealed class MeetingsEndpoints(
             return Conflict(new { message = "Cancelled meetings cannot be edited." });
         }
 
+        request = request with { TimeZoneId = request.TimeZoneId ?? meeting.TimeZoneId };
         var validation = Validate(request);
         if (validation.Error is not null)
         {
@@ -413,7 +416,7 @@ public sealed class MeetingsEndpoints(
             meeting.EndDate != values.EndDate ||
             meeting.IsAllDay != values.AllDay ||
             meeting.StartTime != values.StartTime ||
-            meeting.EndTime != values.EndTime;
+            meeting.EndTime != values.EndTime || (request.TimeZoneId is not null && meeting.TimeZoneId != request.TimeZoneId);
         meeting.Title = values.Title;
         meeting.Description = values.Description;
         meeting.StartDate = values.StartDate;
@@ -421,6 +424,8 @@ public sealed class MeetingsEndpoints(
         meeting.IsAllDay = values.AllDay;
         meeting.StartTime = values.StartTime;
         meeting.EndTime = values.EndTime;
+        meeting.TimeZoneId = request.TimeZoneId ?? meeting.TimeZoneId;
+        meeting.CalendarSequence++;
         meeting.UpdatedAt = DateTimeOffset.UtcNow;
 
         var requestedIds = people!.Select(x => x.Id).ToHashSet();
@@ -528,6 +533,7 @@ public sealed class MeetingsEndpoints(
             meeting.Status = "cancelled";
             meeting.CancelledAt = DateTimeOffset.UtcNow;
             meeting.UpdatedAt = meeting.CancelledAt.Value;
+            meeting.CalendarSequence++;
             foreach (var participant in meeting.Participants)
             {
                 db.UserNotifications.Add(new UserNotification
@@ -750,7 +756,7 @@ public sealed class MeetingsEndpoints(
 
         if (!TryDate(request.StartDate, out var startDate) ||
             !TryDate(request.EndDate, out var endDate) || endDate < startDate ||
-            endDate.DayNumber - startDate.DayNumber > 366)
+            endDate.DayNumber - startDate.DayNumber > 366 || endDate == DateOnly.MaxValue)
         {
             return (null, "Choose a valid date range of at most one year.");
         }
@@ -768,6 +774,11 @@ public sealed class MeetingsEndpoints(
 
             startTime = parsedStart;
             endTime = parsedEnd;
+        }
+        var zoneError = CalendarExport.ValidateTimeZone(request.TimeZoneId, startDate, startTime, endDate, endTime);
+        if (zoneError is not null)
+        {
+            return (null, zoneError);
         }
         return (new MeetingValues(title, description, startDate, endDate,
             request.AllDay, startTime, endTime), null);
@@ -835,7 +846,8 @@ public sealed class MeetingsEndpoints(
             .ToArray(),
         meeting.CreatedAt,
         meeting.UpdatedAt,
-        meeting.CancelledAt);
+        meeting.CancelledAt,
+        meeting.TimeZoneId);
 }
 
 public sealed record SaveScheduledMeetingRequest(
@@ -846,7 +858,8 @@ public sealed record SaveScheduledMeetingRequest(
     bool AllDay,
     string? Start,
     string? End,
-    Guid[]? People);
+    Guid[]? People,
+    string? TimeZoneId = null);
 
 public sealed record MeetingPersonDto(Guid Id, string DisplayName,
     string Username, string ResponseStatus, DateTimeOffset? RespondedAt);
@@ -876,7 +889,8 @@ public sealed record ScheduledMeetingDto(
     IReadOnlyList<MeetingPersonDto> People,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    DateTimeOffset? CancelledAt);
+    DateTimeOffset? CancelledAt,
+    string? TimeZoneId);
 
 internal sealed record MeetingValues(string Title, string? Description,
     DateOnly StartDate, DateOnly EndDate, bool AllDay,

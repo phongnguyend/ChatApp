@@ -477,6 +477,8 @@ public sealed class ChatAppDbContext(DbContextOptions<ChatAppDbContext> options)
         entity.Property(x => x.NormalizedUserName).HasColumnName("NormalizedUsername").HasMaxLength(256).IsRequired();
         entity.HasIndex(x => x.NormalizedUserName).HasDatabaseName("IX_Users_NormalizedUsername").IsUnique();
         entity.Ignore(x => x.DisplayName);
+        entity.Property(x => x.CalendarFeedToken).HasMaxLength(64);
+        entity.HasIndex(x => x.CalendarFeedToken).IsUnique().HasFilter("[CalendarFeedToken] IS NOT NULL");
         entity.Property(x => x.AvatarUrl).HasColumnType("nvarchar(max)");
         entity.Property(x => x.Status).HasMaxLength(20).HasDefaultValue("active");
         entity.Property(x => x.CreatedAt).HasPrecision(3);
@@ -558,6 +560,9 @@ public sealed class ChatAppDbContext(DbContextOptions<ChatAppDbContext> options)
         meeting.HasKey(x => x.Id);
         meeting.Property(x => x.Id).HasDefaultValueSql("NEWSEQUENTIALID()");
         meeting.Property(x => x.Title).HasMaxLength(200).IsRequired();
+        meeting.Property(x => x.TimeZoneId).HasMaxLength(100);
+        meeting.Property(x => x.ShareToken).HasMaxLength(64);
+        meeting.HasIndex(x => x.ShareToken).IsUnique().HasFilter("[ShareToken] IS NOT NULL");
         meeting.Property(x => x.Description).HasMaxLength(4000);
         meeting.Property(x => x.StartDate).HasColumnType("date");
         meeting.Property(x => x.EndDate).HasColumnType("date");

@@ -1,3 +1,5 @@
+import { CalendarFeedButton, MeetingCalendarActions, MeetingTimeZone } from '../components/CalendarSharing';
+import { localTimeZone } from '../services/calendar';
 import { Modal } from '../components/Modal';
 import { toast } from '../services/toasts';
 import { authFetch as fetch } from "../services/auth";
@@ -14,6 +16,7 @@ type CalendarMeeting = {
   startDate: string;
   endDate: string;
   allDay: boolean;
+  timeZoneId: string | null;
   start: string | null;
   end: string | null;
   status: "scheduled" | "cancelled";
@@ -46,7 +49,7 @@ type CalendarReminder = {
   updatedAt: string;
 };
 type ReminderForm = { title: string; description: string; reminderDate: string; reminderTime: string; allDay: boolean };
-type MeetingForm = Pick<CalendarMeeting, "title" | "description" | "startDate" | "endDate" | "allDay" | "people"> & { start: string; end: string };
+type MeetingForm = Pick<CalendarMeeting, "title" | "description" | "startDate" | "endDate" | "allDay" | "people"> & { start: string; end: string; timeZoneId: string };
 
 async function readResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -171,6 +174,7 @@ function newForm(date: string, start: string, allDay = false): MeetingForm {
     startDate: date,
     endDate: date,
     allDay,
+    timeZoneId: localTimeZone(),
     start,
     end: timeValue(Math.min(minutesFromTime(start) + 60, 23 * 60 + 59)),
     people: [],
@@ -503,6 +507,7 @@ export function CalendarView({
       startDate: meeting.startDate,
       endDate: meeting.endDate,
       allDay: meeting.allDay,
+      timeZoneId: meeting.timeZoneId ?? "",
       start: meeting.start ?? "09:00",
       end: meeting.end ?? "10:00",
       people: meeting.people,
@@ -629,6 +634,7 @@ export function CalendarView({
           <p className="calendar-intro">See meetings, tasks, and reminders this week.</p>
         </div>
         <div className="calendar-toolbar-actions">
+          <CalendarFeedButton />
           <button className="calendar-back" type="button" onClick={() => { setForm(null); setReminderForm(null); setSelectedReminder(null); closeDetails(); onBack(); }}>Back to chat</button>
           <button className="calendar-reminder-create" type="button" onClick={() => openReminderForm(today >= dateKey(weekStart) && today <= dateKey(weekEnd) ? today : dateKey(weekStart))}>
             <AlarmClock size={17} /> New reminder
@@ -856,6 +862,7 @@ export function CalendarView({
                 <input id="calendar-end-date" type="date" required min={form.startDate} value={form.endDate} onChange={(event) => setForm({ ...form, endDate: event.target.value })} />
               </div>
             </div>
+<MeetingTimeZone value={form.timeZoneId} onChange={timeZoneId => setForm({ ...form, timeZoneId })} />
 {!form.allDay && (
               <div className="calendar-time-range">
                 <div><label htmlFor="calendar-start">Start time</label><input id="calendar-start" type="time" required value={form.start} onChange={(event) => setForm({ ...form, start: event.target.value })} /></div>
@@ -969,6 +976,8 @@ export function CalendarView({
 <div className="calendar-detail-section"><strong>Organizer</strong><p>{selectedMeeting.organizerDisplayName} (@{selectedMeeting.organizerUsername})</p></div>
 <div className="calendar-detail-section"><strong>People</strong>{selectedMeeting.people.length ? <ul className="calendar-response-list">{selectedMeeting.people.map((person) => <li key={person.id}><span>{person.displayName} <small>@{person.username}</small></span><span className={`calendar-response-status ${person.responseStatus ?? "pending"}`}>{responseLabel(person.responseStatus)}</span></li>)}</ul> : <p>Only the organizer</p>}</div>
 {!selectedMeeting.canEdit && selectedMeeting.status !== "cancelled" && <div className="calendar-detail-section calendar-rsvp"><strong>Your response</strong><div role="group" aria-label="Respond to meeting invitation"><button type="button" className={selectedMeeting.viewerResponseStatus === "accepted" ? "active" : undefined} aria-pressed={selectedMeeting.viewerResponseStatus === "accepted"} disabled={isResponding || isLoadingDetail} onClick={() => void respondToMeeting("accepted")}><CheckCircle2 size={15} aria-hidden="true" /> Accept</button><button type="button" className={selectedMeeting.viewerResponseStatus === "tentative" ? "active" : undefined} aria-pressed={selectedMeeting.viewerResponseStatus === "tentative"} disabled={isResponding || isLoadingDetail} onClick={() => void respondToMeeting("tentative")}><HelpCircle size={15} aria-hidden="true" /> Maybe</button><button type="button" className={selectedMeeting.viewerResponseStatus === "declined" ? "active danger" : "danger"} aria-pressed={selectedMeeting.viewerResponseStatus === "declined"} disabled={isResponding || isLoadingDetail} onClick={() => void respondToMeeting("declined")}><XCircle size={15} aria-hidden="true" /> Decline</button></div>{isResponding && <p className="calendar-form-note" role="status"><LoaderCircle className="spin" size={15} /> Saving response…</p>}</div>}
+<MeetingCalendarActions id={selectedMeeting.id} canEdit={selectedMeeting.canEdit} />
+{!selectedMeeting.allDay && <p>Time zone: {selectedMeeting.timeZoneId ?? "Unspecified (local time)"}</p>}
 {selectedMeeting.description && <div className="calendar-detail-section"><strong>Description</strong><p className="calendar-detail-description">{selectedMeeting.description}</p></div>}
 {isLoadingDetail && <p role="status" className="calendar-form-note"><LoaderCircle className="spin" size={15} /> Loading current details…</p>}
 {detailError && <p role="alert" className="calendar-form-error">{detailError}</p>}

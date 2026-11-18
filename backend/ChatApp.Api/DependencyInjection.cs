@@ -82,6 +82,9 @@ public static class DependencyInjection
 
         LiveStreamsEndpoints.Map(app);
         MeetingsEndpoints.Map(app);
+
+        CalendarSharingEndpoints.Map(app);
+
         MessagesEndpoints.Map(app);
         PushNotificationsEndpoints.Map(app);
         RecordingsEndpoints.Map(app);

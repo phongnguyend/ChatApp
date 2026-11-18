@@ -4,6 +4,9 @@ namespace ChatApp.Domain.Models;
 
 public sealed class ChatUser : IdentityUser<Guid>
 {
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? CalendarFeedToken { get; set; }
+
     [System.Diagnostics.CodeAnalysis.AllowNull]
     public override string UserName { get; set => field = value ?? string.Empty; } = string.Empty;
     [System.Diagnostics.CodeAnalysis.AllowNull]

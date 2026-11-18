@@ -1,0 +1,20 @@
+.calendar-link-dialog { width: min(560px, calc(100vw - 32px)); }
+.calendar-feed-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.calendar-feed-button svg {
+  flex-shrink: 0;
+}
+.calendar-link-dialog label, .calendar-time-zone { display: grid; gap: 6px; }
+.calendar-link-dialog input { box-sizing: border-box; width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); }
+.calendar-share-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-block: 12px; }
+.calendar-share-actions button, .calendar-share-actions a { display: inline-flex; align-items: center; gap: 7px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); color: var(--ink); text-decoration: none; font: inherit; cursor: pointer; }
+.calendar-share-actions svg { flex-shrink: 0; }
+.public-event { min-height: 100dvh; padding: 32px 16px; box-sizing: border-box; background: var(--cream); color: var(--ink); }
+.public-event article { max-width: 720px; margin: auto; padding: 28px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+.public-event h1 { overflow-wrap: anywhere; }
+.public-event-description { white-space: pre-wrap; overflow-wrap: anywhere; }
+.public-event-note { color: var(--muted); line-height: 1.6; }

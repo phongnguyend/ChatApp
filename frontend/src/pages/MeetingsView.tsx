@@ -1,3 +1,5 @@
+import { CalendarFeedButton, MeetingCalendarActions, MeetingTimeZone } from '../components/CalendarSharing';
+import { localTimeZone } from '../services/calendar';
 import { Modal } from '../components/Modal';
 import { toast } from '../services/toasts';
 import { authFetch as fetch } from "../services/auth";
@@ -14,6 +16,7 @@ type Meeting = {
   startDate: string;
   endDate: string;
   allDay: boolean;
+  timeZoneId: string | null;
   start: string | null;
   end: string | null;
   status: "scheduled" | "cancelled";
@@ -27,7 +30,7 @@ type Meeting = {
   updatedAt: string;
   cancelledAt: string | null;
 };
-type MeetingForm = Pick<Meeting, "title" | "description" | "startDate" | "endDate" | "allDay" | "people"> & { start: string; end: string };
+type MeetingForm = Pick<Meeting, "title" | "description" | "startDate" | "endDate" | "allDay" | "people"> & { start: string; end: string; timeZoneId: string };
 type MeetingPage = { items: Meeting[]; hasMore: boolean };
 type MeetingFilters = { from: string; to: string; name: string; organizer: string; participant: string };
 const emptyFilters = (): MeetingFilters => ({ from: "", to: "", name: "", organizer: "", participant: "" });
@@ -68,7 +71,7 @@ function responseLabel(response: MeetingResponse | undefined | null) {
 
 function newForm(): MeetingForm {
   const today = dateKey(new Date());
-  return { title: "", description: "", startDate: today, endDate: today, allDay: false, start: "09:00", end: "10:00", people: [] };
+  return { title: "", description: "", startDate: today, endDate: today, allDay: false, start: "09:00", end: "10:00", people: [], timeZoneId: localTimeZone() };
 }
 
 export function MeetingsView({ apiUrl, currentUsername, onBack, onOpenConversation, openTarget, hidden }: {
@@ -226,7 +229,7 @@ export function MeetingsView({ apiUrl, currentUsername, onBack, onOpenConversati
     closeDetails();
     setEditingId(meeting.id);
     setForm({ title: meeting.title, description: meeting.description, startDate: meeting.startDate,
-      endDate: meeting.endDate, allDay: meeting.allDay, start: meeting.start ?? "09:00",
+      endDate: meeting.endDate, timeZoneId: meeting.timeZoneId ?? '', allDay: meeting.allDay, start: meeting.start ?? "09:00",
       end: meeting.end ?? "10:00", people: meeting.people });
     setFormError("");
     setPeopleQuery("");
@@ -311,7 +314,7 @@ export function MeetingsView({ apiUrl, currentUsername, onBack, onOpenConversati
   }
 
   return <section className="meetings-view" hidden={hidden} aria-label="Meetings">
-    <header className="meetings-header"><div><p className="eyebrow">YOUR SCHEDULE</p><h1>Meetings</h1><p>Find meetings you organize and meetings you have been invited to.</p></div><div className="meetings-header-actions"><button type="button" onClick={onBack}><ArrowLeft size={16} /> Back to chat</button><button className="meetings-primary" type="button" onClick={openCreate}><Plus size={17} /> New meeting</button></div></header>
+    <header className="meetings-header"><div><p className="eyebrow">YOUR SCHEDULE</p><h1>Meetings</h1><p>Find meetings you organize and meetings you have been invited to.</p></div><div className="meetings-header-actions"><CalendarFeedButton /><button type="button" onClick={onBack}><ArrowLeft size={16} /> Back to chat</button><button className="meetings-primary" type="button" onClick={openCreate}><Plus size={17} /> New meeting</button></div></header>
     <div className="meetings-tabs" role="tablist" aria-label="Meeting sections"><button type="button" role="tab" aria-selected={tab === "created"} onClick={() => changeTab("created")}><CalendarDays size={15} /> Organized by me</button><button type="button" role="tab" aria-selected={tab === "invited"} onClick={() => changeTab("invited")}><Users size={15} /> Invited to</button></div>
     <div className="meetings-filters" role="search" aria-label="Filter meetings">
       <div className="meetings-filter-heading"><strong>Filters</strong>{hasFilters && <button type="button" onClick={clearFilters}><X size={14} /> Clear filters</button>}</div>
@@ -335,6 +338,8 @@ export function MeetingsView({ apiUrl, currentUsername, onBack, onOpenConversati
 <div className="meetings-detail-section"><strong>Organizer</strong><p>{selected.organizerDisplayName} (@{selected.organizerUsername})</p></div>
 <div className="meetings-detail-section"><strong>People</strong>{selected.people.length ? <ul className="meetings-response-list">{selected.people.map((person) => <li key={person.id}><span>{person.displayName} <small>@{person.username}</small></span><span className={`meetings-response-status ${person.responseStatus ?? "pending"}`}>{responseLabel(person.responseStatus)}</span></li>)}</ul> : <p>Only the organizer</p>}</div>
 {!selected.canEdit && selected.status !== "cancelled" && <div className="meetings-detail-section meetings-rsvp"><strong>Your response</strong><div role="group" aria-label="Respond to meeting invitation"><button type="button" className={selected.viewerResponseStatus === "accepted" ? "active" : undefined} aria-pressed={selected.viewerResponseStatus === "accepted"} disabled={responding || detailLoading} onClick={() => void respond("accepted")}><CheckCircle2 size={15} aria-hidden="true" /> Accept</button><button type="button" className={selected.viewerResponseStatus === "tentative" ? "active" : undefined} aria-pressed={selected.viewerResponseStatus === "tentative"} disabled={responding || detailLoading} onClick={() => void respond("tentative")}><HelpCircle size={15} aria-hidden="true" /> Maybe</button><button type="button" className={selected.viewerResponseStatus === "declined" ? "active danger" : "danger"} aria-pressed={selected.viewerResponseStatus === "declined"} disabled={responding || detailLoading} onClick={() => void respond("declined")}><XCircle size={15} aria-hidden="true" /> Decline</button></div>{responding && <p className="meetings-muted" role="status"><LoaderCircle className="meetings-spin" size={15} /> Saving response...</p>}</div>}
+<MeetingCalendarActions id={selected.id} canEdit={selected.canEdit} />
+{!selected.allDay && <p>Time zone: {selected.timeZoneId ?? "Unspecified (local time)"}</p>}
 {selected.description && <div className="meetings-detail-section"><strong>Description</strong><p>{selected.description}</p></div>}
 {detailLoading && <p className="meetings-muted"><LoaderCircle className="meetings-spin" size={15} /> Loading current details...</p>}
 {detailError && <p className="meetings-error" role="alert">{detailError}</p>}
@@ -353,6 +358,7 @@ export function MeetingsView({ apiUrl, currentUsername, onBack, onOpenConversati
 <label>People<div className="meetings-people-field"><Search size={15} /><input value={peopleQuery} onChange={(event) => { setPeopleQuery(event.target.value); setFormError(""); }} placeholder="Search name or username" autoComplete="off" /></div></label>
 {peopleQuery.trim() && <div className="meetings-people-results" role="listbox" aria-label="People">{searchingPeople ? <p>Searching...</p> : peopleError ? <p className="meetings-error">{peopleError}</p> : peopleResults.filter((person) => !form.people.some((item) => item.id === person.id)).map((person) => <button type="button" role="option" aria-selected={false} key={person.id} onClick={() => { setForm({ ...form, people: [...form.people, person] }); setPeopleQuery(""); setPeopleResults([]); }}>{person.displayName} <small>@{person.username}</small></button>)}</div>}
 {form.people.length > 0 && <div className="meetings-people-chips">{form.people.map((person) => <span key={person.id}><UserRound size={13} />{person.displayName}<button type="button" aria-label={`Remove ${person.displayName}`} onClick={() => setForm({ ...form, people: form.people.filter((item) => item.id !== person.id) })}><X size={13} /></button></span>)}</div>}
+<MeetingTimeZone value={form.timeZoneId} onChange={timeZoneId => setForm({ ...form, timeZoneId })} />
 <label>Description<textarea rows={4} maxLength={4000} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Add an agenda or details (optional)" /></label>
 {formError && <p className="meetings-error" role="alert">{formError}</p>}
 </Modal.Body>

@@ -2,6 +2,13 @@ namespace ChatApp.Domain.Models;
 
 public sealed class ScheduledMeeting
 {
+    public string? TimeZoneId { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? ShareToken { get; set; }
+
+    public int CalendarSequence { get; set; }
+
     public Guid Id { get; set; }
     public Guid OrganizerUserId { get; set; }
     public ChatUser OrganizerUser { get; set; } = null!;

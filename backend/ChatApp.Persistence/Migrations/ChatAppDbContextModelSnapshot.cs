@@ -213,6 +213,10 @@ namespace ChatApp.Persistence.Migrations
                     b.Property<string>("AvatarUrl")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("CalendarFeedToken")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
                         .HasColumnType("nvarchar(max)");
@@ -295,6 +299,10 @@ namespace ChatApp.Persistence.Migrations
                         .HasColumnName("Username");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CalendarFeedToken")
+                        .IsUnique()
+                        .HasFilter("[CalendarFeedToken] IS NOT NULL");
 
                     b.HasIndex("NormalizedEmail")
                         .IsUnique()
@@ -1260,6 +1268,9 @@ namespace ChatApp.Persistence.Migrations
                         .HasColumnType("uniqueidentifier")
                         .HasDefaultValueSql("NEWSEQUENTIALID()");
 
+                    b.Property<int>("CalendarSequence")
+                        .HasColumnType("int");
+
                     b.Property<DateTimeOffset?>("CancelledAt")
                         .HasPrecision(3)
                         .HasColumnType("datetimeoffset(3)");
@@ -1287,6 +1298,10 @@ namespace ChatApp.Persistence.Migrations
                     b.Property<Guid>("OrganizerUserId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("ShareToken")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
                     b.Property<DateOnly>("StartDate")
                         .HasColumnType("date");
 
@@ -1297,6 +1312,10 @@ namespace ChatApp.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("TimeZoneId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -1314,6 +1333,10 @@ namespace ChatApp.Persistence.Migrations
                         .HasFilter("[ConversationId] IS NOT NULL");
 
                     b.HasIndex("OrganizerUserId");
+
+                    b.HasIndex("ShareToken")
+                        .IsUnique()
+                        .HasFilter("[ShareToken] IS NOT NULL");
 
                     b.HasIndex("StartDate", "EndDate");
 
