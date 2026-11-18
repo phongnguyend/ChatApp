@@ -303,7 +303,7 @@ public static class FormsEndpoints
             {
                 return Results.Json(new { error = uploaderId is null ? "The form owner has no storage available for attachments. Please contact them." : "Your storage is full. Remove unused files in My Documents." }, statusCode: 413);
             }
-            var form = await db.Forms.FromSqlInterpolated($"SELECT * FROM [Forms] WITH (UPDLOCK, HOLDLOCK) WHERE [ShareToken] = {token}").SingleOrDefaultAsync(ct);
+            var form = await db.Forms.FromSql($"SELECT * FROM [Forms] WITH (UPDLOCK, HOLDLOCK) WHERE [ShareToken] = {token}").SingleOrDefaultAsync(ct);
             if (form is null || !form.IsPublished)
             {
                 return Results.NotFound(new { error = "This form is unavailable." });
@@ -385,7 +385,7 @@ public static class FormsEndpoints
                 await FormStorageUsage.Lock(db, storageOwnerId, ct);
             }
         }
-        var form = await db.Forms.FromSqlInterpolated($"SELECT * FROM [Forms] WITH (UPDLOCK, HOLDLOCK) WHERE [ShareToken] = {token}").SingleOrDefaultAsync(ct);
+        var form = await db.Forms.FromSql($"SELECT * FROM [Forms] WITH (UPDLOCK, HOLDLOCK) WHERE [ShareToken] = {token}").SingleOrDefaultAsync(ct);
         if (form is null || request.SubmissionKey == Guid.Empty)
         {
             return Results.NotFound(new { error = "This form is unavailable." });

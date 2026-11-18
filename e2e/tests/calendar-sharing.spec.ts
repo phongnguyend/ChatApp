@@ -67,6 +67,7 @@ test('event links and private feeds enforce access, revocation, updates and canc
   await request.post(`${base}/subscription`, { headers: headersFor(guest.username), data: { action: 'disable' } });
   expect((await request.get(`${base}/feeds/${nextFeed}/calendar.ics`)).status()).toBe(404);
   expect((await request.post(`${apiUrl}/api/meetings?username=${owner.username}`, { headers, data: { ...data, timeZoneId: 'Invalid/Zone' } })).status()).toBe(400);
+  expect((await request.post(`${apiUrl}/api/meetings?username=${owner.username}`, { headers, data: { ...data, start: '24:00' } })).status()).toBe(400);
   const ownerSubscription = await request.post(`${base}/subscription`, { headers, data: { action: 'enable' } });
   const ownerFeedToken = (await ownerSubscription.json()).token;
   const reenabled = await request.post(share, { headers, data: { action: 'enable' } });

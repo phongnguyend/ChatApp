@@ -512,7 +512,7 @@ resource apiApp 'Microsoft.Web/sites@2023-12-01' = if (deployAppHosting) {
       ]
       ftpsState: 'Disabled'
       http20Enabled: true
-      linuxFxVersion: 'DOTNETCORE|10.0'
+      linuxFxVersion: 'DOTNETCORE|11.0'
       minTlsVersion: '1.2'
       use32BitWorkerProcess: false
       webSocketsEnabled: true
@@ -579,7 +579,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = if (deployAppHosting) {
       ]
       ftpsState: 'Disabled'
       http20Enabled: true
-      linuxFxVersion: 'DOTNET-ISOLATED|10.0'
+      linuxFxVersion: 'DOTNET-ISOLATED|11.0'
       minTlsVersion: '1.2'
       use32BitWorkerProcess: false
     }

@@ -7,12 +7,14 @@ on:
       - dev
     paths:
       - backend/**
+      - global.json
       - .github/workflows/backend-ci.yml
   pull_request:
     branches:
       - main
     paths:
       - backend/**
+      - global.json
       - .github/workflows/backend-ci.yml
   workflow_dispatch:
 
@@ -37,10 +39,13 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: 11.0.x
 
       - name: Restore dependencies
         run: dotnet restore ChatApp.slnx
 
       - name: Build
         run: dotnet build ChatApp.slnx --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test ChatApp.Tests/ChatApp.Tests.csproj --configuration Release --no-build --no-restore

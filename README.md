@@ -183,9 +183,16 @@ composes the application and selects the active page.
 
 Prerequisites:
 
-- .NET 10 SDK
+- .NET 11 SDK (11.0.100 or a newer stable 11.0 feature band, selected by `global.json`)
 - Node.js 20 or newer
 - SQL Server LocalDB, or another SQL Server instance
+
+All backend projects and the E2E seed utility target `net11.0`. Azure Functions uses
+`Azure.Functions.Sdk` 1.1.0, pinned in `global.json`, with the isolated worker model.
+This replaces the old `Microsoft.Azure.Functions.Worker.Sdk` package as required by
+the [.NET 11 Functions migration](https://techcommunity.microsoft.com/blog/AppsonAzureBlog/-net-11-is-now-generally-available-in-azure-functions/4571176).
+Use current Azure Functions Core Tools when running Functions locally. CI, Docker
+images, and the Azure App Service/Functions runtime configuration also target .NET 11.
 
 The default connection string uses `(localdb)\mssqllocaldb`. To use another SQL
 Server instance, update `ConnectionStrings:ChatDatabase` in

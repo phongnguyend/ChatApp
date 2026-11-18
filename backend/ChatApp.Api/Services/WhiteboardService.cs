@@ -58,7 +58,7 @@ public sealed class WhiteboardService(ChatAppDbContext db, IHubContext<Whiteboar
     public async Task<object> Apply(Guid id, Guid userId, BoardCommand command, CancellationToken ct)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await db.Whiteboards.FromSqlInterpolated($"SELECT * FROM [Whiteboards] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {id}").SingleOrDefaultAsync(ct);
+        await db.Whiteboards.FromSql($"SELECT * FROM [Whiteboards] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {id}").SingleOrDefaultAsync(ct);
         var board = await Access(id, userId, true, ct);
         var prior = await db.WhiteboardVersions.SingleOrDefaultAsync(x => x.WhiteboardId == id && x.OperationId == command.OperationId, ct);
         if (prior is not null)

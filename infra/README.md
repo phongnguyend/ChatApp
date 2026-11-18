@@ -2,7 +2,7 @@
 
 `main.bicep` creates the resources used by ChatApp:
 
-- a Linux Azure App Service running the .NET 10 API;
+- a Linux Azure App Service running the .NET 11 API;
 - an Azure Static Web App for the Vite frontend;
 - a private Azure Blob Storage container for uploads;
 - an Azure SQL logical server and Basic database;
@@ -264,7 +264,7 @@ The resource group defaults to `<workloadName>-<environmentName>`. Set the optio
 
 ## GitHub Actions application release
 
-Run **Actions ? Release applications ? Run workflow**, choose the source branch or tag, then select `dev` or `test`. The workflow is [release.yml](../.github/workflows/release.yml). It builds the API and Azure Functions with .NET 10 and the frontend with Node.js 24, then deploys all three to the selected environment. Releases for the same environment are serialized.
+Run **Actions ? Release applications ? Run workflow**, choose the source branch or tag, then select `dev` or `test`. The workflow is [release.yml](../.github/workflows/release.yml). It builds the API and Azure Functions with .NET 11 and the frontend with Node.js 24, then deploys all three to the selected environment. Releases for the same environment are serialized.
 
 Deploy infrastructure and run [grant-sql-access.sql](grant-sql-access.sql) before the first release. Reuse the environment's `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID` secrets and OIDC federation from the infrastructure workflow. The Azure identity needs permission to deploy App Service and Functions and retrieve the Static Web App deployment token.
 

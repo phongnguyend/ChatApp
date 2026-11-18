@@ -88,7 +88,7 @@ public static partial class WhiteboardsEndpoints
         group.MapPost("/{id:guid}/members", async (Guid id, Share request, ClaimsPrincipal user, ChatAppDbContext db, WhiteboardService boards, CancellationToken ct) =>
         {
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
-            await db.Whiteboards.FromSqlInterpolated($"SELECT * FROM [Whiteboards] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {id}").SingleOrDefaultAsync(ct);
+            await db.Whiteboards.FromSql($"SELECT * FROM [Whiteboards] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {id}").SingleOrDefaultAsync(ct);
             await boards.Owner(id, WhiteboardService.UserId(user), ct);
             var normalized = request.Username?.Trim().ToUpperInvariant();
             var target = await db.Users.SingleOrDefaultAsync(x => x.NormalizedUserName == normalized && x.IsEnabled, ct);
@@ -112,7 +112,7 @@ public static partial class WhiteboardsEndpoints
         group.MapDelete("/{id:guid}/members/{userId:guid}", async (Guid id, Guid userId, ClaimsPrincipal user, ChatAppDbContext db, WhiteboardService boards, CancellationToken ct) =>
         {
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
-            await db.Whiteboards.FromSqlInterpolated($"SELECT * FROM [Whiteboards] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {id}").SingleOrDefaultAsync(ct);
+            await db.Whiteboards.FromSql($"SELECT * FROM [Whiteboards] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {id}").SingleOrDefaultAsync(ct);
             await boards.Owner(id, WhiteboardService.UserId(user), ct);
             await db.WhiteboardMembers.Where(x => x.WhiteboardId == id && x.UserId == userId).ExecuteDeleteAsync(ct);
             await transaction.CommitAsync(ct);
@@ -129,7 +129,7 @@ public static partial class WhiteboardsEndpoints
         group.MapPost("/{id:guid}/versions/{revision:int}/restore", async (Guid id, int revision, Restore request, ClaimsPrincipal user, ChatAppDbContext db, WhiteboardService boards, CancellationToken ct) =>
         {
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
-            await db.Whiteboards.FromSqlInterpolated($"SELECT * FROM [Whiteboards] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {id}").SingleOrDefaultAsync(ct);
+            await db.Whiteboards.FromSql($"SELECT * FROM [Whiteboards] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {id}").SingleOrDefaultAsync(ct);
             await boards.Owner(id, WhiteboardService.UserId(user), ct);
             var board = await db.Whiteboards.SingleAsync(x => x.Id == id, ct);
             if (board.Revision != request.ExpectedRevision)

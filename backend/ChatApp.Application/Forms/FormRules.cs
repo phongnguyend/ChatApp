@@ -361,8 +361,10 @@ public static class FormRules
                     "yesno" => value is "Yes" or "No",
                     "email" => MailAddress.TryCreate(value, out var address) && address.Address == value && value.Length <= 254,
                     "date" => DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _),
-                    "time" => value.Length == 5 && TimeOnly.TryParseExact(value, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out _),
-                    "datetime" => value.Length == 16 && DateTime.TryParseExact(value, "yyyy-MM-dd'T'HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out _),
+                    "time" => value.Length == 5 && TimeOnly.TryParseExact(value, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var timeValue)
+                        && timeValue.ToString("HH:mm", CultureInfo.InvariantCulture) == value,
+                    "datetime" => value.Length == 16 && DateTime.TryParseExact(value, "yyyy-MM-dd'T'HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateTimeValue)
+                        && dateTimeValue.ToString("yyyy-MM-dd'T'HH:mm", CultureInfo.InvariantCulture) == value,
                     "number" => decimal.TryParse(value, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var number) && (node.Min is null || number >= node.Min) && (node.Max is null || number <= node.Max),
                     "rating" => int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var rating) && rating >= 1 && rating <= (node.Max ?? 5),
                     "text" => value.Length <= 2000,

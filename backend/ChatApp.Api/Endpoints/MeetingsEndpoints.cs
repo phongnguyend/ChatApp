@@ -737,7 +737,7 @@ public sealed class MeetingsEndpoints(
 
     private static bool TryTime(string? value, out TimeOnly time) =>
         TimeOnly.TryParseExact(value, "HH:mm", CultureInfo.InvariantCulture,
-            DateTimeStyles.None, out time);
+            DateTimeStyles.None, out time) && time.ToString("HH:mm", CultureInfo.InvariantCulture) == value;
 
     private static (MeetingValues? Values, string? Error) Validate(
         SaveScheduledMeetingRequest request)

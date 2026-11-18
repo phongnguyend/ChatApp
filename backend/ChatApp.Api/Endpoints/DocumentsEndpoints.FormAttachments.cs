@@ -47,7 +47,7 @@ public sealed partial class DocumentsEndpoints
         Guid? uploaderId = unattributed ? null : user.Id;
         await ChatApp.Infrastructure.Storage.FormStorageUsage.Lock(db, uploaderId, ct);
         // Serialize against submission claiming this upload; committed attachments are never deleted here.
-        var upload = await db.FormAttachmentUploads.FromSqlInterpolated($"SELECT * FROM [FormAttachmentUploads] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {id}").Where(x => (x.CreatedById ?? x.FormOwnerId) == uploaderId).SingleOrDefaultAsync(ct);
+        var upload = await db.FormAttachmentUploads.FromSql($"SELECT * FROM [FormAttachmentUploads] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {id}").Where(x => (x.CreatedById ?? x.FormOwnerId) == uploaderId).SingleOrDefaultAsync(ct);
         if (upload is null)
         {
             return NotFound();
